@@ -85,8 +85,9 @@ L-item wins. Every entry names what the task is, not only its number.
    done. L-89 distant players is done (2026-10-03). Open: waypoint storage
    on a server and L-86 radar-face follow-ups.
 4. **Schematic — L-93 load, place, project, verify and list materials:**
-   chosen 2026-10-03; the design conversation is in progress (decisions
-   and open questions in the L-item). No code before the spec is agreed.
+   chosen 2026-10-03; the core is built and checked locally. The 0.1.7
+   scope (entities, area save, open folder and large-file warning, an
+   outline for blocks without a mesh) was agreed 2026-10-07; see the L-item.
 5. **Research when convenient:** L-37 FreeCamera seeing caves (wanted),
    L-79 carved pumpkin and spyglass frame draw path (cheap-model friendly
    trace/test steps), L-71 starting a glide from the mod, L-57
@@ -954,7 +955,28 @@ review covered the map and Waypoints screen. Further map UI changes are new
 work, not an open part of L-83.
 
 ### L-93 Schematic: load, place, project, verify and list materials (experimental)
-Kind: Design (in progress). Chosen by the maintainer 2026-10-03.
+Kind: Design done for the first scope; the remaining parts are Ready
+**(strong model)** or Research as marked. Chosen by the maintainer 2026-10-03.
+Status (2026-10-07): placing, ghosts, the verifier, the four tabs, the HUD,
+keys and the target-card line are built and checked in a local world
+(VALIDATION.md). 0.1.7 waits for the parts below.
+Scope for 0.1.7 (maintainer, 2026-10-07), in this order:
+1. Entities from files: named dashed frames, verified by type near the
+   spot, their own section in the material list, the per-placement switch
+   (decided below; the saved `entities` flag already exists).
+2. Area selection and save (decided below): corner keys on the looked-at
+   block, the frame, number adjustment and name on the screen, "Include
+   entities" (default off).
+3. "Open folder" on the Files tab, and a warning before loading a very large
+   file.
+4. Blocks without a mesh on the ghost path that the block-entity renderer
+   does not draw either (torch, bed, skull, door ...): at least the outline
+   alone, so no block of a schematic is invisible.
+If there is room before 0.1.7 (maintainer's call, not required): the
+rotatable 3D preview in Files, neighbor-dependent shapes (fences, panes,
+stair corners, redstone) following the schematic's neighbors instead of the
+real world's, and the translucent look as an option. Otherwise they become
+follow-ups after 0.1.7.
 A client-side schematic subsystem for building from a saved structure: pick
 a file, place it in the world, see it as ghost blocks, compare it with what
 is built, and see which materials are still needed. It ships default off
@@ -1155,11 +1177,6 @@ then rendering, screen and keys.
   nearest mistake, then up to five materials with right-aligned left/have.
   "Select the placement you look at" casts the view ray against placement
   boxes.
-- Next: material names to items (wall torch -> torch, double slab -> two
-  slabs, two-cell beds and doors -> one item) and the inventory count are
-  game glue; then the placement session (files, saved placements, the
-  selected placement), ghost meshes per section, the verifier scan within a
-  frame budget, the screen, HUD and keys.
 
 Research (2026-10-03, in progress):
 - Ghost look. Candidates, compared in game with `xmake f --ghost_probe=y`

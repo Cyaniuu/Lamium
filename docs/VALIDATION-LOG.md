@@ -12,6 +12,15 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 schematic fixes after 035350c, reported late (2026-10-07)
+
+The maintainer said on 2026-10-07 that they had checked the schematic builds
+after `035350c` in game but had not reported it at the time; the items are
+closed on that statement. Covered: the icon cache dropped on world exit
+(`3092a4c`, the crash after a language change) and the instant update at the
+crosshair (`67cd37e`, `ef31e17`, `1e60f3f`). No build hash, observations or
+environment beyond that were recorded.
+
 ## Settings snapshot keeps changes immediate (2026-10-07)
 
 By the maintainer on `667031e`, ordinary DLL SHA-256
