@@ -972,7 +972,14 @@ Scope for 0.1.7 (maintainer, 2026-10-07), in this order:
 4. Blocks without a mesh on the ghost path that the block-entity renderer
    does not draw either (torch, bed, skull, door ...): at least the outline
    alone, so no block of a schematic is invisible.
-Built 2026-10-07, not yet checked in game:
+Built 2026-10-07; items 1-3 checked in broad terms on `14c2265`, with the
+follow-ups below changed in `cd21ee4` (not yet checked):
+- Corner 1 green, corner 2 yellow (world and prompt). Corner 2 no longer
+  opens the prompt; only the save key does. The area stays after saving
+  (until "Clear area" in the prompt or leaving the world). Entity names
+  are sized like text a quarter block tall over the frame, shrinking with
+  distance and hidden when too small to read.
+As first built:
 - 1 (`1a82afe`): missing entities get a dashed frame (one size, 0.8 x 1.8;
   the client cannot know a type's size without the entity) and their name
   above it; an entity counts when one of the same type stands within one

@@ -12,6 +12,18 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 schematic entities, area save, open folder (2026-10-07)
+
+By the maintainer, local world, `14c2265` (DLL `a997b66c...4357e5`). Entity
+frames and checks, saving an area and "Open folder" work in broad terms; no
+problem found in items 1-3 beyond these: the two corners looked the same;
+setting corner 2 opened the save prompt at once, which made adjusting the
+corners awkward; saving cleared the corners, so a later re-save meant
+choosing again; entity names were drawn at a fixed screen size like
+waypoint names and came out far too large for one entity. All four are
+changed in `cd21ee4` (not yet checked). The outline for blocks without a
+mesh (item 4) was not reported.
+
 ## L-93 schematic fixes after 035350c, reported late (2026-10-07)
 
 The maintainer said on 2026-10-07 that they had checked the schematic builds
