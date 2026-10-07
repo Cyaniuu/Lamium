@@ -19,6 +19,7 @@ struct SettingsTable {
     bool compact{}, shortFooter{};
     float searchX{}, searchWidth{}, closeX{};
     float navTop{}, navBottom{};
+    float navStep = navItemHeight; // a sidebar item's height: less when a short window must fit them all
     float tableLeft{}, tableWidth{}, theadTop{}, rowsTop{}, footerTop{};
     float nameX{}, stateX{}, keyX{}, keyWidth{};
     // The version after the title (L-101); placed by placeVersion from measured text.
@@ -26,7 +27,10 @@ struct SettingsTable {
     int first{}, visible{};
     int count{};
 
-    static SettingsTable fit(float screenWidth, float screenHeight, int count, int first) {
+    // `navItems` counts the sidebar's items. A sidebar that cannot fit them
+    // at a readable height gives way to the tabs, as on a narrow window.
+    static constexpr float minNavStep = 11;
+    static SettingsTable fit(float screenWidth, float screenHeight, int count, int first, int navItems = 0) {
         SettingsTable t;
         if (!std::isfinite(screenWidth) || !std::isfinite(screenHeight) || screenWidth < 240 || screenHeight < 150)
             return t;
@@ -37,6 +41,12 @@ struct SettingsTable {
         t.top = std::round((screenHeight - t.height) * .5f);
         t.compact = t.width < 440;
         t.shortFooter = t.height < 230;
+        if (!t.compact && navItems > 0) {
+            // Top items, the pinned ones and the rule between them.
+            float room = t.height - (t.shortFooter ? 14 : 44) - headerHeight - 8 - 4;
+            t.navStep = std::min(navItemHeight, std::floor(room / static_cast<float>(navItems)));
+            if (t.navStep < minNavStep) { t.compact = true; t.navStep = navItemHeight; }
+        }
         t.closeX = t.left + t.width - pad - closeWidth;
         t.searchWidth = std::min(170.0f, t.width * .4f);
         t.searchX = t.closeX - gap - t.searchWidth;
@@ -92,9 +102,9 @@ struct SettingsTable {
     // Values without a switch span the state and key columns.
     float controlX() const { return stateX; }
     float controlWidth() const { return keyX + keyWidth - stateX; }
-    float navItemY(int index) const { return navTop + 4 + index * navItemHeight; }
+    float navItemY(int index) const { return navTop + 4 + index * navStep; }
     static constexpr int pinnedItems = 6; // Hotkeys, Shapes, Waypoints, Schematics, World map, HUD layout.
-    float pinnedItemY(int k) const { return navBottom - 4 - (pinnedItems - k) * navItemHeight; }
+    float pinnedItemY(int k) const { return navBottom - 4 - (pinnedItems - k) * navStep; }
     // Binding-editor buttons (Clear / Reset / Cancel) on the footer's first line.
     static constexpr float footerButtonWidth = 50, footerButtonHeight = 11;
     float footerButtonX(int index) const { return left + pad + index * (footerButtonWidth + 4); }
@@ -168,9 +178,9 @@ struct SettingsTable {
             for (int k = 0; k < pinnedItems && k < navItems; ++k) {
                 int index = navItems - pinnedItems + k;
                 float itemTop = pinnedItemY(k);
-                if (y >= itemTop && y < itemTop + navItemHeight) return {Zone::Nav, index};
+                if (y >= itemTop && y < itemTop + navStep) return {Zone::Nav, index};
             }
-            int index = static_cast<int>(std::floor((y - navTop - 4) / navItemHeight));
+            int index = static_cast<int>(std::floor((y - navTop - 4) / navStep));
             return index >= 0 && index < navItems - pinnedItems ? Hit{Zone::Nav, index} : Hit{};
         }
         if (y < rowsTop) return {};

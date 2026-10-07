@@ -62,6 +62,13 @@ void settingsTableTests() {
 
     // Scrolling is owned by the caller and clamped.
     check(SettingsTable::fit(640, 360, 60, 1000).first == 60 - wide.visible, "scroll clamps to the last page");
+    // Fourteen sidebar items (L-93 added Schematics twice) in a short window.
+    auto squeezed = SettingsTable::fit(640, 250, 60, 0, 14), tabbed = SettingsTable::fit(640, 190, 60, 0, 14);
+    check(!squeezed.compact && squeezed.navStep >= SettingsTable::minNavStep
+          && squeezed.navItemY(14 - SettingsTable::pinnedItems - 1) + squeezed.navStep + 4 <= squeezed.pinnedItemY(0),
+          "a short window narrows sidebar items so the top ones and the pinned ones do not meet");
+    check(tabbed.compact && SettingsTable::fit(640, 360, 60, 0, 14).navStep == SettingsTable::navItemHeight,
+          "a window too short for the sidebar uses tabs; a tall one keeps full items");
     check(SettingsTable::fit(640, 360, 5, 3).first == 0, "short lists do not scroll");
     check(SettingsTable::reveal(10, 5, 8) == 5 && SettingsTable::reveal(10, 20, 8) == 13 && SettingsTable::reveal(10, 12, 8) == 10,
         "reveal scrolls minimally");
