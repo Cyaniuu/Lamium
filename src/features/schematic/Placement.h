@@ -24,6 +24,15 @@ inline int quarterTurns(int rotation) { return ((rotation % 4) + 4) % 4; }
 inline Size placedSize(Size size, int rotation) {
     return quarterTurns(rotation) % 2 ? Size{size.z, size.y, size.x} : size;
 }
+// The placed box seen from above, in world blocks: [x0, x1) by [z0, z1).
+struct Footprint {
+    int x0 = 0, z0 = 0, x1 = 0, z1 = 0;
+    bool operator==(Footprint const&) const = default;
+};
+inline Footprint footprint(Size size, Placement const& placement) {
+    auto placed = placedSize(size, placement.rotation);
+    return {placement.origin.x, placement.origin.z, placement.origin.x + placed.x, placement.origin.z + placed.z};
+}
 // Structure-local cell -> world cell.
 inline Point toWorld(Size size, Placement const& placement, Point local) {
     int x = local.x, z = local.z;

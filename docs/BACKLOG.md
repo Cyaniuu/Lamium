@@ -646,7 +646,9 @@ Accepted follow-ups (2026-10-07; known gaps, not 0.1.7 blockers):
 - Entity name-tag distance and quantity.
 
 Pick the next follow-up with the maintainer; the list is not an implementation
-order. Chosen 2026-10-07: placement markers on the minimap/world map. Runtime gaps stay under Pre-release checks and VALIDATION.
+order. Chosen 2026-10-07: placement markers on the minimap/world map,
+built the same day (look in SCHEMATIC.md), not yet checked in game. Runtime
+gaps stay under Pre-release checks and VALIDATION.
 
 ### L-57 Client info counters
 Kind: Research. Split from L-53 on 2026-09-27 (wave 2).

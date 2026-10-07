@@ -167,6 +167,9 @@ void placementTransforms() {
                   "every turn and mirror fills exactly the placed box");
             check(inverse, "toLocal undoes toWorld");
         }
+    check(footprint(size, {{10, 64, -7}, 0, Mirror::None}) == Footprint{10, -7, 13, -2}
+          && footprint(size, {{10, 64, -7}, 1, Mirror::X}) == Footprint{10, -7, 15, -4},
+          "the footprint covers the placed box from above, turned");
     Placement turned{{0, 0, 0}, 1, Mirror::None};
     // A box 3 wide (x) and 5 deep (z): after one clockwise turn it is 5 wide and 3 deep,
     // and its north-east corner moves to the south-east.

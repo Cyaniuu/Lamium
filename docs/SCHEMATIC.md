@@ -226,6 +226,15 @@ that depend on neighbors following the schematic; the translucent look;
 drawing heads, doors and honey blocks; how far and how many entity name
 tags show. (The menu animation was moved before 0.1.7 the same day.)
 To check before 0.1.7: see [Pre-release checks](BACKLOG.md#pre-release-checks).
+- Placements on the maps (built 2026-10-07; look chosen by the agent at the
+  maintainer's request, not yet checked): while Schematics are on, each
+  placement in the viewed dimension shows its footprint from above as a cyan
+  outline (the map palette's cyan) with a black edge and a faint fill, under
+  the waypoints; the selected one is outlined white. The minimap shows
+  visible placements only, turning with a heading-up map and clipped to a
+  round one; the world map also shows hidden ones faintly with "(hidden)"
+  and the name under the footprint. A footprint is never drawn smaller than
+  a few pixels. No click action on the map yet.
 - Menu settings (decided 2026-10-07): background dimming light by default
   (none and dark selectable); shown centered at full size by default, or
   as an option small in the lower right so the view stays free; it opens

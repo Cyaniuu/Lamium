@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 namespace lamium::map {
@@ -113,7 +114,10 @@ inline void composeTerrain(TileCache& cache, Frame const& frame, std::vector<std
 
 // The player arrow, pointing up at angle 0 and turning clockwise. Outline in
 // black, fill white. `size` is its height in pixels.
-struct Point { double x, y; };
+struct Point {
+    double x, y;
+    bool operator==(Point const&) const = default;
+};
 inline constexpr std::array<Point, 4> arrowShape{{{0, -9}, {6.5, 7}, {0, 3.5}, {-6.5, 7}}};
 inline double segmentDistance(Point p, Point a, Point b) {
     double vx = b.x - a.x, vy = b.y - a.y;
@@ -131,6 +135,42 @@ inline bool insidePolygon(Point p, std::array<Point, N> const& polygon) {
         if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
     }
     return inside;
+}
+// A schematic placement's footprint (L-93): a black-edged colored outline
+// around a faint fill, clipped to the map's shape. A footprint smaller than a
+// few pixels still shows as a small square.
+inline void drawOutline(std::vector<std::uint32_t>& pixels, int n, std::array<Point, 4> corners, std::uint32_t color,
+                        double width, bool round, float fillAlpha = .18f) {
+    constexpr double smallest = 3;
+    double cx = 0, cy = 0;
+    for (auto const& c : corners) { cx += c.x / 4; cy += c.y / 4; }
+    if (std::hypot(corners[2].x - corners[0].x, corners[2].y - corners[0].y) < smallest) {
+        double h = smallest / 2;
+        corners = {{{cx - h, cy - h}, {cx + h, cy - h}, {cx + h, cy + h}, {cx - h, cy + h}}};
+    }
+    double reach = width / 2 + 1.5;
+    double minX = corners[0].x, maxX = minX, minY = corners[0].y, maxY = minY;
+    for (auto const& c : corners) {
+        minX = std::min(minX, c.x); maxX = std::max(maxX, c.x);
+        minY = std::min(minY, c.y); maxY = std::max(maxY, c.y);
+    }
+    if (!(maxX >= -reach && maxY >= -reach && minX <= n + reach && minY <= n + reach)) return;
+    int x0 = std::max(0, int(std::floor(minX - reach))), x1 = std::min(n - 1, int(std::ceil(maxX + reach)));
+    int y0 = std::max(0, int(std::floor(minY - reach))), y1 = std::min(n - 1, int(std::ceil(maxY + reach)));
+    for (int y = y0; y <= y1; ++y)
+        for (int x = x0; x <= x1; ++x) {
+            if (!insideShape(x, y, n, round)) continue;
+            Point p{x + .5, y + .5};
+            double d = std::numeric_limits<double>::infinity();
+            for (size_t i = 0, j = 3; i < 4; j = i++) d = std::min(d, segmentDistance(p, corners[j], corners[i]));
+            auto& pixel = pixels[static_cast<size_t>(y) * n + x];
+            if (insidePolygon(p, corners) && fillAlpha > 0)
+                pixel = over(pixel, channel(color, 0), channel(color, 1), channel(color, 2), fillAlpha);
+            float edge = static_cast<float>(std::clamp(width / 2 + 1.5 - d, 0.0, 1.0));
+            if (edge > 0) pixel = over(pixel, 0, 0, 0, edge * .8f);
+            float line = static_cast<float>(std::clamp(width / 2 + .5 - d, 0.0, 1.0));
+            if (line > 0) pixel = over(pixel, channel(color, 0), channel(color, 1), channel(color, 2), line);
+        }
 }
 inline void drawArrow(std::vector<std::uint32_t>& pixels, int n, double cx, double cy, double angle, double size) {
     double unit = size / 16.0, outline = 1.5 * unit;

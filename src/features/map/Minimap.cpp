@@ -6,6 +6,7 @@
 #include "features/map/MapRegion.h"
 #include "features/map/MapStore.h"
 #include "features/map/RadarFaces.h"
+#include "features/map/SchematicMarks.h"
 #include "features/map/WaypointSession.h"
 #include "features/map/Waypoints.h"
 #include "features/map/MapTiles.h"
@@ -181,6 +182,12 @@ struct State {
             bool operator==(Mark const&) const = default;
         };
         std::vector<Mark> marks;
+        struct Outline {
+            std::array<Point, 4> corners;
+            bool selected;
+            bool operator==(Outline const&) const = default;
+        };
+        std::vector<Outline> outlines;
         bool operator==(Overlay const&) const = default;
     } shown;
     unsigned composes = 0;
@@ -697,14 +704,30 @@ std::optional<ui::hud_editor::Box> drawMinimap(MinecraftUIRenderContext& context
             }
             if (set.death && set.death->dimension == view->dimension) place(set.death->x + .5, set.death->z + .5, -1);
         }
+        for (auto const& mark : placementMarks(view->dimension)) {
+            if (!mark.visible) continue;
+            auto const& a = mark.area;
+            State::Overlay::Outline outline{{}, mark.selected};
+            std::array<std::array<int, 2>, 4> world{{{a.x0, a.z0}, {a.x1, a.z0}, {a.x1, a.z1}, {a.x0, a.z1}}};
+            for (size_t i = 0; i < 4; ++i) {
+                auto p = worldToPixel(transform, centerX, centerZ, world[i][0], world[i][1], blocks, pixels);
+                // Quarter pixels: a still map is not redrawn for rounding noise.
+                outline.corners[i] = {std::round(p.x * 4) / 4, std::round(p.y * 4) / 4};
+            }
+            overlay.outlines.push_back(outline);
+        }
         auto const& shown = state.shown;
         bool redraw = !state.uploaded || overlay.composes != shown.composes || overlay.visible != shown.visible
             || !(std::abs(overlay.angle - shown.angle) < .004) || !(std::abs(overlay.x - shown.x) < .25)
-            || !(std::abs(overlay.y - shown.y) < .25) || overlay.dots != shown.dots || overlay.marks != shown.marks;
+            || !(std::abs(overlay.y - shown.y) < .25) || overlay.dots != shown.dots || overlay.marks != shown.marks
+            || overlay.outlines != shown.outlines;
         if (redraw && !state.terrain.empty()) {
             state.image = state.terrain;
             // The look agreed in docs/demos/minimap.html, smaller on wide maps.
             double unit = marker * dotScale(blocksAcross(zoom));
+            for (auto const& outline : overlay.outlines)
+                drawOutline(state.image, pixels, outline.corners, outline.selected ? packColor(255, 255, 255) : placementColor,
+                            std::max(1.0, 1.5 * marker), settings.round);
             // Faces are drawn over the map on screen pixels, below.
             for (auto const& dot : overlay.dots)
                 if (dot.face < 0)

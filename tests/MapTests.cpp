@@ -139,6 +139,21 @@ void image() {
     check(near(northUpArrowAngle(180), 0, 1e-9) && near(std::abs(northUpArrowAngle(0)), 3.14159265358979, 1e-9),
           "north is up, south down");
 
+    std::vector<std::uint32_t> outlined(32 * 32, packColor(50, 50, 50));
+    auto color = packColor(100, 210, 225);
+    drawOutline(outlined, 32, {{{8.5, 8.5}, {23.5, 8.5}, {23.5, 23.5}, {8.5, 23.5}}}, color, 1, false);
+    auto px = [&](int x, int y) { return outlined[static_cast<size_t>(y) * 32 + x]; };
+    check(channel(px(16, 8), 2) > 150 && channel(px(16, 7), 2) < 50, "the outline is colored with a dark edge");
+    check(px(16, 16) != packColor(50, 50, 50) && channel(px(16, 16), 2) < 150, "the inside gets a faint fill");
+    check(px(2, 2) == packColor(50, 50, 50), "pixels away from the footprint stay untouched");
+    std::vector<std::uint32_t> dotted(32 * 32, 0);
+    drawOutline(dotted, 32, {{{16, 16}, {16.2, 16}, {16.2, 16.2}, {16, 16.2}}}, color, 1, false);
+    check(channel(dotted[16 * 32 + 17], 3) > 0 && channel(dotted[16 * 32 + 14], 3) > 0, "a tiny footprint still shows");
+    std::vector<std::uint32_t> clipped(32 * 32, 0);
+    drawOutline(clipped, 32, {{{-10, -10}, {40, -10}, {40, 40}, {-10, 40}}}, color, 1, true);
+    check(clipped[0] == 0 && clipped[16 * 32 + 16] != 0, "a round map clips the footprint to its circle");
+    drawOutline(clipped, 32, {{{900, 900}, {910, 900}, {910, 910}, {900, 910}}}, color, 1, false);
+
     std::vector<std::uint32_t> framed(16 * 16, packColor(50, 50, 50));
     drawFrame(framed, 16, false, 1);
     check(channel(framed[0], 0) > 50 && channel(framed[17], 0) < 50 && framed[2 * 16 + 2] == packColor(50, 50, 50),

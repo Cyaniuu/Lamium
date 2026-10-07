@@ -5,6 +5,7 @@
 #include "features/map/RadarFaces.h"
 #include "features/map/Minimap.h"
 #include "features/map/WaypointSession.h"
+#include "features/map/SchematicMarks.h"
 #include "features/map/WorldMapView.h"
 #include "features/map/SeedLink.h"
 #include "features/map/Teleport.h"
@@ -677,9 +678,32 @@ void drawTiles(MinecraftUIRenderContext& context, glm::vec2 size, double pixelsP
     (void)size;
 }
 
+// Schematic placements (L-93): footprint, faint fill and name, under the
+// other markers. Hidden ones stay faint, like hidden waypoints.
+void drawPlacements(MinecraftUIRenderContext& context) {
+    auto& view = state.view;
+    auto color = rgb(placementColor);
+    for (auto const& mark : placementMarks(state.dimension)) {
+        auto const& a = mark.area;
+        float x0 = std::round(static_cast<float>(view.screenX(a.x0))), y0 = std::round(static_cast<float>(view.screenY(a.z0)));
+        float x1 = std::round(static_cast<float>(view.screenX(a.x1))), y1 = std::round(static_cast<float>(view.screenY(a.z1)));
+        // Never smaller than a few units, so a far-out view still shows it.
+        float cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+        float w = std::max(x1 - x0, 4.f), h = std::max(y1 - y0, 4.f);
+        x0 = cx - w / 2; y0 = cy - h / 2;
+        if (x0 + w < -20 || y0 + h < -20 || x0 > view.width + 20 || y0 > view.height + 20) continue;
+        float opacity = mark.visible ? 1.f : .35f;
+        ui::fill(context, x0, y0, w, h, color, .16f * opacity);
+        ui::frame(context, x0 - 1, y0 - 1, w + 2, h + 2, Rgb{0, 0, 0}, .6f * opacity);
+        ui::frame(context, x0, y0, w, h, mark.selected ? ui::palette::white : color, opacity);
+        auto name = mark.visible ? mark.name : mark.name + " " + ui::translated("worldMap.hidden");
+        smallLabel(context, cx, y0 + h + 2, name, mark.visible ? ui::palette::text : ui::palette::faint);
+    }
+}
 void drawMarkers(MinecraftUIRenderContext& context, Settings::Map const& settings) {
     auto& view = state.view;
     state.markers.clear();
+    drawPlacements(context);
     auto spot = playerSpot();
     if (settings.radar && settings.radarPlayers && spot && spot->dimension == state.dimension) {
         faces::frame();
