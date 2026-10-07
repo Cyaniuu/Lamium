@@ -572,6 +572,10 @@ Accepted follow-ups (2026-10-07; known gaps, not 0.1.7 blockers):
 - The translucent ghost look.
 - Entity name-tag distance and quantity.
 
+Screen review against the mockup (2026-10-08): answers and open points are in
+SCHEMATIC.md "Screen review against the mockup"; a new mockup comes before
+any of it is built.
+
 Pick the next follow-up with the maintainer; the list is not an implementation
 order. Chosen 2026-10-07: placement markers on the minimap/world map,
 built the same day (look in SCHEMATIC.md) and checked in game 2026-10-08.

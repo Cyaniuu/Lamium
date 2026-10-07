@@ -34,6 +34,38 @@ and honey blocks. Schematic neighbors, the translucent look, the Check tab's
 colored preview and the Files tab's rotatable 3D preview remain follow-ups.
 Local checks do not establish server, other-dimension or large-file coverage.
 
+## Screen review against the mockup (2026-10-08, in discussion)
+
+The agent compared `docs/demos/schematic.html` with the screen code; the
+maintainer answered (screenshot at UI Profile 75% as the reference size):
+1. A frame around each placement in the world: yes, as a solid light-blue
+   line like the ghosts' outline (the mock's green/grey is dropped). Open:
+   every placement or only the selected one, and how the selected one
+   differs.
+2. A "◀ placement ▶" switcher on the Check and Materials tabs: rejected; it
+   does not scale to many placements. The Placed list stays the way to pick.
+3. Files grouped by folder with size and block columns: wanted (a small
+   convenience).
+4. Placed list: the selected one must stand out and progress should show,
+   within the width of the list; text such as "Selected" takes too much room.
+5. Check filters with their counts: wanted.
+6. A wrong-state row: a block can differ in several states, so the list keeps
+   the name and the differing states show in the right pane when the row is
+   selected.
+7. Materials: block and entity sections and the missing "show on the HUD"
+   switch, both wanted. Also wanted: amounts as stacks and chests ("3 chests
+   + 5 stacks + 12") on hover or selection, and a right pane used for
+   something better than the explanation text, for example the missing
+   materials drawn like inventory slots, or the raw materials needed to make
+   them (own calculation, or an external calculator site as the map does with
+   ChunkBase).
+8, 9. 3D previews in the screen: not a copy of the mock; vanilla draws 3D in
+   UI (the structure block), so a path likely exists. To research.
+Entities (maintainer, considering): no limit on name tags; draw entities as
+real models with the light-blue outline and the same face treatment as
+blocks, and drop translucency.
+A new mockup comes first; nothing here is built yet.
+
 ## Technical entry points
 
 - `src/features/schematic/Nbt.*`, `Structure.*`: NBT and structure read/write.
