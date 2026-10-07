@@ -12,6 +12,17 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 third look at drawing and the menu (2026-10-07)
+
+By the maintainer, local world, `f6f5386` (DLL `68a0d497...85864`), with a
+screenshot. The menu is fine now. Drawing still felt off: with the camera
+at a cell border a hollow showed, and blocks over the feet and legs were
+not drawn (the open camera cells). The menu animation is wanted before
+0.1.7 after all (for approachability), and the "Shortcuts:" prefix on the
+key groups reads odd. Changed in `efcbda7` (not yet checked): ghosts within
+one cell of the camera's cells drawn whole, the opening animation, the
+groups' old names back.
+
 ## L-93 menu tidy-up and drawing, second look (2026-10-07)
 
 By the maintainer, local world, `4e413ed` (DLL `3604d22b...19c87b`), with

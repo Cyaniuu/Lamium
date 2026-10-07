@@ -1118,8 +1118,15 @@ cell; enclosed ghosts are skipped for everyone again (the option is
 gone). The ring is sized from the item and center sizes so no item meets
 its neighbor or the center at any count (`RadialLayout`, tested); small
 mode scales the whole menu; hints are one per line.
+Third look (`efcbda7`, 2026-10-07, not yet checked): the open camera cells
+are gone; ghosts within one cell of the camera's eye and feet cells keep
+every face and are never skipped as enclosed (so a border position or the
+legs show blocks); the menu's items spread out from 55% of the ring over
+0.15 s with ease-out when a level opens, their text appearing once the
+plates are mostly in (`RadialLayout::spread`, tested); the key groups are
+named "Placement keys", "Shown layers", "Check", "Save an area" again.
 After 0.1.7 (maintainer, 2026-10-07): placements on the minimap and world
-map; an opening animation for the menu.
+map. (The menu animation was moved before 0.1.7 the same day.)
 To check before 0.1.7: see "Pre-release checks".
 - Menu settings (decided 2026-10-07): background dimming light by default
   (none and dark selectable); shown centered at full size by default, or
