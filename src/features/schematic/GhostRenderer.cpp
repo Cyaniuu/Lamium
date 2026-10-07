@@ -816,7 +816,10 @@ void stepScan(BlockSource& region, session::Snapshot const& snapshot, int dimens
             auto info = describe(*actual, actual->getTypeName());
             m.actual = info.icon;
             m.actualName = info.name;
-            if (state == CellState::State && expected) m.states = stateDifferences(blockStates(*expected), blockStates(*actual));
+            if (state == CellState::State && expected) {
+                m.states = stateDifferences(blockStates(*expected), blockStates(*actual));
+                m.identifier = expected->getTypeName();
+            }
         }
         scan.mismatches.push_back(std::move(m));
     }

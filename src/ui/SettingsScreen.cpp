@@ -14,6 +14,7 @@
 #include "features/schematic/SchematicSession.h"
 #include "features/schematic/GhostRenderer.h"
 #include "ui/SchematicFiles.h"
+#include "features/information/SchematicTarget.h"
 #include "features/schematic/SchematicItems.h"
 #include "features/schematic/Selection.h"
 #include "features/schematic/SchematicActions.h"
@@ -2549,19 +2550,12 @@ void showSelectedMismatch() {
 int schematicFieldCount() {
     switch (schematicTab) {
     case SchematicTab::Placements: return selectedPlacement() ? static_cast<int>(schematicFields.size()) : 0;
-    case SchematicTab::Verify: case SchematicTab::Materials: return 1;
+    case SchematicTab::Materials: return 1;
     default: return 0;
     }
 }
 // part: -1/1 step, 0 value (type a number or press), 2 label.
 void activateSchematicField(int index, int part) {
-    if (schematicTab == SchematicTab::Verify) {
-        if (index != 0 || part == 2) return;
-        verifyFilter = (verifyFilter + (part == -1 ? 3 : 1)) % 4;
-        verifySelected = -1;
-        refreshSchematics(false);
-        return;
-    }
     if (schematicTab == SchematicTab::Materials) {
         if (index != 0 || part == 2) return;
         materialsShownOnly = !materialsShownOnly;
@@ -2667,6 +2661,16 @@ int schematicTabAt(ShapesLayout const& l, float x, float y) {
         if (x >= schematicTabX(l, i) && x < schematicTabX(l, i) + schematicTabWidth(l)) return i;
     return -1;
 }
+// The Check tab's four filters, in the list's heading row (L-93 screen review).
+float verifyChipX(ShapesLayout const& l, int i) {
+    float w = (l.listWidth - 2 * ShapesLayout::pad) / 4;
+    return l.listLeft + ShapesLayout::pad + w * static_cast<float>(i);
+}
+int verifyChipAt(ShapesLayout const& l, float x, float y) {
+    if (schematicTab != SchematicTab::Verify || y < l.theadTop || y >= l.rowsTop) return -1;
+    for (int i = 0; i < 4; ++i) if (x >= verifyChipX(l, i) && x < verifyChipX(l, i + 1) - 2) return i;
+    return -1;
+}
 void handleSchematicClick(float x, float y, bool right) {
     finishNumber();
     if (!right && pressScrollbar(schematicsDisplayed, schematicListFirst, x, y)) return;
@@ -2676,6 +2680,13 @@ void handleSchematicClick(float x, float y, bool right) {
         if (nav.zone == Zone::Version) { copyVersion(); return; }
     }
     if (int tab = schematicTabAt(schematicsDisplayed, x, y); tab >= 0) { selectSchematicTab(static_cast<SchematicTab>(tab)); return; }
+    if (int chip = verifyChipAt(schematicsDisplayed, x, y); chip >= 0) {
+        verifyFilter = chip;
+        verifySelected = -1;
+        schematicListFirst = 0;
+        refreshSchematics(false);
+        return;
+    }
     auto hit = schematicsDisplayed.hit(x, y);
     if (!(hit.zone == ShapeZone::Action && hit.index == 1)) schematicDeleteArmed = false;
     switch (hit.zone) {
@@ -2909,12 +2920,23 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         if (showSize) heading(sizeX, sizeW, "schematic.column.size", Align::Right);
         heading(blocksX, blocksW, "schematic.column.blockCount", Align::Right);
         break;
-    case SchematicTab::Verify:
-        heading(left, kindW, "schematic.column.kind");
-        if (posW > 0) heading(left + kindW, posW, "schematic.column.position");
-        heading(left + kindW + posW, listRight - left - kindW - posW - distW - ShapesLayout::pad, "schematic.column.blocks");
-        heading(listRight - ShapesLayout::pad - distW, distW, "schematic.column.distance", Align::Right);
+    case SchematicTab::Verify: {
+        // The filters replace the column headings; each shows how many rows it has.
+        static constexpr std::array<std::string_view, 4> chips{"schematic.filter.mistakes", "schematic.filter.wrong",
+            "schematic.filter.state", "schematic.filter.missing"};
+        auto const& t = verification->visible;
+        bool counted = checked && !counting;
+        std::array<std::uint64_t, 4> counts{t.wrong + t.state + t.extra, t.wrong + t.extra, t.state, t.missing};
+        for (int i = 0; i < 4; ++i) {
+            bool on = verifyFilter == i;
+            std::string text = translated(chips[static_cast<size_t>(i)]);
+            if (counted) text += std::format(" {}", counts[static_cast<size_t>(i)]);
+            drawSmallButton(context,verifyChipX(l,i),l.theadTop,verifyChipX(l,i+1)-verifyChipX(l,i)-2,ShapesLayout::theadHeight-1,
+                std::move(text),verifyChipAt(l,pointer.x,pointer.y) == i,on ? palette::accentDeep : palette::keyFill,
+                on ? palette::accent : palette::keyEdge,on ? palette::text : palette::dim);
+        }
         break;
+    }
     case SchematicTab::Materials:
         heading(left + 14, neededX - left - 16, "schematic.column.material");
         heading(neededX, numW, "schematic.column.needed", Align::Right);
@@ -3001,7 +3023,8 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
                 label(context,x+14,y+3,w-14,name,color);
             };
             if (m.entity) block(bx, bw, m.expected, translated("schematic.withDetail", m.expectedName, translated("schematic.entityTag")), palette::text);
-            else if (m.state == schematic::CellState::Missing) block(bx, bw, m.expected, m.expectedName, palette::text);
+            else if (m.state == schematic::CellState::Missing || m.state == schematic::CellState::State)
+                block(bx, bw, m.expected, m.expectedName, palette::text); // A wrong state: which states, in the right pane.
             else if (m.state == schematic::CellState::Extra) {
                 // Same columns as a wrong block: air where the schematic's block would be.
                 float half = (bw - 10) / 2;
@@ -3139,21 +3162,38 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
             label(context,dx,l.previewY+33,dw,translated("schematic.summary.state", t.state),Rgb{1.f,.8f,.3f});
         }
         label(context,dx,l.previewY+46,dw,layersText(*checked),palette::faint);
-        static constexpr std::array<std::string_view, 4> filters{"schematic.filter.mistakes", "schematic.filter.wrong",
-            "schematic.filter.state", "schematic.filter.missing"};
-        stepperRow(0, "schematic.filter", translated(filters[static_cast<size_t>(verifyFilter)]), false, false);
         if (verifySelected >= 0 && verifySelected < static_cast<int>(verifyRows.size())) {
             auto const& m = *verifyRows[static_cast<size_t>(verifySelected)];
-            float y = l.fieldY(1) + 4;
+            float y = l.previewY + 60;
             label(context,dx,y,dw,mismatchKind(m.state) + std::format("  {}, {}, {}", m.position.x, m.position.y, m.position.z),
                 mismatchColor(m.state));
             if (!m.expectedName.empty()) {
                 drawItemIcon(context, m.expected, dx, y + 12, 12);
                 label(context,dx+14,y+14,dw-14,translated("schematic.expected", m.expectedName),palette::dim);
             }
-            if (!m.actualName.empty()) {
+            if (!m.actualName.empty() && m.state != schematic::CellState::State) {
                 drawItemIcon(context, m.actual, dx, y + 27, 12);
                 label(context,dx+14,y+29,dw-14,translated("schematic.actual", m.actualName),palette::dim);
+            }
+            // Every differing state: "<state>  <now> -> <should be>", named like the target card's.
+            float sy = y + 30;
+            Rgb stateColor{1.f, .8f, .25f};
+            auto const& identifier = m.identifier;
+            for (auto const& d : m.states) {
+                auto translate = [](std::string_view key) { return translated(key); };
+                auto now = information::stateName(d.key, d.actual, identifier, translate);
+                auto want = information::stateName(d.key, d.expected, identifier, translate);
+                auto const& named = now.labelIsKey ? now : want;
+                std::string name = named.labelIsKey ? translated(named.label) : named.label;
+                float half = dw * .45f;
+                label(context,dx,sy,half-4,name,palette::dim);
+                float vx = dx + half, nowW = textWidth(context, now.value);
+                label(context,vx,sy,nowW+2,now.value,stateColor);
+                vx += nowW + 3;
+                changeArrow(context,vx,sy+1.5f+shapeTextDrop(),1,stateColor);
+                vx += changeArrowWidth + 3;
+                label(context,vx,sy,dx+dw-vx,want.value,stateColor);
+                sy += 11;
             }
         }
         fill(context,l.detailLeft,l.actionsY-2,l.detailWidth,1,palette::white,.14f);

@@ -16,6 +16,7 @@ struct Mismatch {
     std::string expectedName, actualName; // display names
     bool entity = false; // a missing entity rather than a block
     std::vector<StateDifference> states; // CellState::State: what differs
+    std::string identifier; // the expected block's name (minecraft:oak_trapdoor), for naming its states
 };
 struct MaterialLine {
     std::string item;      // item name, e.g. minecraft:oak_stairs; empty when the block has no item
