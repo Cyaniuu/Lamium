@@ -3413,16 +3413,23 @@ void renderSchematicMenu(MinecraftUIRenderContext& context, glm::vec2 size, glm:
         labelScaled(context, cx + 4, y + textInset, cw - 8, text, s, color, Align::Center);
         y += line;
     }
+    float below = std::round(l.cy + l.ry + menuSizes.itemHeight / 2 + 4), above = std::round(l.cy - l.ry - menuSizes.itemHeight / 2 - 4);
+    auto note = [&](std::string const& text, Rgb color, bool card, bool top) {
+        float tw = std::min(width(text) + 10, size.x - 8), th = 11 * s + 2;
+        float tx = std::round(std::clamp(l.cx - tw / 2, 4.f, size.x - tw - 4));
+        float ty = top ? above - th : below;
+        if (!top && ty + th > size.y) ty = above - th;
+        if (card) panel(context, tx, ty, tw, th, .86f);
+        labelScaled(context, tx + 5, ty + 1 + textInset, tw - 10, text, s, color, Align::Center);
+    };
+    // The game's toasts are not drawn over this screen: what an item just
+    // did (or why it did nothing, such as no area yet) shows under the ring.
+    if (auto toast = currentToggleToast(toastNow()))
+        note(toast->plain ? toast->text : toast->text + ": " + translated(toast->on ? "on" : "off"), palette::text, true, false);
     // A quiet pointer to the adjust key while it is unbound.
     if (hovered && hovered->stepper() && schematic::menu::repeatable(std::get<menu::Stepper>(hovered->what))
-        && input::effectiveChord(preferences.bindings, input::Action::AdjustSchematic).empty()) {
-        auto tip = translated("schematic.menu.hintAdjust");
-        float tw = std::min(width(tip) + 8, size.x - 8);
-        float tx = std::round(std::clamp(l.cx - tw / 2, 4.f, size.x - tw - 4));
-        float ty = std::round(l.cy + l.ry + menuSizes.itemHeight / 2 + 4);
-        if (ty + line > size.y) ty = std::round(l.cy - l.ry - menuSizes.itemHeight / 2 - line - 4);
-        labelScaled(context, tx + 4, ty, tw - 8, tip, s, palette::faint, Align::Center);
-    }
+        && input::effectiveChord(preferences.bindings, input::Action::AdjustSchematic).empty())
+        note(translated("schematic.menu.hintAdjust"), palette::faint, false, true);
     context.flushText(0, std::nullopt);
 }
 // ---- Schematic save prompt ----

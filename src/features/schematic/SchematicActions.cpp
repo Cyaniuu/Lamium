@@ -159,6 +159,8 @@ void moveBy(LocalPlayer& player, Point d) {
     }
     auto state = selection::current();
     int dimension = static_cast<int>(player.getDimensionId());
+    // An area in another dimension is not moved from here.
+    if (state.dimension != dimension) { ui::showMessageToast(ui::translated("schematic.toast.noArea")); return; }
     auto corner = [&](std::optional<Point> const& c, int which) {
         if (!c) return false;
         selection::setCorner(which, shifted(*c), state.dimension);
@@ -167,7 +169,7 @@ void moveBy(LocalPlayer& player, Point d) {
     bool moved = false;
     if (moveTarget == menu::Target::Corner1 || moveTarget == menu::Target::Area) moved = corner(state.first, 0) || moved;
     if (moveTarget == menu::Target::Corner2 || moveTarget == menu::Target::Area) moved = corner(state.second, 1) || moved;
-    if (!moved || state.dimension != dimension) { ui::showMessageToast(ui::translated("schematic.toast.noArea")); return; }
+    if (!moved) { ui::showMessageToast(ui::translated("schematic.toast.noArea")); return; }
     auto now = selection::current();
     auto const& shown = moveTarget == menu::Target::Corner2 ? now.second : now.first;
     if (shown) ui::showMessageToast(ui::translated("schematic.toast.corner", moveTarget == menu::Target::Corner2 ? 2 : 1, shown->x, shown->y, shown->z));
@@ -442,7 +444,13 @@ void adjustFrame(MinecraftUIRenderContext& context, float, float) {
     IClientInstance& client = context.mClient;
     adjustClient = &client;
     if (!adjustHeld.load()) return;
-    // Each step's own toast reports the new value.
-    if (int turns = pendingWheel.exchange(0); turns && remembered) step(client, *remembered, turns);
+    // One toast: what the wheel repeats, then what the step reported, so the
+    // step's own toast does not replace the first at once.
+    if (int turns = pendingWheel.exchange(0); turns && remembered) {
+        step(client, *remembered, turns);
+        auto shown = ui::currentToggleToast(ui::toastNow());
+        auto prefix = adjustText();
+        ui::showMessageToast(shown && shown->text != prefix ? prefix + "  " + shown->text : prefix);
+    }
 }
 }
