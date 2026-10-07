@@ -73,6 +73,7 @@ void drawRun(MinecraftUIRenderContext& context, Font& font, float x, float y, fl
 }
 }
 float boxTextInset() { return japaneseLocale() ? 0.f : 1.f; }
+float shapeTextDrop() { return japaneseLocale() ? 1.f : 0.f; }
 float labelWidth(MinecraftUIRenderContext& context, std::string_view text, float size) {
     if (!(size > 0) || !std::isfinite(size)) size = 1;
     auto& font = defaultFont(context);

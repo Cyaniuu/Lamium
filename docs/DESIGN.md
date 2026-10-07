@@ -132,7 +132,8 @@ at most 640×380 and centered. New screens reuse these numbers.
   Traditional Chinese is not claimed until it is separately translated and
   reviewed. Contributor notes: [TRANSLATING.md](TRANSLATING.md).
 - Japanese locale: Latin runs are raised 1.5 units to share the baseline, and
-  text inside a frame starts `boxTextInset()` lower. Always draw through
+  text inside a frame starts `boxTextInset()` lower, and a shape drawn beside
+  text (the change arrow) moves `shapeTextDrop()` lower to meet the glyphs. Always draw through
   `ui::label`/`ui::paragraph`, never raw font calls.
 - Text shadow: Lamium draws its own copy half a GUI unit away; the engine's
   shadow sits a whole unit away and reads as doubled on dense Japanese lines.

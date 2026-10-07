@@ -12,6 +12,16 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## Drawn change arrow in the target card (2026-10-08)
+
+By the maintainer, deployed `3b70d73`, DLL
+`6b89c75435b4d55f63c968310e711020a5ed0574d77a09b57db7ffea4108a2a2`,
+Minecraft 1.26.51.01, local world. The arrow now matches the text size and
+color. In Japanese it sat slightly above the kanji (about 0.8 units in the
+screenshot); lowered by `shapeTextDrop()` (1 unit, Japanese only) after this
+check. The maintainer also noted that numbers sit higher than Japanese text
+in the settings screen; that is the Latin raise amount, recorded separately.
+
 ## L-93 target-card redesign, L-112 state names, L-109 switch (2026-10-08)
 
 By the maintainer, deployed `f325932`, DLL

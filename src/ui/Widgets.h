@@ -30,6 +30,10 @@ void labelScaled(MinecraftUIRenderContext&, float x, float y, float width, std::
 // Japanese glyphs fill more of the line; text framed by a border starts this
 // much lower than its box top so it clears the bottom edge in every locale.
 float boxTextInset();
+// How much lower a shape drawn beside text sits so it lines up with the
+// letters, in text units: Japanese glyphs sit about one unit lower than
+// Latin ones (the change arrow measured 2026-10-08).
+float shapeTextDrop();
 void paragraph(MinecraftUIRenderContext&, float x, float y, float width, std::string_view text, size_t maxLines,
                Rgb color = palette::text);
 // How many lines paragraph() would draw.

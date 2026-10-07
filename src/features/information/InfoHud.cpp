@@ -577,7 +577,7 @@ std::optional<ui::hud_editor::Box> drawTargetCard(MinecraftUIRenderContext& cont
             float w = ui::textWidthScaled(context, row.before, z);
             ui::labelScaled(context, x, y, w + 2, row.before, z, color, ui::Align::Left, element.shadow);
             x += w + 3 * z;
-            ui::changeArrow(context, x, y + 1.5f * z, z, color);
+            ui::changeArrow(context, x, y + (1.5f + ui::shapeTextDrop()) * z, z, color);
             x += (ui::changeArrowWidth + 3) * z;
         }
         ui::labelScaled(context, x, y, left + contentW - x + 2, values[i], z, color, ui::Align::Left, element.shadow);
