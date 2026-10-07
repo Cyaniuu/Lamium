@@ -1,5 +1,6 @@
 #pragma once
 #include "features/schematic/Structure.h"
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 
@@ -98,6 +99,17 @@ inline int layerOf(Size placed, LayerAxis axis, Point offset) {
     case LayerAxis::SouthFromNorth: return offset.z;
     default: return placed.z - 1 - offset.z;
     }
+}
+// Changes the layer direction. Turning to the opposite side of the same axis
+// (from below to from above, ...) keeps the same physical layer; another
+// axis keeps the number, clamped to its count.
+inline Layers withAxis(Layers layers, Size placed, LayerAxis next) {
+    auto axisOf = [](LayerAxis a) { return static_cast<int>(a) / 2; };
+    if (axisOf(layers.axis) == axisOf(next) && layers.axis != next)
+        layers.index = layerCount(placed, next) - 1 - layers.index;
+    layers.axis = next;
+    layers.index = std::clamp(layers.index, 0, std::max(0, layerCount(placed, next) - 1));
+    return layers;
 }
 inline bool layerShown(Layers const& layers, Size placed, Point offset) {
     if (layers.mode == LayerMode::All) return true;

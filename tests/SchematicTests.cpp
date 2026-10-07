@@ -204,6 +204,8 @@ void saveRules() {
           && (static_cast<unsigned char>(longJapanese[longJapanese.size() - 13]) & 0xc0) != 0xc0,
           "long names are cut without splitting a character");
 
+    check(compassOctant(0, -5) == 0 && compassOctant(5, -5) == 1 && compassOctant(5, 0) == 2 && compassOctant(0, 5) == 4
+          && compassOctant(-5, 0) == 6 && compassOctant(-5, -5) == 7, "directions name north as -z, clockwise");
     check(chunkOf(0) == 0 && chunkOf(15) == 0 && chunkOf(16) == 1 && chunkOf(-1) == -1 && chunkOf(-16) == -1 && chunkOf(-17) == -2,
           "blocks map to chunks with floor division");
     Area wide{{-20, 60, 5}, {17, 62, 40}};
@@ -284,6 +286,12 @@ void layerRules() {
     check(layerShown(layers, placed, {3, 0, 0}) && !layerShown(layers, placed, {0, 0, 0}), "side layers count from the chosen side");
     check(layerCount(placed, LayerAxis::SouthFromNorth) == 3 && layerCount(placed, LayerAxis::EastFromWest) == 4,
           "layer counts follow the axis");
+    Layers bottom{LayerAxis::UpFromBottom, LayerMode::Only, 1};
+    auto top = withAxis(bottom, placed, LayerAxis::DownFromTop);
+    check(top.index == 4 && layerShown(top, placed, {0, 1, 0}) && !layerShown(top, placed, {0, 2, 0}),
+          "turning to the opposite side keeps the same layer");
+    check(withAxis(bottom, placed, LayerAxis::SouthFromNorth).index == 1 && withAxis({LayerAxis::UpFromBottom, LayerMode::Only, 5}, placed,
+          LayerAxis::SouthFromNorth).index == 2, "another axis keeps the number, clamped");
 }
 
 void verifyRules() {
@@ -342,14 +350,16 @@ void menuRules() {
     check(openAt(false, 3) == -1 && openAt(true, 3) == 3 && openAt(true, -1) == -1 && openAt(true, 99) == -1,
           "the menu opens at the list unless set to reopen where it was closed");
 
-    auto ring = lamium::ui::RadialLayout::at(480, 270, 8, false);
+    auto ring = lamium::ui::RadialLayout::at(480, 270, 8, 90, false);
     bool round = true;
     for (int i = 0; i < 8; ++i) round = round && ring.hit(ring.itemX(i), ring.itemY(i)) == i;
     check(round && ring.hit(ring.cx, ring.cy) == -1 && ring.itemY(0) < ring.cy, "the ring starts at the top and each item is hit by its direction");
-    auto small = lamium::ui::RadialLayout::at(480, 270, 8, true);
-    check(small.cx > ring.cx && small.cy > ring.cy && small.rx < ring.rx
-          && small.cx + small.rx + lamium::ui::RadialLayout::itemWidth * small.scale / 2 <= 480,
-          "the small menu sits smaller in the lower right, inside the screen");
+    auto small = lamium::ui::RadialLayout::at(480, 270, 8, 90, true), fewer = lamium::ui::RadialLayout::at(480, 270, 3, 90, true);
+    check(small.cx > ring.cx && small.cy > ring.cy && small.rx < ring.rx && small.cx + small.rx + 45 <= 480
+          && fewer.cx == small.cx && fewer.cy == small.cy, "the small menu sits in the lower right, inside the screen, and stays put");
+    auto narrow = lamium::ui::RadialLayout::at(320, 200, 8, 120, false);
+    check(narrow.cx - narrow.rx - 60 >= 0 && narrow.cx + narrow.rx + 60 <= 320, "the ring fits a narrow screen");
+    check(repeatable(Stepper::Layer) && !repeatable(Stepper::Target), "the adjust key does not repeat choosing the target");
 }
 
 void drawKeys() {

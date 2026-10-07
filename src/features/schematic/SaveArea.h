@@ -2,6 +2,7 @@
 #include "features/schematic/Placement.h"
 #include "features/schematic/Structure.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <map>
@@ -33,6 +34,13 @@ struct Column {
         return static_cast<std::uint64_t>(highX - lowX + 1) * (highZ - lowZ + 1) * static_cast<std::uint64_t>(height);
     }
 };
+// The direction from one point to another on the map, as one of eight:
+// 0 north (-z), 1 north-east, 2 east (+x), ... 7 north-west.
+inline int compassOctant(double dx, double dz) {
+    double angle = std::atan2(dx, -dz); // 0 toward north, clockwise
+    int octant = static_cast<int>(std::lround(angle / (3.14159265358979323846 / 4)));
+    return ((octant % 8) + 8) % 8;
+}
 inline int chunkOf(int block) { return block >= 0 ? block / 16 : -((-block + 15) / 16); }
 inline std::vector<Column> chunkColumns(Area const& area) {
     Point low = area.low();

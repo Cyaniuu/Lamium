@@ -9,7 +9,7 @@
 // categories, each a ring of items. A stepper changes a value with the wheel
 // (a click steps once); a command runs on a click. What they do is glue.
 namespace lamium::schematic::menu {
-enum class Stepper : std::uint8_t { ForwardBack, LeftRight, UpDown, Rotate, Mirror, LayerAxis, LayerMode, Layer, Placement };
+enum class Stepper : std::uint8_t { ForwardBack, LeftRight, UpDown, Rotate, Mirror, LayerAxis, LayerMode, Layer, Placement, Target };
 enum class Command : std::uint8_t {
     ToFeet, ResetTurn, LayerHere, ShowAll, ToggleShown, ToggleExtras, ToggleEntities, ToggleHud, ToggleFeature,
     Corner1Here, Corner2Here, MoveCorner1, MoveCorner2, MoveArea, MovePlacement, SaveArea, ClearArea,
@@ -31,8 +31,8 @@ struct Category {
 namespace detail {
 using S = Stepper;
 using C = Command;
-inline constexpr std::array<Item, 4> move{{{"schematic.menu.forwardBack", S::ForwardBack}, {"schematic.menu.leftRight", S::LeftRight},
-    {"schematic.menu.upDown", S::UpDown}, {"schematic.menu.toFeet", C::ToFeet}}};
+inline constexpr std::array<Item, 5> move{{{"schematic.menu.forwardBack", S::ForwardBack}, {"schematic.menu.leftRight", S::LeftRight},
+    {"schematic.menu.upDown", S::UpDown}, {"schematic.menu.toFeet", C::ToFeet}, {"schematic.menu.moveTarget", S::Target}}};
 inline constexpr std::array<Item, 3> turn{{{"schematic.menu.rotate", S::Rotate}, {"schematic.menu.mirror", S::Mirror},
     {"schematic.menu.resetTurn", C::ResetTurn}}};
 inline constexpr std::array<Item, 5> layers{{{"schematic.menu.layerAxis", S::LayerAxis}, {"schematic.menu.layerMode", S::LayerMode},
@@ -67,6 +67,8 @@ inline constexpr bool choosesTarget(Command command, Target& target) {
     default: return false;
     }
 }
+// Steppers the adjust key may repeat: not the one that only picks the target.
+inline constexpr bool repeatable(Stepper stepper) { return stepper != Stepper::Target; }
 // Where the menu opens: the category list, or (an option) the level shown
 // when it was last closed.
 inline constexpr int openAt(bool whereClosed, int closedAt) {

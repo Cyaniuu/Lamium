@@ -141,6 +141,7 @@ struct Settings {
         int menuBackground = 1;   // The menu's dimming: 0 none, 1 light, 2 dark.
         bool menuSmall = false;   // Small in the lower right instead of centered.
         bool menuReopen = false;  // Reopen where it was closed instead of at the list.
+        bool lightDrawing = false; // Skip ghosts hidden inside opaque ones (large schematics).
     } schematic;
     struct Overlays {
         bool chunkBorders = false;

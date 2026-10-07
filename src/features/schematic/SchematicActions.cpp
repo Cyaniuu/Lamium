@@ -269,8 +269,13 @@ void step(IClientInstance& client, menu::Stepper stepper, int amount) {
     using S = menu::Stepper;
     auto* player = client.getLocalPlayer();
     if (!player || !amount) return;
-    remembered = stepper;
+    if (menu::repeatable(stepper)) remembered = stepper;
     switch (stepper) {
+    case S::Target: {
+        moveTarget = static_cast<menu::Target>(((static_cast<int>(moveTarget) + amount) % 4 + 4) % 4);
+        ui::showMessageToast(ui::translated("schematic.menu.moveTarget") + ": " + value(S::Target));
+        return;
+    }
     case S::ForwardBack: case S::LeftRight: {
         auto f = away(*player);
         Point d = stepper == S::ForwardBack ? Point{f.x * amount, 0, f.z * amount} : Point{-f.z * amount, 0, f.x * amount};
@@ -289,7 +294,10 @@ void step(IClientInstance& client, menu::Stepper stepper, int amount) {
     case S::LayerAxis: case S::LayerMode: case S::Layer: {
         auto structure = selectedStructure();
         changeSelected([&](SavedPlacement& p) {
-            if (stepper == S::LayerAxis) p.layers.axis = static_cast<LayerAxis>(((static_cast<int>(p.layers.axis) + amount) % 6 + 6) % 6);
+            if (stepper == S::LayerAxis) {
+                Size placed = structure ? placedSize(structure->size, p.placement.rotation) : Size{1, 1, 1};
+                p.layers = withAxis(p.layers, placed, static_cast<LayerAxis>(((static_cast<int>(p.layers.axis) + amount) % 6 + 6) % 6));
+            }
             else if (stepper == S::LayerMode) p.layers.mode = static_cast<LayerMode>(((static_cast<int>(p.layers.mode) + amount) % 3 + 3) % 3);
             else if (p.layers.mode == LayerMode::All) p.layers.mode = LayerMode::Only;
             else p.layers.index += amount;
@@ -366,6 +374,11 @@ std::string value(menu::Stepper stepper) {
     SavedPlacement const* p = set.selected >= 0 && set.selected < static_cast<int>(set.placements.size())
         ? &set.placements[static_cast<size_t>(set.selected)] : nullptr;
     switch (stepper) {
+    case S::Target: {
+        static constexpr std::array<char const*, 4> targets{"schematic.target.placement", "schematic.target.corner1",
+            "schematic.target.corner2", "schematic.target.area"};
+        return ui::translated(targets[static_cast<size_t>(moveTarget)]);
+    }
     case S::Placement: return p ? p->name : std::string{};
     case S::Rotate: return p ? std::format("{}°", p->placement.rotation * 90) : std::string{};
     case S::Mirror: return p ? mirrorName(p->placement.mirror) : std::string{};
@@ -386,7 +399,21 @@ std::string value(menu::Stepper stepper) {
     }
 }
 
+// What the adjust key repeats, for its toast: the item's name, and the
+// move target or the current value.
+std::string adjustText() {
+    if (!remembered) return ui::translated("schematic.adjust.none");
+    std::string name;
+    for (auto const& category : menu::categories)
+        for (auto const& item : category.items)
+            if (item.stepper() && std::get<menu::Stepper>(item.what) == *remembered && name.empty()) name = ui::translated(item.label);
+    bool moving = *remembered == menu::Stepper::ForwardBack || *remembered == menu::Stepper::LeftRight || *remembered == menu::Stepper::UpDown;
+    auto shown = moving ? value(menu::Stepper::Target) : value(*remembered);
+    return ui::translated("schematic.adjust.hint", shown.empty() ? name : name + " (" + shown + ")");
+}
 void setAdjustHeld(bool held) {
+    // Pressing it says what the wheel will repeat, like other toggles' toasts.
+    if (held && !adjustHeld.exchange(true)) ui::showMessageToast(adjustText());
     adjustHeld = held;
     if (!held) pendingWheel = 0;
 }
@@ -411,28 +438,11 @@ void stopAdjust() {
     adjustHeld = false;
     pendingWheel = 0;
 }
-void adjustFrame(MinecraftUIRenderContext& context, float width, float height) {
+void adjustFrame(MinecraftUIRenderContext& context, float, float) {
     IClientInstance& client = context.mClient;
     adjustClient = &client;
     if (!adjustHeld.load()) return;
+    // Each step's own toast reports the new value.
     if (int turns = pendingWheel.exchange(0); turns && remembered) step(client, *remembered, turns);
-    std::string text;
-    if (!remembered) text = ui::translated("schematic.adjust.none");
-    else {
-        for (auto const& category : menu::categories)
-            for (auto const& item : category.items)
-                if (item.stepper() && std::get<menu::Stepper>(item.what) == *remembered && text.empty())
-                    text = ui::translated("schematic.adjust.hint", ui::translated(item.label));
-        if (*remembered == menu::Stepper::ForwardBack || *remembered == menu::Stepper::LeftRight || *remembered == menu::Stepper::UpDown) {
-            static constexpr std::array<char const*, 4> targets{"schematic.target.placement", "schematic.target.corner1",
-                "schematic.target.corner2", "schematic.target.area"};
-            text += " (" + ui::translated(targets[static_cast<size_t>(moveTarget)]) + ")";
-        } else if (auto shown = value(*remembered); !shown.empty()) text += " (" + shown + ")";
-    }
-    float w = ui::textWidthScaled(context, text, .8f);
-    float x = std::round(width / 2 - w / 2), y = std::round(height / 2 + 12);
-    ui::fill(context, x - 3, y - 2, w + 6, 11, ui::palette::panel, .7f);
-    ui::labelScaled(context, x, y, w + 2, text, .8f, ui::palette::text, ui::Align::Left, false);
-    context.flushText(0, std::nullopt);
 }
 }

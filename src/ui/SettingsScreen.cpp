@@ -170,6 +170,7 @@ schematic::PlacementSet schematicSet;
 std::vector<schematic::session::FileEntry> schematicFiles;
 std::chrono::steady_clock::time_point schematicFilesScanned{};
 std::string largeSchematicConfirmed; // a large file the player chose to load
+constexpr std::uint64_t largeSchematicCells = 256 * 1024; // where drawing gets heavy (to be measured)
 ShapesLayout schematicsDisplayed;
 int schematicListFirst = 0, schematicFieldFirst = 0, schematicFieldSelected = -1;
 bool schematicDeleteArmed = false;
@@ -2484,6 +2485,10 @@ void placeSelectedFile() {
         return;
     }
     error.clear();
+    // A large one is heavy to draw: point to the option that lightens it.
+    if (auto structure = schematic::session::structure(schematicFiles[static_cast<size_t>(schematicIndex)].relative);
+        structure && structure->cells() > largeSchematicCells && !Runtime::instance().preferences().schematic.lightDrawing)
+        showMessageToast(translated("schematic.lightDrawingTip"));
     refreshSchematics(false);
     selectSchematicTab(SchematicTab::Placements);
     pickSchematic(SchematicPick::Placement, static_cast<int>(schematicSet.placements.size()) - 1);
@@ -2560,11 +2565,15 @@ void activateSchematicField(int index, int part) {
             });
         return;
     case SchematicField::Visible: changeSchematic([](schematic::SavedPlacement& t) { t.visible = !t.visible; }); return;
-    case SchematicField::LayerAxis:
+    case SchematicField::LayerAxis: {
+        auto structure = schematic::session::structure(p->file);
+        auto placed = structure ? schematic::placedSize(structure->size, p->placement.rotation) : schematic::Size{1, 1, 1};
         changeSchematic([&](schematic::SavedPlacement& t) {
-            t.layers.axis = static_cast<schematic::LayerAxis>((static_cast<int>(t.layers.axis) + direction + 6) % 6);
+            t.layers = schematic::withAxis(t.layers, placed,
+                static_cast<schematic::LayerAxis>((static_cast<int>(t.layers.axis) + direction + 6) % 6));
         });
         return;
+    }
     case SchematicField::LayerMode:
         changeSchematic([&](schematic::SavedPlacement& t) {
             t.layers.mode = static_cast<schematic::LayerMode>((static_cast<int>(t.layers.mode) + direction + 3) % 3);
@@ -3097,7 +3106,7 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         paragraph(context,textLeft,l.footerTop+3,available,text,2,error.empty() ? palette::text : palette::warning);
         bool menuUnbound = input::effectiveChord(Runtime::instance().preferences().bindings, input::Action::SchematicMenu).empty();
         label(context,textLeft,l.footerTop+30,available,translated(editingSchematicField >= 0 ? "shape.numberHint"
-            : menuUnbound ? "schematic.menuKeyHint" : "schematic.screenHint"),menuUnbound && editingSchematicField < 0 ? palette::accent : palette::faint);
+            : menuUnbound ? "schematic.menuKeyHint" : "schematic.screenHint"),palette::faint);
     }
 }
 ShapesLayout fitSchematics(SettingsTable const& t, glm::vec2 size, bool docked) {
@@ -3214,11 +3223,15 @@ void drawEditText(MinecraftUIRenderContext& context, float x, float top, float h
     if (!input.selectedAll() && ms / 530 % 2 == 0) fill(context, x + w + 1, markTop, 1, markHeight, palette::text);
 }
 // ---- Schematic menu ----
-RadialLayout menuLayout(glm::vec2 size) {
-    int count = schematicMenu && schematicMenu->category >= 0
-        ? static_cast<int>(schematic::menu::categories[static_cast<size_t>(schematicMenu->category)].items.size())
-        : static_cast<int>(schematic::menu::categories.size());
-    return RadialLayout::at(size.x, size.y, count, Runtime::instance().preferences().schematic.menuSmall);
+// The ring is sized for the widest name of every level, so it keeps its
+// size and place while moving between levels.
+float menuRingWidth = 96;
+RadialLayout menuLayout(glm::vec2 size, int count = -1) {
+    if (count < 0)
+        count = schematicMenu && schematicMenu->category >= 0
+            ? static_cast<int>(schematic::menu::categories[static_cast<size_t>(schematicMenu->category)].items.size())
+            : static_cast<int>(schematic::menu::categories.size());
+    return RadialLayout::at(size.x, size.y, count, menuRingWidth, Runtime::instance().preferences().schematic.menuSmall);
 }
 bool isKeyOf(input::Action action, int key) {
     auto chord = input::effectiveChord(Runtime::instance().preferences().bindings, action);
@@ -3319,15 +3332,24 @@ std::string menuValue(schematic::menu::Item const& item) {
     default: return {};
     }
 }
+// Drawn with the same parts as Lamium's screens: panel items with the
+// selection's green frame, standard labels, a center panel with a rule
+// under its title.
 void renderSchematicMenu(MinecraftUIRenderContext& context, glm::vec2 size, glm::vec2 pointer) {
     namespace menu = schematic::menu;
     auto const preferences = Runtime::instance().preferences();
     static constexpr std::array<float, 3> dims{0.f, .12f, .35f};
     float dim = dims[static_cast<size_t>(std::clamp(preferences.schematic.menuBackground, 0, 2))];
     if (dim > 0) fill(context, 0, 0, size.x, size.y, Rgb{0, 0, 0}, dim);
+    // One width for every level (measured once per opening).
+    float widest = 72;
+    for (auto const& category : menu::categories) {
+        widest = std::max(widest, textWidth(context, translated(category.label)) + 16);
+        for (auto const& item : category.items) widest = std::max(widest, textWidth(context, translated(item.label)) + 16);
+    }
+    menuRingWidth = widest;
     auto l = menuLayout(size);
     int hover = l.hit(pointer.x, pointer.y);
-    float s = l.scale, text = s < 1 ? .75f : 1.f;
     bool list = schematicMenu->category < 0;
     auto const& category = list ? menu::categories[0] : menu::categories[static_cast<size_t>(schematicMenu->category)];
     menu::Item const* hovered = nullptr;
@@ -3340,41 +3362,50 @@ void renderSchematicMenu(MinecraftUIRenderContext& context, glm::vec2 size, glm:
             value = menuValue(item);
             if (i == hover) hovered = &item;
         }
-        float w = RadialLayout::itemWidth * s, h = (value.empty() ? 14 : RadialLayout::itemHeight) * s;
-        float x = std::round(l.itemX(i) - w / 2), y = std::round(l.itemY(i) - h / 2);
-        bool on = i == hover;
-        fill(context, x, y, w, h, on ? palette::accentDeep : palette::panel, on ? 1.f : .86f);
-        frame(context, x, y, w, h, on ? palette::accent : palette::keyEdge);
-        labelScaled(context, x + 2, y + 3 * s, w - 4, name, text, palette::text, Align::Center, false);
-        if (!value.empty()) labelScaled(context, x + 2, y + 12 * s, w - 4, value, text * .9f, on ? palette::text : palette::dim, Align::Center, false);
+        float h = value.empty() ? ShapesLayout::rowHeight + 2 : RadialLayout::itemHeight;
+        float x = std::round(l.itemX(i) - widest / 2), y = std::round(l.itemY(i) - h / 2);
+        panel(context, x, y, widest, h, .86f);
+        frame(context, x, y, widest, h, palette::white, .14f);
+        rowBackground(context, x, y, widest, h, i == hover, false);
+        label(context, x + 4, y + 2 + boxTextInset(), widest - 8, name, palette::text, Align::Center);
+        if (!value.empty()) label(context, x + 4, y + 13 + boxTextInset(), widest - 8, value, palette::dim, Align::Center);
     }
-    // The center: where the menu is, what Move moves, and what the pointer would do.
-    float cw = RadialLayout::centerWidth * s, ch = RadialLayout::centerHeight * s;
-    float cx = std::round(l.cx - cw / 2), cy = std::round(l.cy - ch / 2);
-    fill(context, cx, cy, cw, ch, palette::panel, .9f);
-    frame(context, cx, cy, cw, ch, palette::white, .14f);
-    float y = cy + 3 * s;
-    labelScaled(context, cx + 2, y, cw - 4, translated(list ? "schematic.menu.title" : category.label), text, palette::text, Align::Center, false);
-    y += 10 * s;
+    // The center: where the menu is, what Move moves, and what a click would do.
+    std::string title = translated(list ? "schematic.menu.title" : category.label);
+    std::vector<std::pair<std::string, Rgb>> lines;
     if (!list && schematicMenu->category == menu::moveCategory) {
         static constexpr std::array<char const*, 4> targets{"schematic.target.placement", "schematic.target.corner1",
             "schematic.target.corner2", "schematic.target.area"};
         static constexpr std::array<Rgb, 4> colors{palette::accent, Rgb{1.f, .4f, .35f}, Rgb{.45f, .65f, 1.f}, palette::white};
         auto t = static_cast<size_t>(schematic::actions::target());
-        labelScaled(context, cx + 2, y, cw - 4, translated("schematic.menu.target", translated(targets[t])), text * .9f, colors[t], Align::Center, false);
-        y += 9 * s;
+        lines.push_back({translated("schematic.menu.target", translated(targets[t])), colors[t]});
     }
-    std::string hint = list ? translated("schematic.menu.hintList")
-        : hovered ? translated(hovered->stepper() ? "schematic.menu.hintStep" : "schematic.menu.hintRun") : std::string{};
-    if (!hint.empty()) { labelScaled(context, cx + 2, y, cw - 4, hint, text * .85f, palette::dim, Align::Center, false); y += 9 * s; }
-    if (!list) labelScaled(context, cx + 2, y, cw - 4, translated("schematic.menu.hintBack"), text * .85f, palette::dim, Align::Center, false);
-    // Leads to the adjust key while it is unbound.
-    if (hovered && hovered->stepper() && input::effectiveChord(preferences.bindings, input::Action::AdjustSchematic).empty()) {
+    if (list) lines.push_back({translated("schematic.menu.hintList"), palette::faint});
+    else {
+        if (hovered) lines.push_back({translated(hovered->stepper() ? "schematic.menu.hintStep" : "schematic.menu.hintRun"), palette::faint});
+        lines.push_back({translated("schematic.menu.hintBack"), palette::faint});
+    }
+    float cw = textWidth(context, title) + 16;
+    for (auto const& [text, color] : lines) cw = std::max(cw, textWidth(context, text) + 16);
+    cw = std::min(cw, std::max(60.f, 2 * l.rx - widest - 8));
+    float ch = 16 + 2 + 11 * static_cast<float>(lines.size()) + 4;
+    float cx = std::round(l.cx - cw / 2), cy = std::round(l.cy - ch / 2);
+    panel(context, cx, cy, cw, ch, .9f);
+    frame(context, cx, cy, cw, ch, palette::white, .14f);
+    label(context, cx + 4, cy + 3 + boxTextInset(), cw - 8, title, palette::text, Align::Center);
+    fill(context, cx + 1, cy + 16, cw - 2, 1, palette::white, .14f);
+    float y = cy + 19;
+    for (auto const& [text, color] : lines) {
+        label(context, cx + 4, y + boxTextInset(), cw - 8, text, color, Align::Center);
+        y += 11;
+    }
+    // A quiet pointer to the adjust key while it is unbound.
+    if (hovered && hovered->stepper() && schematic::menu::repeatable(std::get<menu::Stepper>(hovered->what))
+        && input::effectiveChord(preferences.bindings, input::Action::AdjustSchematic).empty()) {
         auto tip = translated("schematic.menu.hintAdjust");
-        float tw = std::min(textWidthScaled(context, tip, text * .85f) + 8, size.x - 8);
-        float tx = std::round(std::clamp(l.cx - tw / 2, 4.f, size.x - tw - 4)), ty = std::round(cy + ch + 4);
-        fill(context, tx, ty, tw, 11 * s, palette::panel, .8f);
-        labelScaled(context, tx + 4, ty + 1, tw - 8, tip, text * .85f, palette::accent, Align::Left, false);
+        float tw = std::min(textWidth(context, tip) + 8, size.x - 8);
+        float tx = std::round(std::clamp(l.cx - tw / 2, 4.f, size.x - tw - 4)), ty = std::round(cy + ch + 3);
+        label(context, tx + 4, ty, tw - 8, tip, palette::faint, Align::Center);
     }
     context.flushText(0, std::nullopt);
 }

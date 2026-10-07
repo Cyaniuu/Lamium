@@ -208,6 +208,7 @@ std::mutex pointMutex;
 std::optional<Point> pointAt;
 Clock::time_point pointUntil{};
 std::uint64_t builtRevision = 0;
+bool lightDrawing = false; // the option the built sections were made with
 int builtDimension = -1;
 std::atomic<bool> releaseRequested{false};
 ll::event::ListenerPtr exitListener;
@@ -437,7 +438,7 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
                     marks.push_back(mark);
                     continue;
                 }
-                if (enclosed(region, shown, blocks, {x, y, z})) continue;
+                if (lightDrawing && enclosed(region, shown, blocks, {x, y, z})) continue;
                 size_t before = batch.mMeshData->mPositions->size();
                 own.tessellateInWorld(batch, *expected, pos, false);
                 auto& positions = batch.mMeshData->mPositions.get();
@@ -776,9 +777,14 @@ void stepSave(BlockSource& region, LocalPlayer& player) {
                 double dx = (job.columns[c].lowX + job.columns[c].highX) / 2.0 - feet.x, dz = (job.columns[c].lowZ + job.columns[c].highZ) / 2.0 - feet.z;
                 if (dx * dx + dz * dz < best) { best = dx * dx + dz * dz; nearest = &job.columns[c]; }
             }
+            static constexpr std::array<char const*, 8> directions{"schematic.dir.n", "schematic.dir.ne", "schematic.dir.e",
+                "schematic.dir.se", "schematic.dir.s", "schematic.dir.sw", "schematic.dir.w", "schematic.dir.nw"};
+            double dx = nearest ? (nearest->lowX + nearest->highX + 1) / 2.0 - feet.x : 0;
+            double dz = nearest ? (nearest->lowZ + nearest->highZ + 1) / 2.0 - feet.z : 0;
             std::lock_guard lock(saveMutex);
             saveMessage = ui::translated("schematic.save.waiting", job.request.file, static_cast<int>(job.done * 100 / total),
-                nearest ? (nearest->lowX + nearest->highX) / 2 : 0, nearest ? (nearest->lowZ + nearest->highZ) / 2 : 0);
+                ui::translated(directions[static_cast<size_t>(compassOctant(dx, dz))]),
+                static_cast<int>(std::lround(std::hypot(dx, dz))));
         }
         return;
     }
@@ -858,6 +864,51 @@ void drawSelection(ScreenContext& screen, Vec3 const& camera, int dimension) {
     translated(screen, glm::vec3{0}, [&] {
         if (faceMaterial.mRenderMaterialInfoPtr && faces.mCount)
             MeshHelpers::renderMeshImmediately(screen, faces, faceMaterial, OffscreenCaptureDescription{});
+        MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
+    });
+}
+
+// While a save waits, the chunk columns it still has to read: yellow frames
+// standing on the area's floor, nearest first.
+void drawWaitingColumns(ScreenContext& screen, Vec3 const& camera) {
+    if (!saveJob) return;
+    auto const& job = *saveJob;
+    int height = job.builder.structure().size.y;
+    Point low = job.request.area.low();
+    std::vector<std::pair<double, Column const*>> waiting;
+    for (size_t c = 0; c < job.columns.size(); ++c) {
+        auto const& column = job.columns[c];
+        if (job.progress[c] >= column.cells(height)) continue;
+        double dx = (column.lowX + column.highX + 1) / 2.0 - camera.x, dz = (column.lowZ + column.highZ + 1) / 2.0 - camera.z;
+        waiting.push_back({dx * dx + dz * dz, &column});
+    }
+    if (waiting.empty()) return;
+    std::sort(waiting.begin(), waiting.end(), [](auto const& a, auto const& b) { return a.first < b.first; });
+    if (waiting.size() > 256) waiting.resize(256);
+    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
+    mce::MaterialPtr faceMaterial(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"});
+    if (!lineMaterial.mRenderMaterialInfoPtr) return;
+    Tessellator lines(screen.tessellator.mBufferResourceService), faces(screen.tessellator.mBufferResourceService);
+    lines.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(waiting.size() * 24), false);
+    faces.begin({}, mce::PrimitiveMode::QuadList, static_cast<int>(waiting.size() * 8), false);
+    lines.color(1.f, .8f, .25f, 1.f);
+    faces.color(1.f, .8f, .25f, .18f);
+    constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
+    for (auto const& [distance, column] : waiting) {
+        glm::vec3 a{static_cast<float>(column->lowX - camera.x) + .05f, static_cast<float>(low.y - camera.y),
+                    static_cast<float>(column->lowZ - camera.z) + .05f};
+        glm::vec3 b{static_cast<float>(column->highX + 1 - camera.x) - .05f, static_cast<float>(low.y + height - camera.y),
+                    static_cast<float>(column->highZ + 1 - camera.z) - .05f};
+        glm::vec3 c[8];
+        for (int k = 0; k < 8; ++k) c[k] = {k & 1 ? b.x : a.x, k & 2 ? b.y : a.y, k & 4 ? b.z : a.z};
+        for (auto [p, q] : edges) { lines.vertex(c[p].x, c[p].y, c[p].z); lines.vertex(c[q].x, c[q].y, c[q].z); }
+        // The floor, seen from both sides, so the column reads from above too.
+        glm::vec3 floor[4]{c[0], c[1], c[5], c[4]};
+        for (int k = 0; k < 4; ++k) faces.vertex(floor[k].x, floor[k].y + .02f, floor[k].z);
+        for (int k = 3; k >= 0; --k) faces.vertex(floor[k].x, floor[k].y + .02f, floor[k].z);
+    }
+    translated(screen, glm::vec3{0}, [&] {
+        if (faceMaterial.mRenderMaterialInfoPtr) MeshHelpers::renderMeshImmediately(screen, faces, faceMaterial, OffscreenCaptureDescription{});
         MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
     });
 }
@@ -961,6 +1012,10 @@ void drawNameTags(ScreenContext& screen, IClientInstance& client, BlockSource& r
 void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, LocalPlayer& player) {
     auto snapshot = session::snapshot();
     int dimension = static_cast<int>(player.getDimensionId());
+    if (bool light = Runtime::instance().snapshot()->schematic.lightDrawing; light != lightDrawing) {
+        lightDrawing = light;
+        sections.clear();
+    }
     if (snapshot.revision != builtRevision || dimension != builtDimension) {
         // Placements whose draw key is unchanged keep their resolved blocks
         // and built sections (moved to their new index); only changed ones
@@ -1230,6 +1285,7 @@ LL_TYPE_INSTANCE_HOOK(GhostPass, ll::memory::HookPriority::Normal, LevelRenderer
         drawPoint(context.mScreenContext, context.mImpl->mCameraPosition);
         stepSave(player->getDimensionBlockSource(), *player);
         drawSelection(context.mScreenContext, context.mImpl->mCameraPosition, static_cast<int>(player->getDimensionId()));
+        drawWaitingColumns(context.mScreenContext, context.mImpl->mCameraPosition);
     } catch (std::exception const& error) {
         static bool reported = false;
         if (!std::exchange(reported, true)) log(std::string("drawing failed: ") + error.what());
