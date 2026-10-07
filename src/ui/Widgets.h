@@ -32,6 +32,8 @@ void labelScaled(MinecraftUIRenderContext&, float x, float y, float width, std::
 float boxTextInset();
 void paragraph(MinecraftUIRenderContext&, float x, float y, float width, std::string_view text, size_t maxLines,
                Rgb color = palette::text);
+// How many lines paragraph() would draw.
+size_t paragraphLines(MinecraftUIRenderContext&, float width, std::string_view text, size_t maxLines);
 float textWidth(MinecraftUIRenderContext&, std::string_view text);
 float textWidthScaled(MinecraftUIRenderContext&, std::string_view text, float scale);
 // The width labelScaled lays the text out at: with a Japanese locale, Latin

@@ -158,6 +158,10 @@ void paragraph(MinecraftUIRenderContext& context, float x, float y, float width,
         y += 12;
     }
 }
+size_t paragraphLines(MinecraftUIRenderContext& context, float width, std::string_view text, size_t maxLines) {
+    auto& font = defaultFont(context);
+    return wrapLabel(text, width, maxLines, [&](std::string_view part) { return font.getLineLength(part, 1.0f, false); }).size();
+}
 void panel(MinecraftUIRenderContext& context, float left, float top, float width, float height, float opacity) {
     fill(context,left,top,width,height,palette::panel,opacity);
 }

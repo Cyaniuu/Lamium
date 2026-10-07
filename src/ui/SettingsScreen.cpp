@@ -107,6 +107,20 @@ bool keyboardTip = false;
 glm::vec2 tipPointer{};
 SettingsTable displayed;
 float displayedInverseScale = 0;
+// Where the pointer was at the last frame, in GUI units. Wheel events carry
+// no position, so the pane under the pointer is found from this.
+glm::vec2 lastPointer{-1, -1};
+// A list scrollbar being dragged: the list's first row and its layout.
+int* scrollDragFirst = nullptr;
+ShapesLayout const* scrollDragLayout = nullptr;
+// A press on a list's scrollbar moves the list there and starts a drag.
+bool pressScrollbar(ShapesLayout const& l, int& first, float x, float y) {
+    if (!l.onScrollbar(x, y)) return false;
+    first = l.firstAt(y);
+    scrollDragFirst = &first;
+    scrollDragLayout = &l;
+    return true;
+}
 float displayedTabWidth = 0;
 // GUI coordinates; resolved against the layout drawn in the next frame.
 struct Click { float x, y; bool right; };
@@ -1086,6 +1100,7 @@ void openShapeKeySettings() {
 }
 void handleShapeClick(float x, float y, bool right) {
     finishNumber();
+    if (!right && pressScrollbar(shapesDisplayed, shapeListFirst, x, y)) return;
     if (!shapesDocked) {
         auto nav = displayed.hit(x, y, navCount, displayedTabWidth);
         if (nav.zone == Zone::Nav) { selectNav(nav.index); return; }
@@ -2057,6 +2072,7 @@ void keepDeathPoint() {
 }
 void handleWaypointClick(float x, float y, bool right) {
     finishNumber();
+    if (!right && pressScrollbar(waypointsDisplayed, waypointListFirst, x, y)) return;
     if (!waypointsDocked) {
         auto nav = displayed.hit(x, y, navCount, displayedTabWidth);
         if (nav.zone == Zone::Nav) { selectNav(nav.index); return; }
@@ -2637,6 +2653,7 @@ int schematicTabAt(ShapesLayout const& l, float x, float y) {
 }
 void handleSchematicClick(float x, float y, bool right) {
     finishNumber();
+    if (!right && pressScrollbar(schematicsDisplayed, schematicListFirst, x, y)) return;
     if (!schematicsDocked) {
         auto nav = displayed.hit(x, y, navCount, displayedTabWidth);
         if (nav.zone == Zone::Nav) { selectNav(nav.index); return; }
@@ -2836,9 +2853,12 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
     auto* checked = checkedPlacement();
     bool counting = checked && (!verification->complete || verification->placement != schematicSet.selected);
     // Column positions for the Verify and Materials lists.
-    float kindW = 38, posW = 78, distW = 28;
-    float numW = 34, carriedX = listRight - ShapesLayout::pad - numW, leftX = carriedX - numW - 2, placedX = leftX - numW - 2,
-        neededX = placedX - numW - 2;
+    // A narrow list (a large UI) drops the columns it can do without, so the
+    // names keep their room: the position in Check, "placed" in Materials.
+    float kindW = 38, distW = 28, posW = listRight - left - kindW - distW - ShapesLayout::pad - 78 >= 90 ? 78.f : 0.f;
+    float numW = 34, carriedX = listRight - ShapesLayout::pad - numW, leftX = carriedX - numW - 2;
+    bool showPlaced = leftX - 2 * (numW + 2) - left - 16 >= 70;
+    float placedX = leftX - numW - 2, neededX = (showPlaced ? placedX : leftX) - numW - 2;
     switch (schematicTab) {
     case SchematicTab::Placements:
         heading(left, shownX - left - 74, "shape.columnName");
@@ -2847,14 +2867,14 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
     case SchematicTab::Files: heading(left, l.listWidth - 2 * ShapesLayout::pad, "shape.columnName"); break;
     case SchematicTab::Verify:
         heading(left, kindW, "schematic.column.kind");
-        heading(left + kindW, posW, "schematic.column.position");
+        if (posW > 0) heading(left + kindW, posW, "schematic.column.position");
         heading(left + kindW + posW, listRight - left - kindW - posW - distW - ShapesLayout::pad, "schematic.column.blocks");
         heading(listRight - ShapesLayout::pad - distW, distW, "schematic.column.distance", Align::Right);
         break;
     case SchematicTab::Materials:
         heading(left + 14, neededX - left - 16, "schematic.column.material");
         heading(neededX, numW, "schematic.column.needed", Align::Right);
-        heading(placedX, numW, "schematic.column.placed", Align::Right);
+        if (showPlaced) heading(placedX, numW, "schematic.column.placed", Align::Right);
         heading(leftX, numW, "schematic.column.left", Align::Right);
         heading(carriedX, numW, "schematic.column.carried", Align::Right);
         break;
@@ -2897,7 +2917,7 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
             auto const& m = *verifyRows[static_cast<size_t>(i)];
             fill(context,left,y+4,6,6,mismatchColor(m.state));
             label(context,left+9,y+3,kindW-10,mismatchKind(m.state),palette::dim);
-            label(context,left+kindW,y+3,posW-2,std::format("{}, {}, {}", m.position.x, m.position.y, m.position.z),palette::dim);
+            if (posW > 0) label(context,left+kindW,y+3,posW-2,std::format("{}, {}, {}", m.position.x, m.position.y, m.position.z),palette::dim);
             float bx = left + kindW + posW, bw = listRight - bx - distW - ShapesLayout::pad - 4;
             // The schematic's block, then what is there, each with its icon.
             auto block = [&](float x, float w, std::string const& icon, std::string const& name, Rgb color) {
@@ -2932,7 +2952,7 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
             label(context,left+14,y+3,neededX-left-16,name,line.remaining() ? palette::text : palette::faint);
             auto have = noItem ? std::uint64_t{0} : carried[line.item];
             label(context,neededX,y+3,numW,std::to_string(line.needed),palette::dim,Align::Right);
-            label(context,placedX,y+3,numW,std::to_string(line.placed),palette::dim,Align::Right);
+            if (showPlaced) label(context,placedX,y+3,numW,std::to_string(line.placed),palette::dim,Align::Right);
             label(context,leftX,y+3,numW,std::to_string(line.remaining()),palette::text,Align::Right);
             Rgb haveColor = !line.remaining() ? palette::faint : have >= line.remaining() ? palette::accent : palette::warning;
             label(context,carriedX,y+3,numW,noItem ? "-" : std::to_string(have),noItem ? palette::faint : haveColor,Align::Right);
@@ -3020,7 +3040,7 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
             if (waits) {
                 // Just above its "Load" button, so the warning and the choice read together.
                 auto text = translated("schematic.largeWarning", std::format("{:.1f}", static_cast<double>(f.bytes) / (1024 * 1024)));
-                int lines = std::clamp(static_cast<int>(std::ceil(textWidth(context, text) / std::max(1.f, dw - 12))), 1, 4);
+                int lines = static_cast<int>(paragraphLines(context, dw, text, 4));
                 paragraph(context,dx,std::max(l.previewY,l.actionsY-4-12.f*lines),dw,text,4,palette::warning);
             } else info(f.relative, l.previewY);
             drawSmallButton(context,l.actionX(0),l.actionsY+2,l.firstActionWidth,12,translated(waits ? "schematic.loadAnyway" : "schematic.place"),
@@ -3113,7 +3133,8 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
 ShapesLayout fitSchematics(SettingsTable const& t, glm::vec2 size, bool docked) {
     auto l = ShapesLayout::fit(t, size.x, size.y, docked, schematicRowCount(), schematicListFirst, schematicFieldCount(),
         schematicFieldFirst, false, false);
-    l.firstActionWidth = 96;
+    // The first action never runs into the one at the right edge.
+    l.firstActionWidth = std::clamp(l.detailWidth - 2 * ShapesLayout::pad - ShapesLayout::deleteWidth - 4, 40.f, 96.f);
     schematicsDisplayed = l;
     schematicListFirst = l.listFirst;
     schematicFieldFirst = l.fieldFirst;
@@ -3620,6 +3641,7 @@ void render(ll::event::UIRenderEvent& event) {
     if (&current != client) return;
     if (!ownsTop()) { if (seen) clear(); return; }
     seen = true;
+    lastPointer = view.mPointerLocationPrevious;
     applyNumber();
     applyShapeName();
     if (bindingEdit) {
@@ -3703,7 +3725,8 @@ void render(ll::event::UIRenderEvent& event) {
             if (!exit) exit = hud_editor::key(key, heldShift()) == hud_editor::Result::Exit;
         if (exit) { hud_editor::reset(); selectNav(editorReturn); }
     } else if (!closing) {
-        if (std::exchange(pendingRelease, false)) sliderDrag = nullptr;
+        if (std::exchange(pendingRelease, false)) { sliderDrag = nullptr; scrollDragFirst = nullptr; }
+        if (scrollDragFirst && scrollDragLayout) *scrollDragFirst = scrollDragLayout->firstAt(lastPointer.y);
         if (shapesView()) {
             shapeList = overlay::shapes::list();
             if (auto click = std::exchange(pendingClick, std::nullopt)) handleShapeClick(click->x, click->y, click->right);
@@ -3930,7 +3953,8 @@ void start() {
         if (schematicsView() && wheel) {
             int step = event.buttonData() > 0 ? -3 : 3;
             auto const& l = schematicsDisplayed;
-            bool overList = scaled && x >= l.listLeft && x < l.listLeft + l.listWidth && (!l.docked || y < l.detailTop);
+            float px = lastPointer.x, py = lastPointer.y;
+            bool overList = px >= l.listLeft && px < l.listLeft + l.listWidth && (!l.docked || py < l.detailTop);
             if (overList) schematicListFirst = std::max(0, schematicListFirst + step);
             else schematicFieldFirst = std::max(0, schematicFieldFirst + step);
             return;
@@ -3938,7 +3962,8 @@ void start() {
         if (waypointsView() && wheel) {
             int step = event.buttonData() > 0 ? -3 : 3;
             auto const& l = waypointsDisplayed;
-            bool overList = scaled && x >= l.listLeft && x < l.listLeft + l.listWidth && (!l.docked || y < l.detailTop);
+            float px = lastPointer.x, py = lastPointer.y;
+            bool overList = px >= l.listLeft && px < l.listLeft + l.listWidth && (!l.docked || py < l.detailTop);
             if (overList) waypointListFirst = std::max(0, waypointListFirst + step);
             else waypointFieldFirst = std::max(0, waypointFieldFirst + step);
             return;
@@ -3947,7 +3972,8 @@ void start() {
             // Scroll whichever pane is under the pointer; selection stays put.
             int step = event.buttonData() > 0 ? -3 : 3;
             auto const& l = shapesDisplayed;
-            bool overList = scaled && x >= l.listLeft && x < l.listLeft + l.listWidth && (!l.docked || y < l.detailTop);
+            float px = lastPointer.x, py = lastPointer.y;
+            bool overList = px >= l.listLeft && px < l.listLeft + l.listWidth && (!l.docked || py < l.detailTop);
             if (overList) shapeListFirst = std::max(0, shapeListFirst + step);
             else shapeFieldFirst = std::max(0, shapeFieldFirst + step);
             return;

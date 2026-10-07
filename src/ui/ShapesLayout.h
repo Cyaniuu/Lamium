@@ -80,6 +80,18 @@ struct ShapesLayout {
     }
     bool usable() const { return width > 0 && fieldVisible > 0; }
     float listRowY(int index) const { return rowsTop + (index - listFirst) * rowHeight; }
+    // The list's scrollbar, along its right edge while the rows overflow:
+    // a press there or a drag puts the first row where the pointer is.
+    bool onScrollbar(float x, float y) const {
+        float right = listLeft + listWidth;
+        return listCount > listVisible && x >= right - 8 && x < right && y >= rowsTop && y < rowsTop + listVisible * rowHeight;
+    }
+    int firstAt(float y) const {
+        float track = listVisible * rowHeight;
+        if (listCount <= listVisible || !(track > 0)) return 0;
+        float t = std::clamp((y - rowsTop) / track, 0.0f, 1.0f);
+        return static_cast<int>(std::lround(t * static_cast<float>(listCount - listVisible)));
+    }
     float fieldY(int index) const { return fieldsTop + (index - fieldFirst) * (picking ? pickHeight : rowHeight); }
     // Values are right-aligned steppers in the editor.
     float stepperWidth() const { return std::min(118.0f, detailWidth - 2 * pad - 70); }

@@ -297,7 +297,7 @@ std::optional<ui::hud_editor::Box> drawSchematicHud(MinecraftUIRenderContext& co
     if (!ready && selected) contentW = std::max(contentW, widthOf(ui::translated("schematic.counting"), small));
     contentW = std::clamp(contentW, 80 * z, 170 * z);
 
-    float h = rowH + 2 * z;
+    float h = rowH + 4 * z;
     if (!ready && selected) h += rowH;
     if (ready && verify) h += 2 * rowH + (nearest ? rowH : 0) + 2 * z;
     if (!materials.empty()) h += 2 * z + rowH * (1 + static_cast<float>(materials.size()));
@@ -315,7 +315,7 @@ std::optional<ui::hud_editor::Box> drawSchematicHud(MinecraftUIRenderContext& co
     if (!layers.empty()) text(x + contentW - layersW, y + 1 * z, layersW, layers, ui::palette::dim, small, ui::Align::Right);
     y += rowH + 1 * z;
     rule(y);
-    y += 1 * z;
+    y += 3 * z; // room under the rule before the counts
     if (!ready && selected) {
         text(x, y, contentW, ui::translated("schematic.counting"), ui::palette::dim, small);
         y += rowH;

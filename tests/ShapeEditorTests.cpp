@@ -89,6 +89,11 @@ void shapeEditorTests() {
     auto inside = ui::ShapesLayout::fit(table, 640, 360, false, 3, 0, 16, 0, false, false);
     check(inside.usable() && inside.listLeft + inside.listWidth == inside.detailLeft
         && inside.detailLeft + inside.detailWidth == table.rowsRight(), "list and editor share the table area");
+    auto many = ui::ShapesLayout::fit(table, 640, 360, false, 80, 0, 16, 0, false, false);
+    float bar = many.listLeft + many.listWidth - 2;
+    check(many.onScrollbar(bar, many.rowsTop + 1) && !many.onScrollbar(many.listLeft + 10, many.rowsTop + 1) && !inside.onScrollbar(bar, inside.rowsTop + 1)
+          && many.firstAt(many.rowsTop) == 0 && many.firstAt(many.rowsTop + many.listVisible * ui::ShapesLayout::rowHeight) == 80 - many.listVisible,
+          "the scrollbar takes presses only while rows overflow, and maps its track to the first row");
     check(inside.hit(inside.listLeft + 10, inside.listRowY(1) + 3).zone == ui::ShapesLayout::Zone::ListRow
         && inside.hit(inside.listLeft + 10, inside.listRowY(1) + 3).index == 1, "list rows are hit by index");
     auto field = inside.hit(inside.stepperX() + 2, inside.fieldY(2) + 3);
