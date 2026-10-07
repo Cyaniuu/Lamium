@@ -29,7 +29,10 @@ In-world waypoint markers follow vanilla Hide HUD (F1), including the death
 point, names and distances (decided 2026-10-07, L-106). The marker draw checks
 `IOptionRegistry::getHideHud()` each frame; restoring the HUD resumes the
 configured Always / While held / Off behavior. This does not change waypoint
-storage or recording. Implementation is built; F1 hide/restore awaits a game check.
+storage or recording. The maintainer confirmed F1 hide/restore of all marker
+parts and hiding during FreeCamera on `775c8c0` (2026-10-07).
+The minimap still remains visible with F1, along with other custom HUD
+elements (L-107); that broader issue is recorded but not yet fixed.
 
 ## Technical entry points
 

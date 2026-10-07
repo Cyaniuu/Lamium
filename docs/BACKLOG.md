@@ -212,19 +212,22 @@ unmet gates for versions already published:
 
 ## Bugs
 
-### L-106 In-world waypoint markers remain visible with F1
-Kind: Bug. Reported and behavior decided by the maintainer 2026-10-07.
-Status: built; awaits in-game validation.
-Vanilla Hide HUD (F1) hides the HUD but Lamium's in-world waypoint markers
-remain visible, interfering with screenshots. Hide all of those markers,
-including death points, names and distances, while vanilla HUD is hidden.
-Restoring the HUD resumes the existing Always / While held / Off behavior
-without changing saved waypoint visibility or map recording.
-Implementation: `WaypointMarkers.cpp::draw` checks the owning client's
-`IOptionRegistry::getHideHud()` before drawing. No key interception or new
-setting. Check F1 hide/restore with normal and death markers, including the
-While held mode and FreeCamera. Files: `src/features/map/WaypointMarkers.cpp`,
-docs/MAP.md and docs/VALIDATION.md.
+### L-107 Lamium HUD elements remain visible with F1
+Kind: Bug. Reported by the maintainer 2026-10-07 after checking L-106.
+Status: open; recorded only, implementation not started.
+Vanilla Hide HUD (F1) still leaves at least the minimap, Target Info and
+Info HUD visible. The maintainer reports the problem across custom HUD
+elements; inspect the other elements when fixing it rather than assuming
+only these three are affected. In-world waypoint markers are already fixed
+and checked on `775c8c0` (L-106).
+Expected: screenshot-facing HUD elements follow vanilla HUD hiding and resume
+their configured visibility when the HUD returns. Preserve settings and
+background work such as map recording and death-point detection.
+Start with `InfoHud.cpp::drawHud` and its call in `SettingsScreen.cpp::render`;
+check the remaining HUD draw paths and use the owning client's vanilla HUD
+state. No new setting or F1 key interception. Validate hide/restore with each
+affected element, with FreeCamera, and that background map/death tracking
+continues. The full affected-element inventory remains to be checked.
 
 ### L-73 Architecture review
 Kind: Refactor (strong model). Review done 2026-09-30 on main 4d1790b

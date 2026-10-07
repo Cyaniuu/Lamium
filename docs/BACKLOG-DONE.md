@@ -10,6 +10,23 @@ Runtime status is in [VALIDATION.md](VALIDATION.md), the evidence in
 
 ## Bugs
 
+### L-106 In-world waypoint markers remain visible with F1
+Kind: Bug. Reported and behavior decided by the maintainer 2026-10-07.
+Status: done 2026-10-07; checked in game on `775c8c0` (DLL `a719272b...1b67a97e`).
+Vanilla Hide HUD (F1) hid the HUD but Lamium's in-world waypoint markers
+remained visible, interfering with screenshots. `WaypointMarkers.cpp::draw`
+now checks the owning client's `IOptionRegistry::getHideHud()` before drawing.
+All of those markers, including death points, names and distances, follow
+vanilla HUD hiding. Restoring the HUD resumes the configured visibility
+without changing saved waypoint visibility or map recording. No key
+interception or new setting.
+The maintainer confirmed all marker parts disappear with F1, return to their
+configured display when F1 is restored, and also disappear during FreeCamera.
+Individual While held key combinations were not reported separately.
+Technical notes: docs/MAP.md; evidence: docs/VALIDATION-LOG.md.
+The same issue remains in the minimap, Target Info, Info HUD and potentially
+other custom HUD elements; tracked separately as L-107 in BACKLOG.md.
+
 ### L-84 IME composition leaves its intermediate text in Lamium's text fields
 Kind: Bug. Reported by the maintainer 2026-10-01 while checking L-83.
 Status: done 2026-10-01; fix checked in game on `384c751`.

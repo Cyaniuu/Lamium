@@ -12,6 +12,23 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-106 waypoint F1 hide/restore passes; other HUD remains (2026-10-07)
+
+By the maintainer, deployed `775c8c0`, DLL
+`a719272b3055cc029eb207b6961b8c90374d86d1159690a24da5c8561b67a97e`,
+Minecraft 1.26.51.01 / LeviLamina Client 26.51.6, all trace options off.
+The local-world/BDS distinction was not supplied for these checks.
+Confirmed all three checklist items: F1 hides normal waypoint markers,
+death points, names and distances; restoring F1 returns the configured
+display; the markers also disappear with F1 during FreeCamera.
+Individual While held key combinations were not reported separately.
+
+Reported that the same issue remains broadly in other HUD elements,
+including the minimap, Target Info and Info HUD. These elements remain
+visible while vanilla HUD is hidden. Recorded as open bug L-107; the rest
+of the affected-element inventory is not yet established. This result closes
+L-106 only. No implementation of L-107 was requested with this report.
+
 ## L-37 Hold/Toggle, menus, focus and dimension follow-up (2026-10-07)
 
 By the maintainer, follow-up on deployed `d56b81e`, DLL
