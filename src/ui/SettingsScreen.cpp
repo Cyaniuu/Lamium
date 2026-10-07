@@ -14,6 +14,8 @@
 #include "features/schematic/SchematicSession.h"
 #include "features/schematic/GhostRenderer.h"
 #include "ui/SchematicFiles.h"
+#include "features/schematic/MaterialAmount.h"
+#include "app/Desktop.h"
 #include "features/information/SchematicTarget.h"
 #include "features/schematic/SchematicItems.h"
 #include "features/schematic/Selection.h"
@@ -2409,7 +2411,11 @@ int verifySelected = -1;
 bool materialsShownOnly = false;
 std::shared_ptr<schematic::Verification const> verification;
 std::vector<schematic::Mismatch const*> verifyRows;
-std::vector<schematic::MaterialLine const*> materialRows;
+std::vector<schematic::MaterialLine const*> materialRows; // blocks first, then entities
+// The Materials list: -1 a "Blocks" heading, -2 an "Entities" heading, else an
+// index into materialRows. Headings only when both kinds are present.
+std::vector<int> materialListRows;
+int materialSelected = -1; // index into materialRows
 
 bool verifyMatches(schematic::Mismatch const& m) {
     using schematic::CellState;
@@ -2441,7 +2447,18 @@ void refreshSchematics(bool files) {
     if (verification->placement >= 0 && verification->placement == schematicSet.selected) {
         for (auto const& m : verification->mismatches) if (verifyMatches(m)) verifyRows.push_back(&m);
         for (auto const& line : materialsShownOnly ? verification->visibleMaterials : verification->materials) materialRows.push_back(&line);
+        std::stable_partition(materialRows.begin(), materialRows.end(), [](auto const* line) { return !line->entity; });
     }
+    materialListRows.clear();
+    bool blocks = false, entities = false;
+    for (auto const* line : materialRows) (line->entity ? entities : blocks) = true;
+    for (int i = 0; i < static_cast<int>(materialRows.size()); ++i) {
+        bool entity = materialRows[static_cast<size_t>(i)]->entity;
+        if (blocks && entities && (i == 0 || entity != materialRows[static_cast<size_t>(i - 1)]->entity))
+            materialListRows.push_back(entity ? -2 : -1);
+        materialListRows.push_back(i);
+    }
+    if (materialSelected >= static_cast<int>(materialRows.size())) materialSelected = -1;
     if (verifySelected >= static_cast<int>(verifyRows.size())) verifySelected = -1;
 }
 int schematicRowCount() {
@@ -2449,7 +2466,7 @@ int schematicRowCount() {
     case SchematicTab::Placements: return static_cast<int>(schematicSet.placements.size());
     case SchematicTab::Files: return static_cast<int>(schematicFileRows.size());
     case SchematicTab::Verify: return static_cast<int>(verifyRows.size());
-    default: return static_cast<int>(materialRows.size());
+    default: return static_cast<int>(materialListRows.size());
     }
 }
 schematic::SavedPlacement const* selectedPlacement() {
@@ -2550,16 +2567,20 @@ void showSelectedMismatch() {
 int schematicFieldCount() {
     switch (schematicTab) {
     case SchematicTab::Placements: return selectedPlacement() ? static_cast<int>(schematicFields.size()) : 0;
-    case SchematicTab::Materials: return 1;
+    case SchematicTab::Materials: return 2;
     default: return 0;
     }
 }
 // part: -1/1 step, 0 value (type a number or press), 2 label.
 void activateSchematicField(int index, int part) {
     if (schematicTab == SchematicTab::Materials) {
-        if (index != 0 || part == 2) return;
-        materialsShownOnly = !materialsShownOnly;
-        refreshSchematics(false);
+        if (part == 2) return;
+        if (index == 0) {
+            materialsShownOnly = !materialsShownOnly;
+            refreshSchematics(false);
+        } else if (index == 1) {
+            if (auto option = settings::find("schematic.hud")) adjustOption(*option, 1);
+        }
         return;
     }
     auto const* p = selectedPlacement();
@@ -2671,6 +2692,35 @@ int verifyChipAt(ShapesLayout const& l, float x, float y) {
     for (int i = 0; i < 4; ++i) if (x >= verifyChipX(l, i) && x < verifyChipX(l, i + 1) - 2) return i;
     return -1;
 }
+int stackSizeOf(schematic::MaterialLine const& line) {
+    auto const* stack = schematic::items::iconStack(line.icon);
+    return stack ? std::max(1, static_cast<int>(stack->getMaxStackSize())) : 64;
+}
+// "1 chest + 4 stacks + 16", number first (L-93 screen review).
+std::string amountText(std::uint64_t count, int maxStack) {
+    auto a = schematic::amountOf(count, maxStack);
+    std::vector<std::string> parts;
+    if (a.chests) parts.push_back(translated(a.chests == 1 ? "amount.chest" : "amount.chests", a.chests));
+    if (a.stacks) parts.push_back(translated(a.stacks == 1 ? "amount.stack" : "amount.stacks", a.stacks));
+    if (a.items || parts.empty()) parts.push_back(std::to_string(a.items));
+    std::string out;
+    for (auto const& part : parts) out += (out.empty() ? "" : " + ") + part;
+    return out;
+}
+std::map<std::string, std::uint64_t> carriedItems();
+// Materials still to gather: remaining minus what the player carries.
+struct Missing { schematic::MaterialLine const* line; std::uint64_t missing; };
+std::vector<Missing> missingMaterials() {
+    std::vector<Missing> out;
+    auto carried = carriedItems();
+    for (auto const* line : materialRows) {
+        bool noItem = line->item.empty() || (line->entity && !schematic::items::iconStack(line->icon));
+        if (noItem || !line->remaining()) continue;
+        auto have = carried[line->item];
+        if (have < line->remaining()) out.push_back({line, line->remaining() - have});
+    }
+    return out;
+}
 void handleSchematicClick(float x, float y, bool right) {
     finishNumber();
     if (!right && pressScrollbar(schematicsDisplayed, schematicListFirst, x, y)) return;
@@ -2719,7 +2769,10 @@ void handleSchematicClick(float x, float y, bool right) {
             return;
         }
         case SchematicTab::Verify: verifySelected = row; return;
-        default: return;
+        default:
+            if (row >= 0 && row < static_cast<int>(materialListRows.size()) && materialListRows[static_cast<size_t>(row)] >= 0)
+                materialSelected = materialListRows[static_cast<size_t>(row)];
+            return;
         }
     }
     case ShapeZone::Field: activateSchematicField(hit.index, right ? -1 : hit.part); return;
@@ -2730,6 +2783,15 @@ void handleSchematicClick(float x, float y, bool right) {
             return;
         }
         if (schematicTab == SchematicTab::Verify) { if (hit.index == 0) showSelectedMismatch(); return; }
+        if (schematicTab == SchematicTab::Materials) {
+            if (hit.index != 0) return;
+            auto items = missingMaterials();
+            if (items.empty()) return;
+            std::vector<std::pair<std::string, std::uint64_t>> wanted;
+            for (auto const& m : items) wanted.push_back({m.line->item, m.missing});
+            if (!openUrl(schematic::calculatorUrl(wanted))) error = translated("worldMap.linkFailed");
+            return;
+        }
         if (schematicTab != SchematicTab::Placements || hit.index != 1 || !selectedPlacement()) return;
         if (!schematicDeleteArmed) { schematicDeleteArmed = true; return; }
         deleteSelectedPlacement();
@@ -2958,6 +3020,8 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
     auto* player = client ? client->getLocalPlayer() : nullptr;
     Vec3 feet = player ? player->getFeetPos() : Vec3{0, 0, 0};
     auto carried = schematicTab == SchematicTab::Materials ? carriedItems() : std::map<std::string, std::uint64_t>{};
+    struct Tip { std::string text; float x = 0, y = 0; };
+    std::optional<Tip> materialTip;
     for (int i = l.listFirst; i < l.listFirst + l.listVisible && i < l.listCount; ++i) {
         float y = l.listRowY(i);
         if (i % 2) fill(context,l.listLeft+1,y,l.listWidth-2,ShapesLayout::rowHeight,palette::white,.025f);
@@ -2965,7 +3029,9 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
             : schematicTab == SchematicTab::Placements ? schematicPick == SchematicPick::Placement && i == schematicIndex
             : schematicTab == SchematicTab::Files ? schematicPick == SchematicPick::File
                 && schematicFileRows[static_cast<size_t>(i)].file == schematicIndex : false;
-        bool heading = schematicTab == SchematicTab::Files && schematicFileRows[static_cast<size_t>(i)].file < 0;
+        bool heading = (schematicTab == SchematicTab::Files && schematicFileRows[static_cast<size_t>(i)].file < 0)
+            || (schematicTab == SchematicTab::Materials && materialListRows[static_cast<size_t>(i)] < 0);
+        if (schematicTab == SchematicTab::Materials && !heading) chosen = materialListRows[static_cast<size_t>(i)] == materialSelected;
         if (!heading) rowBackground(context,l.listLeft+1,y,l.listWidth-2,ShapesLayout::rowHeight,chosen,over(ShapeZone::ListRow,i));
         switch (schematicTab) {
         case SchematicTab::Placements: {
@@ -3043,7 +3109,16 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
             break;
         }
         case SchematicTab::Materials: {
-            auto const& line = *materialRows[static_cast<size_t>(i)];
+            int index = materialListRows[static_cast<size_t>(i)];
+            if (index < 0) {
+                label(context,left,y+5,l.listWidth-2*ShapesLayout::pad,translated(index == -1 ? "schematic.section.blocks"
+                    : "schematic.section.entities"),palette::faint);
+                break;
+            }
+            auto const& line = *materialRows[static_cast<size_t>(index)];
+            // The counts convert to chests and stacks under the pointer.
+            if (tabHover < 0 && hover.zone == ShapeZone::ListRow && hover.index == i && pointer.x >= neededX && line.remaining())
+                materialTip = {amountText(line.remaining(), stackSizeOf(line)), pointer.x, pointer.y};
             // Entities: an icon and a carried count only when an item places them.
             bool noItem = line.item.empty() || (line.entity && !schematic::items::iconStack(line.icon));
             drawItemIcon(context, line.icon, left, y + 1, 12);
@@ -3223,17 +3298,48 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         }
         label(context,dx,l.previewY+35,dw,layersText(*checked),palette::faint);
         stepperRow(0, "schematic.shownLayersOnly", {}, true, materialsShownOnly);
-        float y = l.fieldY(1) + 6;
-        label(context,dx,y,dw,translated("schematic.materials.howTitle"),palette::faint);
-        static constexpr std::array<std::string_view, 6> how{"schematic.materials.how.need", "schematic.materials.how.placed",
-            "schematic.materials.how.left", "schematic.materials.how.have", "schematic.materials.how.colors",
-            "schematic.materials.how.entities"};
-        for (size_t i = 0; i < how.size(); ++i)
-            label(context,dx,y+12+11*static_cast<float>(i),dw,translated(how[i]),palette::dim);
+        stepperRow(1, "schematic.materials.hud", {}, true, Runtime::instance().preferences().schematic.hud);
+        float y = l.fieldY(1) + ShapesLayout::rowHeight + 6;
+        if (materialSelected >= 0 && materialSelected < static_cast<int>(materialRows.size())) {
+            auto const& line = *materialRows[static_cast<size_t>(materialSelected)];
+            drawItemIcon(context, line.icon, dx, y - 2, 12);
+            label(context,dx+14,y,dw-14,line.name);
+            label(context,dx,y+11,dw,translated("schematic.materials.leftAmount",
+                amountText(line.remaining(), stackSizeOf(line))),palette::dim);
+            y += 26;
+        }
+        // What is still missing, drawn like inventory slots: one slot per stack.
+        auto missing = missingMaterials();
+        label(context,dx,y,dw,translated("schematic.materials.missing", missing.size()),missing.empty() ? palette::accent : palette::faint);
+        y += 11;
+        float slot = std::min(18.f, std::floor(dw / 9));
+        int slots = 0, rows = std::max(1, static_cast<int>((l.actionsY - 6 - y) / slot));
+        for (auto const& m : missing) {
+            int size = stackSizeOf(*m.line);
+            for (std::uint64_t left = m.missing; left && slots < 9 * rows; ++slots) {
+                auto count = std::min<std::uint64_t>(left, static_cast<std::uint64_t>(size));
+                left -= count;
+                float sx = dx + static_cast<float>(slots % 9) * slot, sy = y + static_cast<float>(slots / 9) * slot;
+                fill(context,sx,sy,slot-1,slot-1,palette::keyFill);
+                frame(context,sx,sy,slot-1,slot-1,palette::keyEdge);
+                drawItemIcon(context, m.line->icon, sx + (slot - 13) / 2, sy + (slot - 13) / 2, 12);
+                label(context,sx,sy+slot-10,slot-2,std::to_string(count),palette::warning,Align::Right);
+            }
+        }
+        fill(context,l.detailLeft,l.actionsY-2,l.detailWidth,1,palette::white,.14f);
+        drawSmallButton(context,l.actionX(0),l.actionsY+2,l.firstActionWidth,12,translated("schematic.openCalculator"),
+            over(ShapeZone::Action,0),missing.empty() ? palette::keyFill : palette::accentDeep,
+            missing.empty() ? palette::keyEdge : palette::accent, missing.empty() ? palette::faint : palette::text);
         break;
     }
     }
 
+    if (materialTip) {
+        float w = textWidth(context, materialTip->text) + 8, x = std::min(materialTip->x + 8, l.left + l.width - w - 2);
+        fill(context,x,materialTip->y+10,w,13,palette::panel,.95f);
+        frame(context,x,materialTip->y+10,w,13,palette::keyEdge);
+        label(context,x+4,materialTip->y+12,w-6,materialTip->text,palette::text);
+    }
     // Footer.
     fill(context,l.left,l.footerTop,l.width,1,palette::white,.14f);
     float textLeft = l.left + ShapesLayout::pad, available = l.width - 2 * ShapesLayout::pad;

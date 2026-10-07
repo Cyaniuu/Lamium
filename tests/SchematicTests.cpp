@@ -6,6 +6,7 @@
 #include "ui/SavePromptLayout.h"
 #include "ui/RadialLayout.h"
 #include "ui/SchematicFiles.h"
+#include "features/schematic/MaterialAmount.h"
 #include "features/schematic/MenuModel.h"
 #include "features/schematic/GhostFaces.h"
 #include <array>
@@ -183,6 +184,14 @@ void placementTransforms() {
         check(flat.size() == 2 && flat[0].file == 1 && flat[1].file == 0, "without subfolders there are no headings");
         check(rowOf(list, 3) == 4 && rowOf(list, 9) == -1, "a file's row is found");
     }
+    check(amountOf(2000, 64) == Amount{1, 4, 16} && amountOf(52, 64) == Amount{0, 0, 52}
+          && amountOf(1728, 64) == Amount{1, 0, 0} && amountOf(40, 16) == Amount{0, 2, 8},
+          "amounts split into chests of 27 stacks, stacks and items, by the item's stack size");
+    check(calculatorName("minecraft:oak_planks") == "oakplanks" && calculatorName("minecraft:stonebrick") == "stonebricks",
+          "calculator names drop underscores and fix the ids the site names differently");
+    check(calculatorUrl({{"minecraft:oak_planks", 32}, {"", 4}, {"minecraft:glass", 0}, {"minecraft:oak_stairs", 5}})
+              == "https://resourcecalculator.com/minecraft/#oakplanks=32&oakstairs=5",
+          "the calculator link carries the remaining items and skips empty ones");
     {
         std::map<std::string, std::string> expected{{"direction", "2"}, {"half", "top"}, {"open", "0"}};
         std::map<std::string, std::string> actual{{"direction", "1"}, {"open", "0"}, {"powered", "1"}};
