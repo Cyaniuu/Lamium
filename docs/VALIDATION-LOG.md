@@ -12,6 +12,33 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 screen review step 1 (2026-10-08)
+
+By the maintainer, deployed `fb0500f`, DLL
+`eab620753bb9b050a6df6970177f574bbfb495df5959d02e92a59f5c86a163be`,
+Minecraft 1.26.51.01, local world, all trace options off (screenshots in the
+conversation).
+Passed: Placed list accent bar, progress column filling in after a moment,
+progress in the detail pane, coordinates dropping when narrow; Files folder
+headings, size/block columns, PageUp/PageDown skipping headings; Check
+filter counts and filtering, wrong-state rows with the differing states on
+the right; Materials sections, chest amounts on hover and selection, HUD
+switch, missing slots, the ResourceCalculator link with the right items.
+Not good enough:
+- World frames show, but the selected one cannot be told from the others
+  (the line material likely ignores alpha).
+- Entity boxes with faces looked worse than the dashed frames, and names at
+  any distance were too many; reverted (`5fa8bcd`). Models (L-115) next.
+- Files: the "(top level)" heading looks odd; headings should read as paths.
+- Check: the filter buttons line up with the tabs above and read as more
+  tabs, not as part of the Check list; the right pane does not say whether a
+  line is about the placement or the selected position.
+- Materials: one very large material fills every slot (one slot per stack);
+  the hover tip was drawn under the list text (fixed in `d368ffb`).
+- ResourceCalculator computes with Java Edition recipes, which can differ
+  from Bedrock; the hint says so now (`d368ffb`), and L-116 (the game's own
+  recipes) matters for that reason too.
+
 ## Change arrow height in Japanese (2026-10-08)
 
 By the maintainer, deployed `c32f276`, DLL
