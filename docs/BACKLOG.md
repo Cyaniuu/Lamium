@@ -583,6 +583,12 @@ mockup", mock `docs/demos/schematic-screen.html`). Work order:
    chest/stack amounts, missing items as slots and the ResourceCalculator
    button; entity ghosts as light-blue outline and faces, name tags without
    limits.
+   Progress (2026-10-08, not yet checked in game): built placement frames
+   (`273fb39`), the Placed progress column and selection bar, Files folders
+   and columns (`e183d46`), Check filter counts and differing states
+   (`926c9f6`). Left: Materials (sections, HUD switch, chest/stack amounts,
+   missing items as slots, ResourceCalculator button) and the entity
+   outline-and-faces look with unlimited name tags.
 2. Research, after step 1 or alongside it: L-114 3D previews in the screen,
    L-115 entity models as ghosts, L-116 raw materials from the game's recipes.
 
