@@ -1,8 +1,10 @@
 # Fake Offhand
 
-L-49 implements block placement. L-95 researches additional item use.
-Decisions and open choices are in [BACKLOG.md](BACKLOG.md); confirmed runtime
-coverage is in [VALIDATION.md](VALIDATION.md).
+L-49 implements block placement; L-95 adds the validated instant-use subset
+and is closed. Both decision records are in [BACKLOG-DONE.md](BACKLOG-DONE.md).
+Timed secondary use was excluded on 2026-10-07; the broader extension scope
+below is the earlier research record, not a promise of support. Confirmed
+runtime coverage and remaining checks are in [VALIDATION.md](VALIDATION.md).
 
 ## Extension scope (chosen 2026-10-06)
 

@@ -24,10 +24,10 @@ or remote identities remain session-only.
 
 ## Shapes view and rendering
 
-Shapes open from the settings sidebar (pinned below Hotkeys) or the
-initially unbound `openshapes` key; they are no longer a row in the Features
-list. Features keeps a Shape rendering entry: its switch hides or shows every
-shape, with `toggleshapes` and `openshapes` bindings.
+Shapes open from the pinned settings sidebar entry or the initially unbound
+`openshapes` key. The Shape drawing feature in settings has a switch that
+hides or shows every shape, a `toggleshapes` binding on its parent row and
+the `openshapes` command on a child row (L-83).
 
 The view places a shape list beside an editor. The list shows color, name,
 type (other dimensions are dimmed and tagged) and a visibility switch. The

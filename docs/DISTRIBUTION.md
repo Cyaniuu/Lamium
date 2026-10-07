@@ -65,8 +65,14 @@ Runtime-owned examples:
 
 - `config/`, including `config/settings.json`
 - `logs/`
-- future per-world or user-created data unless a feature explicitly defines a
-  migration owned by Lamium
+- `schematics/`, the user-created/imported structure library
+- per-server waypoint, map and schematic-placement data under `config/`
+- local-world `lamium/` sidecars (shapes, waypoints, placements and map data),
+  outside the installed package directory
+
+Feature storage contracts are in [OVERLAYS.md](OVERLAYS.md), [MAP.md](MAP.md)
+and [SCHEMATIC.md](SCHEMATIC.md). These remain user data unless a feature
+explicitly defines a migration owned by Lamium.
 
 Release archives must not contain runtime-owned state. The package check already
 rejects `config/` and `logs/`.

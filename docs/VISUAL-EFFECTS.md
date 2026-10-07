@@ -1,10 +1,17 @@
 # Visual effect visibility (L-42)
 
 The maintainer revised the scope after testing on 2026-09-30: "Hide effects"
-under Camera & view has a saved master switch without a key, plus independent
-child switches and optional keys. The master defaults on and children off;
+under Camera & view has a saved master switch with a toggle key, plus independent
+child switches and optional keys. The master defaults off and children on;
 older files preserve their existing selections. Only drawing changes;
 weather, sound, equipment, status effects and boss state stay vanilla.
+
+Current routes: rain/snow, particles, boss bars, nausea color and underwater,
+lava and powder snow views are implemented, with local checks recorded in
+[VALIDATION.md](VALIDATION.md). Pumpkin and spyglass frames are not supported;
+their switches were removed and L-79 owns further research. The dated steps
+below retain earlier defaults, candidates and unchecked-build statements as
+implementation history, not current status.
 
 ## First implementation step, 2026-09-30
 
@@ -65,7 +72,7 @@ splashes. Particles hides rain splashes and every other particle, but leaves
 falling precipitation alone. Either child hides rain splashes; master off
 shows everything regardless of saved selections.
 
-## Remaining research
+## Later implementation and research record
 
 ### Boss bar step (implemented after the 43c4211 trace)
 
@@ -109,7 +116,7 @@ build `b239eb9`, the maintainer confirmed green hiding, child/master/key
 restoration and unchanged effect/icon/vanilla preference. Additional modes,
 packs, restart persistence and lifecycle/owner cases remain unchecked.
 
-### Frame and immersion step (implemented 2026-09-30, unchecked in game)
+### Frame and immersion step (2026-09-30 checkpoint)
 
 New hypothesis, from static evidence rather than another passive trace:
 
@@ -154,7 +161,7 @@ and the log has only the three fog-medium route lines, no mesh route for either
 frame. So the frames are not TexturePtr meshes with those resource names on
 the gameplay-screen mesh path, while the frost frame is (it hid).
 
-### Gated frame trace (next research step)
+### Gated frame trace (L-79 research record)
 
 Hypothesis: the frames use a mesh with a texture variant that has no
 resource name, a differently spelled resource, or another draw entry (UI,
@@ -236,7 +243,7 @@ before release. The effects trace keeps the gate/count tooling for L-79.
   substituting Air, and relies on the vanilla pack having no water/lava screen
   texture; the in-game check decides whether that is the whole view effect.
 
-## Bounded read-only observation
+## Bounded read-only observation record
 
 Expanded 2026-09-30 after the request to implement the remaining seven effects.
 `FullScreenEffectRenderer` and `OnCameraEffectRenderer` are empty declarations

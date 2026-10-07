@@ -1,5 +1,13 @@
 # Lightweight input automation
 
+Current product behavior is in
+[DESIGN.md](DESIGN.md#automatic-attack-and-use-decided-2026-09-25-revised-the-same-day);
+current runtime coverage is in [VALIDATION.md](VALIDATION.md). Auto Attack/Use
+use session switches and pause when gameplay input is unavailable; returning
+to gameplay resumes the chosen mode. The earlier Periodic adapter below
+disarmed on menus/manual clicks and used seconds instead of ticks. Those
+sections are implementation history and do not define the current lifecycle.
+
 ## Auto Attack / Auto Use (L-34, 2026-09-25)
 
 Periodic Attack/Use became Auto Attack / Auto Use (DESIGN "Automatic attack
@@ -27,9 +35,15 @@ and use"). Feature ids stay `periodicAttack`/`periodicUse`; the
   returns. Focus loss, screen and dimension changes also forget the physical
   held state. World exit switches both off.
 
-Unverified in game: whether several clicks within one input update all land
-(attacks, scaffolding, snowballs), whether Hold keeps mining, and behavior
-on servers. The rest of this file records the earlier Periodic adapter.
+Local behavior was rechecked on 2026-09-30 (`221edcb`); whether several clicks
+within one input update all land on servers remains unchecked. See VALIDATION
+for current coverage. The rest of this file records the earlier Periodic adapter.
+
+## Earlier Periodic adapter record (2026-09-23)
+
+Statements below about experimental status, disarming, intervals and remaining
+integration work describe the named early builds. Later rules above supersede
+them. Permanent Sneak/Sprint no longer carry the Experimental badge.
 
 Periodic Attack, Periodic Use, and Permanent Sneak share the runtime intent
 contract in `interaction::AutomationInput`. Permanent Sneak now has an
@@ -78,7 +92,7 @@ LeviLamina Client 26.51.3, and Deesse UI 1.3.9:
 Physical-key overlap, world/dimension transitions, movement/ledge
 behavior, and multiplayer remain unverified. The feature is still experimental.
 
-## Runtime contract
+### Initial runtime contract
 
 - Arming is session state, never a persisted instruction to act on world load.
 - Loss of gameplay input ownership cancels and disarms. Closing a menu or
@@ -93,7 +107,7 @@ behavior, and multiplayer remain unverified. The feature is still experimental.
 - Interval values must be positive. Interval configuration will be bounded in
   the settings layer before reaching this state machine.
 
-## Periodic adapter checkpoint
+### Periodic adapter checkpoint
 
 The initial adapter captures the two observed vanilla action callbacks during
 registration and scopes them to their owning `InputHandler`. It advances after
@@ -168,7 +182,7 @@ confirmed the following in the same environment:
 Alternate UI scales/locales and overlap with other configurable HUD positions
 still need runtime coverage.
 
-### Periodic Use local check
+#### Periodic Use local check
 
 The same `99e1641` DLL and environment were used for a subsequent local survival
 check on 2026-09-23:
@@ -212,9 +226,9 @@ This establishes repeated instant-use consumption in one local world. It does
 not establish food consumption, bow charging, other continuous-use items,
 placement, physical-button overlap, world transitions, or multiplayer behavior.
 
-## Integration still required
+### Initial integration discovery
 
-### Periodic input discovery
+#### Periodic input discovery
 
 SDK 26.51.3 exposes named `InputHandler::registerButtonDownHandler` and
 `registerButtonUpHandler` callbacks, but the inspected client input handler

@@ -1,9 +1,13 @@
 # Detached camera implementation notes
 
 Freelook and FreeCamera are disabled and unbound by default. FreeCamera remains
-experimental. Both passed local runtime checks (see Freelook camera detachment and
-FreeCamera below). This records SDK evidence and remaining integration
-questions.
+experimental. Both passed local runtime checks. Current product behavior is in
+[DESIGN.md](DESIGN.md#camera-decided-2026-09-26-unless-noted); current coverage
+and remaining checks are in [VALIDATION.md](VALIDATION.md). This file records
+the native integration and its evolution. Dated checkpoints retain earlier
+cancellation rules and limitations; later L-26/L-76/L-77/L-78 entries and
+DESIGN define the current behavior. The SDK/probe sections at the end are
+earlier research, not instructions to replace the working camera path.
 
 ## Freelook camera detachment
 
@@ -269,7 +273,15 @@ retention and paused flight through Lamium views, plus normal inventory,
 window movement and explicit release. Hold and broader lifecycle behavior
 remain unverified; no individual Escape/Close results were supplied.
 
-## SDK surfaces inspected
+## Earlier SDK and probe record (2026-09-23)
+
+The sections below preceded the camera-entity implementation described above.
+The view-matrix approaches did not produce the detached view and were abandoned.
+Their diagnostic options remain development tools; their "next" instructions
+and "not completed" statements describe that earlier checkpoint. L-37 in
+BACKLOG owns current cave-visibility research.
+
+### SDK surfaces inspected
 
 In the 26.51.3 client SDK:
 
@@ -299,7 +311,7 @@ In the 26.51.3 client SDK:
   portal, sleeping, and perspective information. These declarations do not
   establish a supported isolated-camera lifecycle.
 
-## Next integration experiment
+### Initial integration experiment
 
 For the next hold/drag experiment, `camera_trace` also records three independently
 bounded Freelook stages (32 records each per process): successful session begin,
@@ -329,9 +341,9 @@ attack, and use while detached. Freelook needs explicit handling of interaction
 aim versus displayed aim before it is considered ready. Settings opening must
 cancel the detached session, and Zoom must use the same camera/input policy.
 
-## Required runtime evidence
+### Probe procedures and observations
 
-### Opt-in position override experiment
+#### Opt-in position override experiment
 
 `xmake f --camera_position_probe=y --camera_probe=n` followed by
 `xmake build Lamium` enables a two-block camera-local rightward displacement
@@ -349,7 +361,7 @@ session. In particular, the separate render origin may have downstream users
 that do not consume the adjusted view. Disable with
 `xmake f --camera_position_probe=n` and rebuild before ordinary use.
 
-### Opt-in view override experiment
+#### Opt-in view override experiment
 
 `xmake f --camera_probe=y` enables a development-only fixed 20-degree
 camera-local yaw while the existing Zoom action is held in gameplay. It also
@@ -367,7 +379,7 @@ across frames, aligns with world overlays, and returns on release. Its runtime
 behavior is not yet verified. A complete feature still needs its own input
 action, detached pose, cancellation policy, and interaction handling.
 
-### Read-only observations
+#### Read-only observations
 
 An optional read-only probe is available with `xmake f --camera_trace=y`
 followed by `xmake`. It observes the existing Zoom hook lifecycle and samples

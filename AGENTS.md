@@ -5,6 +5,7 @@ LeviLamina Client (Windows x64, C++20, clang-cl, xmake). This file is the
 working manual for any coding agent (Claude Code, Pi, OpenCode, ...).
 Read it fully before changing code.
 
+- Documentation index and document roles: [docs/README.md](docs/README.md)
 - Product direction, UI rules and colors: [docs/DESIGN.md](docs/DESIGN.md)
 - What to work on, in what order, and who should do it: [docs/BACKLOG.md](docs/BACKLOG.md)
   (release rules and pre-release checks are in it; finished items:
@@ -24,6 +25,9 @@ a task is in this file and `docs/`. Start with BACKLOG.md's short
 **Current execution order**, then read the selected L-item and its feature doc.
 The L-item is authoritative if a summary ever drifts. If a decision made in
 chat affects implementation, write it into DESIGN.md or BACKLOG.md.
+Long feature contracts and dated implementation records may be linked from
+the L-item (MAP.md, SCHEMATIC.md). Read their current notes first; older build
+checkpoints do not override later decisions or current validation.
 
 BACKLOG-DONE.md and VALIDATION-LOG.md are long, append-only records. Do not
 read them whole: search them for the L-number or feature you need

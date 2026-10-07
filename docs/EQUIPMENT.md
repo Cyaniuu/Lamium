@@ -54,7 +54,8 @@ breaking pauses until then, the tool moves and breaking restarts.
 
 ## Weapon Switch (L-67)
 
-Own switch under Inventory, off by default; the design is in BACKLOG L-67.
+Own switch under Inventory, off by default; the design is retained under L-67
+in BACKLOG-DONE.md.
 When the local player attacks a living entity (anything with the Mob type
 except armor stands), the hotbar item with the highest attack damage plus the
 vanilla Sharpness/Smite/Bane bonus against that target is selected before the

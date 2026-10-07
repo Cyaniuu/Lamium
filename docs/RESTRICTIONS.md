@@ -1,6 +1,13 @@
 # Placement and breaking restrictions
 
-The shared region predicate defines the proposed initial modes:
+This file describes the existing capture/reset implementation and placement
+research. The planned press-anchored redesign is specified in
+[BACKLOG.md](BACKLOG.md#l-15-breaking-and-placement-restrictions) (L-15), and
+has not started. Current runtime coverage is in [VALIDATION.md](VALIDATION.md).
+The redesign's spec takes precedence when implementing L-15; do not extend
+the old capture/reset flow as if it were the chosen future behavior.
+
+The shared region predicate defines the existing capture/reset modes:
 
 - Plane: fixes the anchor coordinate on the selected face-normal axis.
 - Line: fixes the other two coordinates, extending along that axis.
@@ -12,7 +19,7 @@ action enforcement. Preview radius is bounded to 0–16 cells; this bounds rende
 work, not the allowed operation region. Integer coordinate edges retain the
 headroom required by block-face geometry. No Minecraft pointers are stored.
 
-## Integration work still required
+## Existing integration and placement boundary
 
 The mode settings are exposed as independent named choices with immediate saving.
 Breaking now has a default-off toggle and initially unbound capture/reset actions.
@@ -46,10 +53,11 @@ Pure tests cover all axes, negative coordinates, preview membership/counts,
 unbounded predicate behavior, vertical modes, opposite faces, preview work limits
 and integer-edge handling. They do not prove Minecraft hook or placement behavior.
 The breaking implementation builds and links, and catalog/settings/action tests
-pass. Local-world validation remains outstanding: all modes/faces, creative and
-survival, held-button target changes, anchor reset during mining, world exit,
-dimension changes, and interaction with Tool Switch. Do not claim packet suppression
-or complete enforcement until those native paths have been exercised.
+pass. Breaking and resume-after-rejection have local-world evidence (L-36,
+rechecked 2026-09-30), with an occasional held attack that stops breaking still
+unexplained. Full modes/faces, lifecycle and feature-combination coverage is not
+established. Placement enforcement remains unimplemented. Do not claim packet
+suppression or complete enforcement from the tests or partial local checks.
 
 ## Placement integration research (SDK 26.51.3)
 

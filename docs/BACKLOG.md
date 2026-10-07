@@ -12,11 +12,12 @@ Each task has a **kind**, which decides who should pick it up:
 | **Ready** | Spec is complete; mostly pure logic + tests + small glue | Any agent, including cheap models |
 | **Design** | A user-visible choice is open. Output is a spec (often a web demo) that turns into Ready tasks | Maintainer + strong model |
 | **Research** | Needs native reverse engineering, trace builds or runtime-driven debugging | Strong model; cheap models may only collect traces |
+| **Refactor** | Preserves behavior while changing internal structure | Follow the item's model and validation requirements |
 
 Ready tasks marked **(strong model)** are fully specified but visual or
 cross-cutting enough that a strong model should implement them.
 
-A large or open-ended feature (Map, placement and breaking features, later
+A large or open-ended feature (Map, placement and breaking features,
 Schematic) starts with a conversation with the maintainer about what it
 should be - purpose, scope, what is left out - before any spec, spike or
 mockup (decided 2026-09-28).
@@ -28,6 +29,10 @@ decides who picks it up.
 Finished and closed items live in [BACKLOG-DONE.md](BACKLOG-DONE.md) with
 their full history. An `L-` number referenced elsewhere that is not in this
 file is there.
+
+Long feature contracts and dated build/research records are linked from the
+L-item ([MAP.md](MAP.md), [SCHEMATIC.md](SCHEMATIC.md)); current status and
+remaining work stay here. Document roles: [README.md](README.md).
 
 ## Release policy (decided 2026-09-28)
 
@@ -67,29 +72,18 @@ L-item wins. Every entry names what the task is, not only its number.
 1. **Small and medium features**, picked by the maintainer:
    - L-90 Simplified Chinese localization: built and checked in game; waits
      for a native review of the wording.
-   - Offhand follow-up: L-94, L-95 and L-97 are done.
-   - L-102 and L-103 (Hand Restock threshold/order, inventory-screen
-     transfer) are done.
-   - L-104 Map follow-ups (biome foliage, relief, teleport) is done.
 2. **Placement and breaking — L-15 restrictions and L-59 held placement
    style:** specs written after the 2026-09-28 discussion; building waits for
    the maintainer's go.
 3. **Map — L-60 minimap, waypoints and world map:**
-   resumed 2026-10-01. Runs in parallel with the small and medium features
-   in 1; neither ranks above the other. Steps 1-5 (minimap, cave view,
-   radar, waypoints with their screen) and the world map are built, checked
-   in a local world and, for the minimap, radar and world map, on an
-   external BDS server with a large explored area (2026-10-02). L-82
-   ended as a link to an external seed map (done 2026-10-01); seed-based
-   biomes and structures are a non-goal. L-83's map/settings UI review is
-   done. L-89 distant players is done (2026-10-03). Open: waypoint storage
-   on a server and L-86 radar-face follow-ups.
+   core built and checked locally and on an external BDS. Runs in parallel
+   with the small/medium features; neither ranks above the other. Open:
+   waypoint server storage checks and L-86 radar-face follow-ups. Details
+   are in the L-item and MAP.md.
 4. **Schematic — L-93 load, place, project, verify and list materials:**
-   chosen 2026-10-03; the core is built and checked locally. The 0.1.7
-   scope (entities, area save, open folder and large-file warning, an
-   outline for blocks without a mesh) was agreed 2026-10-07, then the menu,
-   adjust key and drawing work; all built, the last parts not yet checked
-   in game (Pre-release checks).
+   included in 0.1.7 and checked locally. Choose the next accepted follow-up
+   with the maintainer; the L-item lists them and SCHEMATIC.md retains the
+   contract and build record. Server/broader coverage remains open.
 5. **Research when convenient:** L-37 FreeCamera seeing caves (wanted),
    L-79 carved pumpkin and spyglass frame draw path (cheap-model friendly
    trace/test steps), L-71 starting a glide from the mod, L-57
@@ -97,8 +91,7 @@ L-item wins. Every entry names what the task is, not only its number.
    breeding timers, L-96 Connected Textures (glass first; step 1 is the
    tessellator spike), L-105 performance profiling (measure before any
    optimization).
-6. **L-73 architecture review:** agreed 2026-09-30, in progress step by
-   step (order in the L-item); step 13 goes with L-15 breaking.
+6. **L-73 architecture review:** only step 13 remains, with L-15 breaking.
 7. **Before a release:** the pre-release checks below. 0.1.7 was released
    on 2026-10-07; server checks of the 2026-10-06/07 work stay listed
    below as known gaps (Release policy does not require a full
@@ -119,9 +112,16 @@ do not duplicate task details into this summary.
 
 ## Pre-release checks
 
-Behavior confirmed only on trace builds or only locally. Check these on the
-trace-disabled release build before tagging (VALIDATION.md has the gaps per
-feature):
+Remaining coverage to consider for the next changed-feature smoke test. These
+include trace-only and local-only results; VALIDATION.md owns the per-feature
+gaps. The Release policy above does not require a full regression or closing
+every server gap before a release.
+
+### Released builds and registry follow-up
+
+The following are released-build checkpoints and listing follow-ups, not
+unmet gates for versions already published:
+
 - 0.1.7 was released on 2026-10-07 (`v0.1.7`, tag CI passed; asset SHA-256
   `2e0926e0...93b013b5`): L-93 Schematics (experimental), L-67 Weapon
   Switch, L-97 fixed fetch slot, L-94 offhand swap (`F`), L-95 Fake Offhand
@@ -153,6 +153,9 @@ feature):
   (L-69), Auto Elytra (L-70) and the L-02 dedicated openers. Still open:
   Hand Restock on BDS and with real latency. The coverage gaps below carried
   past 0.1.4; recheck the relevant ones before the next release.
+
+### Pending feature checks
+
 - FreeCamera speed controls (L-26): five-step adjustment and speed keys passed
   on `7e72244`; revised labels and forward-only sprint follow-up passed on
   `41b1ff6`. Restart persistence and detailed input/menu/focus combinations
@@ -174,8 +177,6 @@ feature):
 - Nausea color (L-42): child/key/master hiding/restoration and unchanged
   effect/icon/vanilla preference passed on normal build `b239eb9`. Remaining:
   restart persistence, additional packs/modes and lifecycle/owner cases.
-- After tagging 0.1.4: the registry PR picks up `v0.1.4`; check that
-  LeviLauncher/Bedrinth offer 0.1.4 with the icon (L-72) once it is merged.
 - If possible, a server with real latency for Hand Restock.
 - Distant players on the map (L-89) and opaque player markers at any
   height: checked on phone/PC-hosted worlds with a trace build; check on the
@@ -198,13 +199,6 @@ feature):
 - Fixed-slot fetch (L-97) and the stronger-weapon fetch: checked locally on
   `c7bb827`; check on a server (the same-hit selection report) and on the
   release build.
-
----
-
-## Open decisions
-
-HUD (docs/demos/hud.html), the settings key and the shape model are decided;
-see DESIGN.md.
 
 ---
 
@@ -296,7 +290,7 @@ check); 13 B with L-15 (in-game check). In-game check 1 follows step 1.
 
 ---
 
-## Design
+## Feature work and research
 
 ### L-59 Held placement style: vanilla, Java-like or fast
 Kind: Design done (discussion with the maintainer, 2026-09-28); Research
@@ -427,8 +421,9 @@ Kind: Design decided, then implementation. Chosen by the maintainer
 Status: built 2026-10-02 (agent-drafted text for all keys, `TranslationsZhCN.h`
 with a build-time order check, docs/TRANSLATING.md). Checked in game on
 `ca25c2c` (fit, baseline and behavior fine; no Latin raise needed). Open: a
-native review of the wording, invited from FeixiangTMC as a PR. Hold the release that first
-ships it until the review or a "draft, corrections welcome" note is decided.
+native review of the wording, invited from FeixiangTMC as a PR. It shipped
+in 0.1.6 as a first AI-assisted translation with corrections welcome; the
+native review remains open and is not a release gate.
 Add Simplified Chinese (`zh_CN`) as Lamium's third official UI locale.
 English and Japanese remain supported; Traditional Chinese is not claimed
 until there is actual demand and a separately reviewed translation.
@@ -598,910 +593,44 @@ start a glide right after the swap. No faked flags or packets: only a
 vanilla path that the server accepts.
 
 ### L-60 Map: minimap, waypoints and world map (experimental)
-Kind: Design done for the minimap (step 0, 2026-09-28); the steps below are
-Research then Ready **(strong model)**. The world map still needs its own
-design discussion. Chosen by the maintainer 2026-09-28 as the next large
-feature.
-Status: resumed 2026-10-01. Steps 1-5 and the world map built and checked
-in a local world on 2026-10-01. On an external BDS server with other players
-and several thousand blocks explored, the minimap, radar and world map
-behaved as locally (reported 2026-10-02); players beyond entity tracking
-range now show faded from the locator state (L-89, done 2026-10-03).
-L-104 map follow-ups (biome foliage tint, relief, missing sections,
-teleport) are done (2026-10-07). Open: waypoint storage on a server and the
-L-86 radar-face follow-ups.
-Decision record: L-60 was chosen when no LeviLamina map mod with a minimap,
-world map and waypoints seemed to exist (ChiyanMap was gone), and put on hold
-2026-09-30 until the maintainer had used CoralMap (CC0-1.0, reference-only,
-PROVENANCE.md group 3), which per its README lacks waypoints, radar, cave
-view and the death point. On 2026-10-01 the maintainer decided to build a
-full map in Lamium without trying CoralMap: it has too few features, and
-ChiyanMap, though feature-rich, left the mouse cursor free after its world
-map closed, scattered its settings and felt rough to operate. Running
-several mods together (Lamium, LHolo, ChiyanMap) also often left the
-Minecraft process running after exit; the cause is not identified, so
-Lamium's map must not become one (see Map-wide requirements).
-A client-side map built from the chunks the client has loaded: a minimap HUD
-element with a radar and waypoints first, then a full-screen world map backed
-by an on-disk cache. It ships default off with the Experimental badge and
-grows on main in steps (Release policy above). Look agreed in
-[demos/minimap.html](demos/minimap.html).
-
-Lamium's map is specified here and implemented independently on
-LeviLamina/Bedrock APIs. ChiyanMap (GPL-3.0) and the current LeviLamina map
-mods are reference-only (PROVENANCE.md group 3). The maintainer keeps
-ChiyanMap recovery material outside the repository (local path in
-`AGENTS.local.md`, when present); planning may use its notes, but whoever
-writes Lamium map code works from this spec and does not open the recovered
-source.
-The implementation should use a player-centered scan spread over frames with
-an explicit budget, retain owned height/color data for shading, partition
-persistent data by world and dimension, and build the world map from bounded
-cached regions rather than a single unbounded texture.
-
-#### Map-wide requirements (decided 2026-10-01)
-These apply to every step, the world map and L-82.
-- Clean shutdown: every scan, bake or disk-cache thread or task is stopped
-  and joined on world exit, dimension change, disabling the feature and mod
-  shutdown. Shutdown never waits on the game's threads or blocks in DLL
-  unload. In-game checks for steps that add background work include quitting
-  the game and confirming the process ends (`tasklist` shows no
-  `Minecraft.Windows`).
-- Cursor and input: a full-screen map opens as a game screen rather than by
-  releasing the mouse by hand. When it closes, when the window loses focus
-  and on world exit, mouse capture and look control return to normal play.
-  Its in-game check: open, close, Alt+Tab away and back, then turn the view.
-- One place for settings: every map option, including anything changeable
-  from inside the world map, lives in the "Map" settings category and is the
-  same setting wherever it is shown.
-- The world map opens fast: regions already cached show at once, and new
-  areas fill in progressively without blocking the screen or the game. The
-  maintainer found a slow-to-generate world map a constant annoyance.
-- Operation is designed before it is built: the world map gets a mockup in
-  `docs/demos/` agreed with the maintainer (dragging, zoom, adding and
-  editing waypoints, closing) before implementation, as the minimap did.
-
-#### Minimap spec (decided with the maintainer, 2026-09-28)
-Map
-- Square, north up; the player is a white arrow with a black edge, modeled
-  on the vanilla map's player marker (check whether the game's own map icon
-  can be drawn at runtime). Rotating (heading up) and round are settings.
-- About 128 x 128 blocks by default; zoom steps from 16 to 512 blocks
-  across (16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512; finer steps
-  decided 2026-10-01, saved as the width in blocks). Chunks the client has not loaded stay blank: a dark,
-  half-transparent fill in the card color (decided 2026-10-01; transparent
-  looked wrong). Known empty ground (a drop in the cave view, the End's
-  void) is an opaque dark color instead, so it reads differently from
-  ground not loaded yet. Nothing is requested from a server.
-- A thin 1-unit frame only; nothing is drawn outside the map except the
-  compass letters, which sit on the frame (2026-10-01).
-Terrain
-- A representative color per block, biome tints for grass, foliage and
-  water (the color the world shows, not the vanilla map item's palette:
-  the first build used that palette and looked unlike the world), and height shading against the north and west neighbors, at the
-  strength shown in the mockup. No day/night darkening.
-- Under a ceiling the map switches to a cave view on its own: floors near
-  the player's height bright, walls dark. The Nether always uses it. A key
-  can force the cave or surface view.
-- The cave view must stay calm (2026-10-01, after the first cave build
-  redrew on every one-block height change): it is drawn around a held
-  height that moves only when the player is more than 3 blocks from it,
-  over a window from 5 above to 24 below that height, with depth-based
-  brightness; the roof check uses most of the 3x3 columns around the
-  player; automatic switches wait 1 s after the previous one. Possible
-  later refinement, not decided: hold the height while the player stays in
-  the same cave space rather than by distance.
-Radar
-- Simple dots by kind, each kind a setting: other players (light blue, with
-  their name), hostile mobs (red) and passive/neutral mobs (white) on by
-  default; dropped items (yellow) off. Every dot has a thick black ring.
-  Dots 8 or more blocks above or below the player are drawn fainter, except
-  players (decided 2026-10-03, L-89): faint means "out of range" for them.
-- On by default; the help text notes that some servers may treat seeing mobs
-  and players through walls as unfair.
-- Later, as an option: per-mob icons (for example from the spawn egg, as the
-  Target card does); dots stay the default.
-Waypoints
-- Add one at the current position with a key; a small prompt asks for the
-  name and color. Only the last death point is recorded automatically, with
-  its own cross marker; it can be turned into an ordinary waypoint. No
-  teleporting.
-- On the minimap: diamonds in the waypoint's color; those outside the map
-  sit on its edge pointing their way.
-- In the world: a small colored diamond in the waypoint's direction with the
-  distance ("128 m"); the name appears when the crosshair is near it.
-- A dedicated Waypoints screen like Shapes, pinned at the bottom of the
-  settings sidebar: list, name, color, coordinates, shown/hidden, delete.
-- Stored per local world, or per server address and port, then per
-  dimension. Lobby-style servers with several worlds share one set for now.
-Following (decided 2026-10-01)
-- While FreeCamera flies, the map's center and heading follow the camera,
-  and the player's arrow is drawn where the player is (hidden when off the
-  map). No setting. Freelook keeps following the player.
-Text, placement and settings
-- Optional lines below the map with a shadow, all default off: coordinates,
-  biome, compass letters (N E S W). No clock. Decided 2026-10-01 after the
-  first build: the lines are centered on the map whatever its anchor; the
-  compass letters are centered on the frame (inside the map they were hard
-  to read), all white, no special color for north.
-- Its own HUD element, default top right at a medium size (about a fifth of
-  the screen height; a "Map size" setting, 10-50 % of the screen height in
-  steps of 1, changes the map alone while the layout scale still scales
-  the whole element, decided 2026-10-01), movable and scalable in the layout editor. Hidden while
-  Debug View is shown (a "hide while Debug View is open" switch like the Info
-  HUD's and Target's); not hidden while zooming or in FreeCamera.
-- A new settings category "Map" holds the minimap, radar and waypoint
-  options (and later the world map), with the Waypoints screen pinned at the
-  bottom of the sidebar. Decided 2026-10-01 (first build had one feature
-  with 19 children): the category lists features of their own: "Minimap"
-  (switch, key; range, size, turning, round, Debug View hiding, zoom and
-  enlarge keys, layout link), "Map text" (a heading without a switch:
-  compass letters, coordinates, biome), "Cave view" (no switch, its key
-  forces the other view), "Radar" (switch; one row per kind and the
-  invisible option), and later "Waypoints".
-- Bindable actions without default keys: minimap zoom in/out, minimap
-  show/hide, add a waypoint, force the cave/surface view, and (2026-10-01)
-  enlarge while held: twice the side and twice the area at the same scale,
-  at most 85 % of the screen height. New actions are
-  appended to `enum Action`.
-
-#### Steps
-Each step lands on main behind the default-off switch and ends with an
-in-game check by the maintainer. Pure logic goes in headers with tests.
-
-Built 2026-10-01 (steps 1-2, unchecked in game): `features/map/MapView.h`,
-`MapTiles.h`, `MapImage.h` (pure, `tests/MapTests.cpp`) and `Minimap.cpp`.
-The whole image (terrain, arrow, frame) is composed on the CPU into a 256 px
-RGBA texture uploaded with `uploadTexture` and then `updateTextureInPlace`.
-Scanning runs on the client thread at 1.5 ms per frame (nearest chunks
-first, near chunks rescanned every second, far ones less often); there is no
-background thread yet. Second build (same day, after the first check):
-colors are the average of each block's top texture (`BlockGraphics`, image
-from the texture group, at most 6 new textures per frame, cached by block
-state and path) times the biome tint (`BiomeColorSampling` map grass/foliage
-colors, water color), with the old map color only as a fallback; the
-surface is the heightmap block, or the covering block just above it (snow
-layer, carpet), looking through glass and plants; shading is cached per
-chunk so turning recomposes every frame; lines centered, compass letters on
-the frame and all white. Third build (same day): cave view (step 3) with
-its own tile cache per view, the Nether always in it; floors are found in
-a column from 2 above to 24 below the player's block (rock at feet and head
-is a wall), cave chunks rescan when the player's height changes by more
-than 1; automatic switch when covered and sky light <= 6 (back at >= 10);
-a "minimapview" key forces the other view and returns to automatic; the
-dark fill for unloaded ground; FreeCamera following. Fourth build: the
-calmer cave view above; blocks the client has not received yet (its
-request stand-in blocks) leave the column unknown and get the chunk
-rescanned soon; bounded log lines name stand-in and colorless blocks.
-Fifth build: a chunk counts as received unless all its columns are
-stand-ins, empty columns are the dark "known empty" color; the map size
-setting and the hold-to-enlarge key (texture 512 px while enlarged).
-Sixth build: in the cave view stand-in blocks count as rock without a
-color (the client leaves hidden sub-chunks unrequested, which left holes
-in the Nether); the finer range steps and 1 % size steps; the center
-snaps to whole pixels when a pixel spans several blocks, stopping the
-shimmer at wide zoom; chunks kept for the enlarged view.
-Step 4, radar (built 2026-10-01, `MapRadar.h`): dots from the client's
-actor list each frame (owned positions, kinds and player names only),
-sorted nearest first and capped at 256, placed in whole texture pixels and
-drawn into the image (dot 3 and ring 2 mockup pixels, palette from the
-mockup's option B); invisible and dead actors are left out; hostile means
-the Monster type flag (hoglins count as passive for now); player names in
-small text beside their dot, flipped left near the right edge; a "Radar"
-switch plus one per kind, items off. After the first radar check
-(2026-10-01): the kind rows are named "Radar (players)" and so on; dots
-keep their mockup size up to 128 blocks across and shrink with the square
-root of the range, to half at 512; "Radar (invisible ones too)", default
-off, also shows invisible players and mobs (help text notes servers may
-treat it as unfair). While enlarged, the arrow, dots and name gaps keep
-their normal on-screen size. The map center and the dots use positions
-interpolated with the frame's tick fraction (read in a world render hook;
-without it, ticked positions). That alone did not stop the wobble while
-running (maintainer, 2026-10-01): terrain and dots were quantized to pixels
-separately. The center now always snaps to the texture's pixel grid along
-the map's own axes, so both step together; the arrow is placed from the
-unsnapped center and stays in the middle.
-A world join/exit or a
-dimension change discards the data; turning the minimap off unloads the
-texture. Any exception turns the minimap off for the session (fail open).
-Not yet built from step 2: the vanilla map marker check (the arrow is drawn
-by Lamium).
-
-1. Texture spike (Research): build an RGBA image at runtime
-   (`cg::ImageBuffer`), register it through
-   `IClientInstance::getTextureGroup()` / `mce::TextureGroup::uploadTexture`,
-   draw it on the HUD with `MinecraftUIRenderContext::drawImage`, and change
-   its pixels each second with `updateTextureInPlace`; a checkerboard is
-   enough. Measure a full update at minimap size (about 256-512 px) and
-   record what happens on world exit, dimension change, resource reload and
-   window resize. If this path fails, record why and ask before considering
-   anything at the DirectX level. Also check whether the vanilla map's
-   player marker texture can be drawn. Not shown in settings.
-2. Surface minimap (Ready once step 1 works): scan top blocks around the
-   player from the client's `BlockSource` (height map, block, biome) within
-   a per-frame time budget, keep owned colors and heights, shade and upload;
-   the HUD element, frame, player arrow, zoom steps, rotating/round options,
-   the text lines, the "Map" settings category and the Debug View hiding.
-   Background scan/bake work carries world + dimension generation identity
-   and discards stale completions. Keep full-dirty data changes separate from
-   presentation-only refreshes where that avoids unnecessary work. Tests:
-   block/biome color and shading math, negative-coordinate chunk/region math,
-   world-to-map transforms (north-up and rotating), zoom steps, scan
-   scheduling and stale-result rejection. In game: include negative
-   coordinates, Nether, quick world re-entry and dimension changes. First
-   Experimental release point.
-3. Cave view: detect a ceiling, scan floors and walls around the player's
-   height, the Nether always in cave view, the force key. Tests: ceiling
-   detection and floor selection on synthetic columns.
-4. Radar: collect nearby players and mobs each frame (owned positions and
-   kinds only), the dot kinds and colors, fainter dots above/below, player
-   names, the per-kind switches. Tests: kind classification and the
-   above/below rule.
-5. Waypoints: storage per world/server/dimension (tolerant JSON like the
-   shapes store), the add prompt, the Waypoints screen, markers on the
-   minimap (edge clamping) and in the world (direction, distance, name near
-   the crosshair), the last death point. Tests: storage round trip and keys,
-   edge clamping, marker projection.
-   Decided 2026-10-01 with [demos/waypoints.html](demos/waypoints.html)
-   (all recommendations accepted): the add key opens a small centered
-   prompt with the name "Waypoint N" (地点 N) preselected and 12 colors,
-   the next color after the last one used; Enter adds, Esc cancels; the
-   position is the block under the feet when the key was pressed; closing
-   it restores mouse capture. The Waypoints screen is built like Shapes
-   (list and detail, dock button), nearest first, this dimension's entries
-   first and others grayed with a dimension tag, the last death point in
-   its own group on top with "Make a waypoint"; delete takes two presses.
-   Settings feature "Waypoints" (switch: all markers; key: add here) with
-   "Show in the world", "Show on the minimap", "Record the death point",
-   a key to open the screen and a key that hides world markers while held.
-   An option, default off, shows Overworld waypoints in the Nether at 1/8
-   of their coordinates (and Nether ones in the Overworld at 8x). World
-   markers get an optional distance limit (default none, 100-10000).
-   Built in three parts, each checked in game: 5a (built 2026-10-01,
-   unchecked) storage (`WaypointStore`, local world `lamium/waypoints.json`
-   beside shapes, servers `config/waypoints/<host>_<port>.json`, Realms and
-   other connections without an address for the session only; a file that
-   fails to load is never overwritten), the add key and prompt (a mode of
-   the settings screen, so it owns the cursor like it), minimap diamonds
-   with edge clamping and the death cross, the death point (noticed in the
-   world render hook because the death screen hides the HUD, saved from the
-   next HUD frame), the "Waypoints" settings feature with minimap, death
-   and cross-dimension switches. 5b: world markers, the distance limit and
-   the hide-while-held key. 5c: the Waypoints screen and the open key.
-   5a passed in a local world on 2026-10-01 (server not checked). The
-   death cross is red (maintainer, 2026-10-01: white read as a passive
-   mob's dot; the cross shape tells it from red hostile dots). 5b built the
-   same day: the camera the world was drawn with is copied in a setupCamera
-   hook that runs outside the FreeCamera and Zoom hooks, and markers are
-   projected onto the HUD from it (axes from the view matrix, scale from
-   the projection matrix; no camera means no markers); pixel diamonds 7
-   units across and the cross from rectangles; the distance below, the name
-   above it when the crosshair is within 20 x 30 units; far markers drawn
-   first; "Show in the world", "Show up to" (0 = any distance, steps of
-   100 up to 10000) and the hold key. After the 5b check: the camera's
-   world position comes from the entity pass (`mCameraPosition`), because
-   setupCamera is camera-relative; "Show in the world" is a choice, decided
-   2026-10-01: Always (the key hides while held) / While the key is held
-   (the key shows them) / Off (the key does nothing), with the key on that
-   row. Markers are placed on whole screen pixels, not GUI units (checked
-   smooth in game on `189c554`). 5c built 2026-10-01: the Waypoints screen
-   reuses the Shapes layout (`ShapesLayout`; header: "Show all" switch, key
-   settings link, dock button; toolbar "+ Add here"); a fourth pinned
-   sidebar item between Shapes and HUD layout; the list is the death point
-   (if any) then this dimension's waypoints nearest first, then the others
-   by name, each with its distance or dimension and a shown switch; the
-   editor has the name, a large diamond with coordinates, dimension and
-   distance, and X / Y / Z (typed or stepped), Move here, Show and Color
-   rows; the death point offers "Make a waypoint" (named "Death point",
-   the death record cleared) and delete; delete takes two presses; an
-   "Open the Waypoints screen" key under the Waypoints feature.
-
-#### World map (step 0 done; first build 2026-10-01, not checked in game)
-Step 0 started and finished 2026-10-01. Decided by the maintainer (all as proposed):
-- Full screen with thin top and bottom bars, opened by a key (default M),
-  closed by the same key or Esc; the game is not paused; HUD and minimap
-  are hidden while it is open. Left drag pans, the wheel zooms about the
-  cursor, north is up.
-- Waypoints from the map through a right-click menu: on empty ground "Add
-  here" (the usual add prompt; Y is the recorded surface, else the
-  player's Y); on a waypoint "Edit" (opens its row in the Waypoints
-  screen), hide/show and delete (two presses); on the death point "Make a
-  waypoint" and delete. No teleport.
-- Recording runs whenever the world map feature is on, whether or not the
-  minimap is shown, with a per-frame budget.
-- The on-disk cache has no size cap; the Map settings show this world's
-  usage and a two-press clear.
-Proposed with them (not questioned): 256×256-block region files of color
-and height, stored like waypoints (a local world's lamium folder; for a
-server Lamium's config folder per address and port), per dimension;
-cached regions read nearest first off the client thread; the minimap
-reads the same cache; the Nether recorded in 16-block layers, Overworld
-caves not recorded in v1.
-Mockup: [demos/worldmap.html](demos/worldmap.html), agreed 2026-10-01 with
-every recommendation: the bars as drawn, a dimension switch to view the
-others (the player's own marked), the Nether layer stepper with "My height"
-(on by default), waypoint names always shown, the menu items as drawn, and
-the settings rows (feature switch with the open key M, Nether layer, saved
-map size with a two-press delete of the whole world's map).
-Build notes (first build): `MapRegion.h` (region data, file format "LMR1"
-with runs, shading, 2:1 downsampling), `WorldMapView.h` (view, zoom steps
-1/8-16 GUI units per block, image levels), `MapStore.cpp` (regions near the
-player kept in memory; a worker thread per joined world reads and saves
-region files, builds images by level from regions or the level below with
-an LRU of about 40 MB, and is joined on world exit and mod stop; damaged
-files count as missing), `Minimap.cpp` `record()` (scans 384 blocks around
-the player with its own 1 ms budget whenever the world map is on; chunks
-the client has not loaded are filled from the saved regions, Overworld
-caves are not recorded), `WorldMap.cpp` (the screen: a pool of 96 runtime
-textures, at most 6 uploads per frame, 16 in the first second, a coarser
-image stands in until a tile is ready), and a world-map mode in the
-settings screen's scene (cursor ownership as for the other screens; the
-add prompt opened from the map returns to it; "Edit" opens the Waypoints
-screen on that waypoint). Saved under the world's `lamium/map/` or
-`config/map/<host>_<port>/`, per dimension (`overworld`, `nether/y<N>`,
-`end`). Region edges shade against level ground. L-82 links from the
-world map to an external seed map.
-After the maintainer's first use (2026-10-01) a review mockup,
-[demos/worldmap-review.html](demos/worldmap-review.html), was agreed with
-every recommendation and built the same day (not checked in game yet):
-- Top bar B: short dimension names (Overworld/Nether/End, 地上/ネザー/
-  エンド), no title, close as a drawn cross; "My height" folded into
-  "Center on me" (it also returns the Nether layer to the player's height;
-  the layer label is accent-colored while it follows). The two-row
-  fallback stays for screens too narrow.
-- A "World map" item pinned in the settings sidebar (between Waypoints and
-  HUD layout). Opened from there, closing the map returns to the settings;
-  opened by its key, to the game. With the feature off the sidebar still
-  opens it and shows the saved map without recording ("Recording is off").
-- A waypoint side panel on the map, toggled by the top bar's "Waypoints"
-  button and remembered (`map.worldMapPanel`, no settings row): this
-  dimension's death point and waypoints nearest first with shown
-  switches; a row moves the map to it; clicking a marker selects it; the
-  editor has the name (typed on the map), X/Y/Z steppers, Move here, Show,
-  colors, "Open in screen" and a two-press delete. The right-click "Edit"
-  selects in the panel.
-- The Waypoints screen opened from the map shows "< Map" instead of
-  Close; it and Esc return to the map with its view kept.
-Checked in a local world 2026-10-01 on `e6781e5` (all points passed).
-L-83 completed 2026-10-01 (see BACKLOG-DONE.md): the settings/UI consistency
-review covered the map and Waypoints screen. Further map UI changes are new
-work, not an open part of L-83.
+Kind: Design completed; implementation built. Remaining work is validation
+and the separately listed radar follow-ups.
+Status: minimap, radar, waypoints and world map built and checked locally
+(2026-10-01); minimap/radar/world map also checked on an external BDS with a
+large explored area (2026-10-02). L-89 distant players and L-104 map
+follow-ups are done.
+Requirements, technical notes and the retained decision/build record:
+[MAP.md](MAP.md). Runtime coverage: [VALIDATION.md](VALIDATION.md).
+Open:
+- Waypoint storage per server address/port: in-game validation.
+- L-86 radar-face follow-ups (Later / parked).
+- Dedicated-server/release coverage for distant players and server checks
+  of L-104: see Pre-release checks.
+Seed-based terrain, biomes and structures remain a non-goal (L-82).
 
 ### L-93 Schematic: load, place, project, verify and list materials (experimental)
-Kind: Design done for the first scope; the remaining parts are Ready
-**(strong model)** or Research as marked. Chosen by the maintainer 2026-10-03.
-Status (2026-10-07): placing, ghosts, the verifier, the four tabs, the HUD,
-keys and the target-card line are built and checked in a local world
-(VALIDATION.md). 0.1.7 waits for the parts below.
-Scope for 0.1.7 (maintainer, 2026-10-07), in this order:
-1. Entities from files: named dashed frames, verified by type near the
-   spot, their own section in the material list, the per-placement switch
-   (decided below; the saved `entities` flag already exists).
-2. Area selection and save (decided below): corner keys on the looked-at
-   block, the frame, number adjustment and name on the screen, "Include
-   entities" (default off).
-3. "Open folder" on the Files tab, and a warning before loading a very large
-   file.
-4. Blocks without a mesh on the ghost path that the block-entity renderer
-   does not draw either (torch, bed, skull, door ...): at least the outline
-   alone, so no block of a schematic is invisible.
-Built 2026-10-07; items 1-3 checked in broad terms on `14c2265`, with the
-follow-ups below changed in `cd21ee4` (not yet checked):
-- Corner 1 green, corner 2 yellow (world and prompt). Corner 2 no longer
-  opens the prompt; only the save key does. The area stays after saving
-  (until "Clear area" in the prompt or leaving the world). Entity names
-  are sized like text a quarter block tall over the frame, shrinking with
-  distance and hidden when too small to read.
-Changed after the second check, in `1c5a676` (not yet checked):
-- Corner 1 outlined red and corner 2 blue on the block's own edges, with
-  faintly tinted faces just outside, so a full block shows its corner.
-- Large areas: the save reads the area chunk column by chunk column; a
-  column whose chunk is not loaded waits until the player comes near (a
-  toast every 8 s names the nearest waiting spot). The prompt shows the
-  progress and its Save button becomes "Stop saving" while a save runs.
-- The save prompt is wider (340), with a status row; "Clear area" sits at
-  the left of the button row.
-- Text fields (save and waypoint prompts, shape and waypoint names) show a
-  blinking caret after the text, or the selection as a highlight, instead
-  of "_" or "[...]". Number fields keep their old look.
-- Entity names are drawn in the world pass as name tags: a dark plate with
-  the text, facing the camera, 0.025 blocks per font pixel, with the
-  game's name tag materials (the both-sides variants). Adding them to the
-  game's own name tag list is not possible from a mod: that list's
-  allocator is not exported.
-- Blocks with neither a world mesh nor a block entity (honey block, door)
-  fall back to the block's shape mesh set on the cell floor; it ignores
-  block states (a door shows its default shape). Skulls stay an outline:
-  their model needs their block entity data (research).
-As first built:
-- 1 (`1a82afe`): missing entities get a dashed frame (one size, 0.8 x 1.8;
-  the client cannot know a type's size without the entity) and their name
-  above it; an entity counts when one of the same type stands within one
-  block of its spot. Entities are judged only within 48 blocks of the
-  player and in loaded chunks (beyond that the client does not know them),
-  so they are neither placed nor missing there. Check lists missing ones as
-  "not placed (entity)"; Materials lists them after the blocks, carried only
-  when an item of the same name exists (armor stand), "-" otherwise. The
-  HUD's materials can include them.
-- 2 (`14c2265`): keys "corner 1" / "corner 2" on the looked-at block
-  (unbound, new "Save an area" key group); the second corner, or the save
-  key, opens a save prompt over the world with both corners as − / +
-  steppers (Shift: 10), the size, the name, the file it becomes and
-  "Include entities". The world shows the area as a white frame with yellow
-  corners, following the steppers. The world render reads 32768 cells per
-  frame and writes the file; a chunk not loaded stops the save with its
-  position. Blocks with their states and the water layer are saved; block
-  entity data (container contents, sign text) is not; entities keep type,
-  position and facing. An existing file needs a second press
-  ("Overwrite").
-- 3 (`14c2265`): "Open folder" replaces "Reload files"; the Files list
-  rescans every two seconds while shown. Files over 2 MB (about a quarter
-  million blocks; not measured) show a warning and a "Load" button first.
-- 4: already in place: a block that gives no mesh and no block-entity
-  model still gets the light-blue outline of its cell (to be checked with
-  torch, bed, skull and door).
-Paused 2026-10-07 for a design conversation (maintainer). Open points from
-the third check (VALIDATION-LOG): how schematic keys work overall (too many
-single-purpose keys; the selection and corners should share the placement
-keys; a key to clear the selection), drawing cost of large schematics
-(culling, not rebuilding every placement on any change), name tag
-visibility (walls, distance, many entities), showing unloaded parts of a
-running save, and the small fixes (prompt line spacing, caret height,
-honey block and door fallback, the large-file warning not seen).
-Controls decided 2026-10-07 (mockup [demos/schematic-controls.html](demos/schematic-controls.html),
-second round):
-- A schematic menu on one key: a two-level radial menu (categories, then
-  their items) drawn by Lamium. Clicking an item runs it; the wheel over a
-  stepper item changes its value; right click goes back one level; the
-  menu key or Esc closes it. The game keeps running while it is open; the
-  menu only takes the mouse, like Lamium's screens.
-- It reaches most of what the screen does for placements and the save
-  area. Categories (to be finalized with the mockup): Move (forward/back,
-  left/right, up/down relative to the view, to feet; acts on the "move
-  target"), Turn (rotate, mirror, reset), Layers (axis, mode, layer, the
-  layer you stand in, show all), Show (this placement, extra blocks,
-  entities, Schematic HUD, the feature), Area (corner 1/2 at the looked-at
-  block, "move corner 1 / corner 2 / the whole area ->", save, clear),
-  Placement (selected placement, "move the placement ->", look-at select,
-  place from a file, delete via the screen), Check (nearest mistake only,
-  as decided 2026-10-03; Check and Materials tabs), Screen (tabs, key
-  settings). Names, file picking and delete confirmation stay on the
-  screen. Absolute X/Y/Z are not in the menu (Y duplicated up/down).
-- The move target is one of: selected placement, corner 1, corner 2, the
-  whole area. It is chosen by the "... ->" items, which open Move; Move
-  shows the target in its color (green, red, blue, white) in its center.
-- An adjust key (recommended): held with the wheel, it repeats the stepper
-  item used last in the menu (for example up/down or the layer), with a
-  hint under the crosshair saying what it repeats. No tap/hold
-  distinction anywhere.
-- The single-purpose keys stay as advanced shortcuts, unbound by default.
-- A held stick (or any item) as a tool is not built; only if users ask.
-Built 2026-10-07 while the maintainer cannot test (none of it checked in
-game yet):
-- `7fe5324`: name tags hidden behind blocks (a ray from the camera); honey
-  block and door back to the outline alone; prompt line spacing, caret
-  margins, the large-file warning above its button.
-- `8a09567` drawing: a change keeps the built sections of placements whose
-  `drawKey` (PlacementStore) is unchanged, and the check keeps running
-  unless its own placement changed; a section is rebuilt only when a hash
-  of its world blocks changed (compared on the old 0.25 s / 2 s timers, at
-  most 8 sections per frame); sections outside the view are not drawn and
-  are built after those in view; a ghost with an opaque full block (real,
-  or an opaque ghost that will be drawn) on all six sides is not
-  tessellated. Known limit: a change in a neighboring section does not
-  rebuild an enclosed cell at the border until its own section changes.
-- `b80f4dc` menu and adjust key: as decided above. Pure parts:
-  `MenuModel.h` (categories, items, targets, where it opens) and
-  `RadialLayout.h` (ring geometry and pointer hit), with tests. The menu is
-  a mode of Lamium's screen like the prompts; the adjust key is a Hold
-  action whose wheel turns are counted on the input thread and applied by
-  the HUD frame. Settings rows: "Schematic menu (start here)" with the
-  three menu options right under Schematics, "Repeat the last adjustment
-  (recommended)", and the single-purpose groups renamed "Shortcuts: ...".
-Changed after the first look (`4e413ed`, 2026-10-07, not yet checked):
-the menu drawn with Lamium's panel, selection frame and labels, its center
-fixed on every level and the ring fitted to narrow screens; "Move target"
-in Move; the adjust key reports through toasts (no crosshair hint); a
-layer direction turned to the opposite side keeps the same layer
-(`withAxis`); skipping enclosed ghosts became the option "Lighter drawing
-for large schematics" (off), suggested by a toast when a file over 256k
-cells is placed; a waiting save names a direction and distance and frames
-the columns it waits for in yellow; key labels without "start here" /
-"recommended" and the footer tip in faint text.
-Second look (`f6f5386`, 2026-10-07, not yet checked): each tessellated
-ghost drops its quads on a side touching an opaque ghost (`GhostFaces.h`;
-collapsed to a point so no vertex data moves), which also ends the
-z-fighting between adjacent ghosts; the camera's eye and feet cells are
-not drawn and count as open, so from inside a schematic the ghosts around
-form walls, and the sections around them rebuild when the camera changes
-cell; enclosed ghosts are skipped for everyone again (the option is
-gone). The ring is sized from the item and center sizes so no item meets
-its neighbor or the center at any count (`RadialLayout`, tested); small
-mode scales the whole menu; hints are one per line.
-Third look (`efcbda7`, 2026-10-07, not yet checked): the open camera cells
-are gone; ghosts within one cell of the camera's eye and feet cells keep
-every face and are never skipped as enclosed (so a border position or the
-legs show blocks); the menu's items spread out from 55% of the ring over
-0.15 s with ease-out when a level opens, their text appearing once the
-plates are mostly in (`RadialLayout::spread`, tested); the key groups are
-named "Placement keys", "Shown layers", "Check", "Save an area" again.
-Fourth look: near the camera each pair of touching ghost faces kept only
-the one facing the camera; the menu opening follows the Animations setting
-(confirmed). Fifth look (`60b5fab`, not yet checked): that left hollows
-where the near clip plane cut the kept face, so ghosts within one cell of
-the camera now keep every face, each shrunk by 0.4% toward its cell center
-so touching faces never share a plane. Also the settings sidebar fits short
-windows (`SettingsTable::navStep`, tested), found at UI Profile 100%
-(confirmed). Sixth look: the inset still z-fought east-west; now every
-pair of touching faces where either cell is within one of the camera's
-cells keeps only the camera-facing face (`faces::beyond`, tested), ghosts
-within two cells are never skipped, no inset (not yet checked).
-After 0.1.7 (maintainer, 2026-10-07; not blockers, known issues): placements
-on the minimap and world map; a more detailed target-card line (the
-expected block's icon, and for a wrong state which states differ); beds
-sometimes drawing only one half, and a bed cell showing the outline alone;
-the Verify tab's colored preview; the rotatable 3D preview in Files; shapes
-that depend on neighbors following the schematic; the translucent look;
-drawing heads, doors and honey blocks; how far and how many entity name
-tags show. (The menu animation was moved before 0.1.7 the same day.)
-To check before 0.1.7: see "Pre-release checks".
-- Menu settings (decided 2026-10-07): background dimming light by default
-  (none and dark selectable); shown centered at full size by default, or
-  as an option small in the lower right so the view stays free; it opens
-  at the category list by default, or as an option exactly where it was
-  closed (the level shown at closing; the list if the player had gone back
-  up with right click).
-- All keys stay unbound by default (schematics are experimental). The
-  settings lead to the right ones first: the menu key and the adjust key
-  sit right under the Schematics switch, marked as where to start and
-  recommended; the single-purpose keys move into a collapsed "Shortcuts
-  (advanced)" group. While the menu key is unbound, the Schematics
-  screen's footer suggests binding it with a link to the key settings;
-  while the adjust key is unbound, the menu's center says what it would
-  do. (Wording to be settled when built.)
-If there is room before 0.1.7 (maintainer's call, not required): the
-rotatable 3D preview in Files, neighbor-dependent shapes (fences, panes,
-stair corners, redstone) following the schematic's neighbors instead of the
-real world's, and the translucent look as an option. Otherwise they become
-follow-ups after 0.1.7.
-A client-side schematic subsystem for building from a saved structure: pick
-a file, place it in the world, see it as ghost blocks, compare it with what
-is built, and see which materials are still needed. It ships default off
-with the Experimental badge and lands on main in steps (Release policy
-above); steps that are not usable yet stay out of the settings screen.
+Kind: First scope completed; follow-ups are Ready **(strong model)** or
+Research where a new renderer path or behavior needs investigation.
+Status: included in 0.1.7 (released 2026-10-07). Loading/placing, ghosts,
+checking/materials, HUD/keys/target line, entities, area save, folder opening,
+large-file warning, menu/adjust key and the final UI/drawing fixes have local
+checks, including the release smoke test. Server and broader coverage remain
+open; see [VALIDATION.md](VALIDATION.md).
+Requirements, technical notes and the retained decision/build/research record:
+[SCHEMATIC.md](SCHEMATIC.md).
+Accepted follow-ups (2026-10-07; known gaps, not 0.1.7 blockers):
+- Placement markers on the minimap/world map.
+- A richer target-card line: expected block icon and differing state values.
+- Beds sometimes drawing only one half or an outline; heads, doors and
+  honey blocks still drawing as outlines.
+- The Check tab's verifier-colored preview and the Files tab's rotatable
+  3D preview.
+- Neighbor-dependent ghost shapes using schematic neighbors.
+- The translucent ghost look.
+- Entity name-tag distance and quantity.
 
-Decided 2026-10-03:
-- Independent implementation. LeviSchematic (the maintainer's fork) stays
-  reference-only (PROVENANCE.md group 3): it shows what was feasible
-  (`.mcstructure` load/save, ghost projection, transform, world comparison,
-  selection) but its code is not incorporated. The maintainer wants to own
-  the code for design freedom and licensing. Whoever writes the Lamium code
-  works from this spec and does not open LeviSchematic source.
-- One design for the whole first scope: schematic browser, placement
-  (move, rotate, mirror), ghost projection, layer controls, verifier and
-  material list are specified together, so later parts are not bolted on.
-  Implementation may still land in steps.
-- File format: `.mcstructure` only. Java `.litematic` import is a possible
-  later addition, not part of this item.
-- Ghost look: translucent real block models are the target, on one
-  condition: their brightness must not depend on the world's light level
-  (a projection in a dark cave reads as well as one in daylight). If that
-  cannot be done, another look is chosen with the maintainer. Research
-  first.
-- Operation: a dedicated screen plus keys, consistent with the rest of
-  Lamium (DESIGN.md "Tools with their own state get a dedicated view").
-  No held-item tool (no stick or wand selection); that may be revisited
-  only if users ask.
-- Later, not in this item: placement guidance, schematic-aware placement
-  restriction, hotbar item selection and placement assist; the entity and
-  block-entity follow-ups listed below.
-
-Also decided 2026-10-03 (the recommendations, accepted):
-- Saving is in scope: select an area in the world without an item and save
-  it as `.mcstructure`.
-- Files live in `mods/Lamium/schematics/` (subfolders allowed); the browser
-  has "open folder".
-- Several placements at once, remembered per world (servers by address and
-  port) and dimension across sessions.
-- Verifier: not placed shows the translucent ghost, correct hides it, wrong
-  block is red, wrong state (facing etc.) is yellow.
-- Material list: total, placed, remaining and in inventory on the
-  dedicated screen. "In inventory" includes the contents of shulker boxes
-  carried in the inventory.
-- Container contents are ignored; structure void means "place nothing
-  here". (Entities were first listed as ignored too; reopened the same day,
-  see the entity proposal below.)
-
-Decided 2026-10-03 after the first mockup
-([demos/schematic.html](demos/schematic.html)):
-- Extra blocks (a block where the schematic has air) show red like wrong
-  blocks by default, because they can break redstone machines; each
-  placement can switch to ignoring them (no red, not counted), for builds
-  where they do not matter.
-- Placement keys (move one block toward / away from the look direction,
-  to the feet, rotate 90°, mirror, layer up / down, next placement), the
-  area-selection flow (corner keys on the looked-at block, frame, adjust
-  numbers on the screen, name and save), the Schematic entry pinned at the
-  bottom of the sidebar and a "Schematic" settings category are accepted
-  as in the mockup. All keys unbound by default.
-- The material list lives on the dedicated screen. Its HUD list is
-  default off and changes only when the player switches it (setting, key
-  or the screen's switch); placing a schematic never turns it on. Large
-  builds would not fit the HUD, and the screen is one key away.
-- Layers work along any axis: height (from below / from above), east-west
-  (from west / east) and north-south (from north / south), each with
-  all / this layer only / up to this layer. Default: height from below.
-- The file browser shows a rotatable 3D preview of the schematic with
-  "up to layer N". It depends on the same research as the ghost look; if
-  real block models cannot be drawn there, fall back to a top-down
-  layer-by-layer plan like the Shapes editor.
-
-Decided 2026-10-03 (verifier views):
-- Seeing what is wrong, in four places (accepted): the target card adds "schematic:
-  <expected block> (<kind>)" when the crosshair is on a mismatched block;
-  an optional HUD element (default off, switched like the material list)
-  shows, for the selected placement and the visible layers, correct/total,
-  not placed, wrong, wrong state, extra, and the distance to the nearest
-  mistake; a key marks the nearest mistake in the world with its distance
-  (pressing again moves to the next); and a "Verify" tab on the screen
-  lists mismatches (kind, position, expected → actual, distance; filtered
-  by kind, mistakes before not-placed) next to a preview colored by
-  verifier state, with "show in world". Counts follow the visible layers.
-  The HUD shows the counts and the distance to the nearest mistake.
-- No separate placement-screen preview showing rotation and mirror; the
-  verifier-colored preview in the Verify tab is the only one besides the
-  file browser's.
-
-Decided 2026-10-03 (selection, tabs and HUD; accepted as proposed):
-- One selected placement for the whole subsystem: placement keys, the
-  Verify tab, the material list, the HUD and the nearest-mistake key all
-  act on it. It changes only when a schematic is placed (the new placement
-  becomes selected), when one is picked in the placement list, with ◀ ▶ on
-  the Verify and material tabs, or with the "select the looked-at
-  placement" and "next placement" keys; never by walking near another.
-  Its frame is green in the world, others grey. Remembered per world and
-  dimension.
-- The Verify and material tabs pick the placement with one "◀ name ▶"
-  stepper instead of a row of buttons, which would not scale; the
-  placement list is the way to choose among many.
-- No counts on the screen's tabs ("Placements 2", "Verify 8"); the list
-  and details already show them. The sidebar entry keeps its count like
-  Shapes and Waypoints.
-- One "Schematic" HUD element (default off, switched only by the player)
-  with two child switches for its sections: verifier counts and remaining
-  materials (remaining / in inventory). It moves as one element in the HUD
-  layout editor.
-- Wrong blocks and extra blocks share the red color, so they are one group
-  everywhere: the Verify tab filters are "mistakes / wrong or extra / wrong
-  state / not placed" (the row's kind column still says which), and the
-  HUD and the tab summary count "wrong or extra" together.
-- Wherever a block or item is named (Verify rows, material list, the HUD
-  material lines, the target-card line), its item icon is drawn before the
-  name, using Lamium's existing item icon drawing.
-
-Decided 2026-10-03 (entities, first version; accepted as proposed):
-- Entities in a `.mcstructure` (armor stands, mobs, ...): shown as a named
-  dashed frame rather than a translucent model; verified by type and
-  position only (one of that type near the spot), not pose, equipment or
-  name; listed in their own section of the material list ("in inventory"
-  only where an item places them, e.g. armor stands; "—" for mobs); each
-  placement can turn entity display and verification off (default on).
-- Saving: the save prompt has "Include entities" (default off). Only what
-  the client knows can be saved (type, position, rotation; equipment and
-  other data depend on research).
-- Later, not in the first version (research items): an option to show
-  entities with their real look (not necessarily translucent), or at least
-  a frame that shows their facing; verifying armor stand equipment and
-  item frame contents. In Bedrock an item frame is a block with a block
-  entity, not an entity, so its contents belong with the container-content
-  question rather than with entities.
-
-- Size and load (decided 2026-10-03): no hard limit. Building ghost meshes,
-  verifying and counting materials run in bounded steps per frame/tick
-  (DESIGN.md "Engineering behavior") and fill in progressively; counts show
-  "counting" until complete. Loading a very large schematic (on the order
-  of hundreds of thousands of blocks) shows a warning first. Exact numbers
-  come from measurement.
-
-Implementation (2026-10-03, maintainer's go): game-independent core first,
-then rendering, screen and keys.
-- Done: `.mcstructure` read/write (`src/features/schematic/Nbt.*`,
-  `Structure.*`): little-endian NBT, layers as int arrays (current exports)
-  or int lists (older ones), palette with state keys, block entity data by
-  cell, entities relative to the corner. Placement and layer math
-  (`Placement.h`: mirror then clockwise quarter turns, inverse lookup, six
-  layer axes with all/only/up-to) and verifier/material rules
-  (`Verify.h`). Covered in `tests/SchematicTests.cpp`; set
-  `LAMIUM_SAMPLE_STRUCTURES` to a folder of real exports to parse them too.
-- Block states are turned by the game:
-  `VanillaBlockStateTransformUtils::transformBlock(block, Rotation, Mirror)`.
-  Whether its rotation direction and mirror axes match `Placement.h`
-  (clockwise from above; X flips east-west) must be checked in game with
-  stairs once ghosts are drawn from a placement.
-- First playable step (2026-10-03, awaiting the maintainer's check): the
-  "Schematic" switch (default off, Experimental, new "Schematics" settings
-  category; keys to toggle and to open the screen, unbound), a Schematics
-  screen pinned in the sidebar (placements above the files of
-  mods/Lamium/schematics; place a file at your feet; edit position,
-  rotation, mirror, visibility, layers, extra blocks; delete), placements
-  saved per world beside the waypoints (`schematics.json`), and ghosts
-  drawn per 16-block section (`GhostRenderer.cpp`): tinted ghosts where a
-  block is missing, red outlines for wrong or extra blocks, yellow for a
-  wrong state, orange for unknown block names, block-entity models with an
-  outline. Sections rebuild two per frame and refresh every two seconds.
-  Not yet: Verify and material tabs, HUD, placement keys, the translucent
-  option, entities, saving areas.
-- Verify and materials (2026-10-03, awaiting the maintainer's check): the
-  screen has four tabs (Placed, Files, Check, Materials). The world render
-  scans the selected placement 16384 cells per frame and publishes a
-  finished pass (`Verification.h`): counts in the shown layers, up to 2000
-  mismatches (mistakes before missing blocks, nearest first) with item
-  icons, and material lines by item (the block's pick item; double slabs
-  count two, upper door/bed halves none). Check filters mistakes / wrong or
-  extra / wrong state / not placed; "Show in world" closes the screen and
-  marks the cell with a white box and a beam for 30 s. Materials show
-  need / placed / left / carried (inventory plus shulker box contents;
-  green when enough, yellow when short), all layers or shown layers only.
-- HUD, keys and target card (2026-10-03, awaiting the maintainer's check):
-  a "Schematic HUD" element (default off; switch, key and the HUD layout
-  editor; child switches for check counts and materials left) shows the
-  selected placement's counts in the shown layers, the distance to the
-  nearest mistake and up to five materials left with icons (yellow when
-  short). Keys, all unbound: nearest mistake (again: the next), select
-  the looked-at placement, next placement, move one block along the view
-  (steep views move up or down) or back, move to feet, turn 90° right,
-  mirror, shown layer up/down; each confirms with a toast. The target card
-  adds "Schematic: <block> (<kind>)" when the crosshair block is a
-  mistake. The Placed tab has "Layer here: match where I stand".
-- Settings regrouped after the first look (2026-10-03): the Schematics
-  category has five rows: Schematics (switch, key, open screen), Schematic
-  HUD (switch, key, "show check counts", "show materials left", layout
-  link), and keyless groups Placement keys (select looked-at, next,
-  away/closer/left/right/up/down, to feet, turn, mirror), Shown layers
-  (up, down, layer here) and Check (nearest mistake, always the nearest).
-  Action rows explain themselves through "help.key.<id>". The HUD is a
-  fixed-width card: name and layer, a two-by-two grid of marked counts,
-  nearest mistake, then up to five materials with right-aligned left/have.
-  "Select the placement you look at" casts the view ray against placement
-  boxes.
-
-Research (2026-10-03, in progress):
-- Ghost look. Candidates, compared in game with `xmake f --ghost_probe=y`
-  (`src/features/schematic/GhostProbe.cpp`; F7 anchors four rows of test
-  blocks three blocks ahead, F6 toggles ignoreLighting for rows B-D):
-  A `BlockTessellator::renderGuiBlock` with alpha 0.5 and light 1 (the GUI
-  block path); B a private `BlockTessellator` appending the block, drawn
-  with the `moving_block_blend` material, the moving-block renderer's
-  terrain atlas and `ActorShaderManager::setupShaderParameters` with
-  ignoreLighting; C the same with in-world tessellation at the real
-  position (shapes from real neighbors); D like B with the moving-block
-  renderer's own blend material. A private tessellator keeps the alpha
-  color override out of vanilla's block mesh caches. To check: which rows
-  draw, whether they are translucent, whether brightness stays the same in
-  daylight, at night and in a dark cave, stairs facing, grass tint, and
-  that held/dropped blocks still look normal afterwards.
-  Round 1-2 (maintainer, 2026-10-03, 1.26.51.01 with LeviSchematic, LHolo
-  and ChiyanMap also installed): the in-world path drew translucent blocks
-  whose brightness did not change at night, with parts missing, then
-  crashed (null read inside `tessellateBlockInWorld` with a private
-  tessellator); the appended mesh with `moving_block_blend` drew nothing;
-  with the renderer's blend material it drew opaque and off the block grid;
-  the GUI path ignored the alpha and was off the grid too. Round 3 shifts
-  the appended mesh to the block corner, fills its missing light UVs and
-  adds the fallback look.
-  Round 3: on the block grid now, brightness unchanged at night, nothing
-  missing, but opaque with both materials (the named one drew nothing);
-  torch and chest give no vertices on this path; the outline was a full
-  block regardless of shape; in daylight the fallback is hard to tell from
-  real blocks. The log showed the appended mesh has no vertex colors and
-  no light UVs at all, and the color override is ignored on this path.
-  Round 4 writes vertex colors (alpha 0.5, or a light-blue tint for the
-  fallback), outlines the mesh bounds, and tests stair states 0-4.
-  Round 4: the named `moving_block_blend` still drew nothing. With the
-  moving-block renderer's blend material the blocks were translucent and
-  kept their brightness day and night, but whole blocks turned darker or
-  lighter while jumping or turning (likely draw order against other
-  translucent geometry such as water, since depth is written). The tinted
-  fallback was stable, readable as schematic blocks in daylight, and its
-  outline followed the shape. The item-shape mesh ignores block states
-  (all five stairs faced the same way), so real schematics need the
-  in-world mesh. Round 5 primes a private tessellator and retries the
-  in-world mesh, translucent and outlined.
-  Round 5: no crash after priming. `tessellateBlockInWorld` drew every
-  block as a plain cube (it is the cube path; the shape dispatcher is
-  `tessellateInWorld`). The in-world mesh carries light UVs and AO colors.
-  Translucent blocks flickered even with the view still; with the opaque
-  tint, glass flickered where it overlapped other ghost blocks. Round 6
-  uses `tessellateInWorld`, scales ghosts slightly toward the eye like
-  shapes, and logs how often the render pass runs.
-  Round 6: stairs face the right ways and the fence takes its
-  unconnected shape (neighbors come from the real world). The pass runs
-  once a frame (about 300 calls in 5 s at 60 fps), yet translucent cubes
-  and glass in front of planks still flickered with the view still: the
-  engine evidently reorders separate draw calls between frames. Round 7
-  tessellates all ghost blocks into one mesh and sorts its quads far to
-  near before one draw.
-  Round 7 (`3c29f5d`): no flicker in either look, moving or still; the
-  2x2x2 cube and planks behind ghost glass are stable; stairs face the
-  right ways. Remaining defect: real translucent blocks (glass) behind a
-  ghost block disappear, in both looks. The ghost mesh writes depth in the
-  entity-effects pass, which runs before the world's translucent layer.
-- Ghost path found (2026-10-03): a private `BlockTessellator` (primed with
-  one appended block per frame), `tessellateInWorld` per block into one
-  shared `Tessellator`, vertex colors rewritten (alpha 0.5, or a light-blue
-  tint), quads sorted far to near, and one draw with the moving-block
-  renderer's blend material and terrain atlas after
-  `ActorShaderManager::setupShaderParameters(..., ignoreLighting = true,
-  ...)`. Brightness stays the same in daylight and at night. Both looks
-  work: translucent, and tinted with a light-blue outline that follows the
-  shape.
-- Round 8 (`52cd792`, block coverage; both looks behave the same): a mesh
-  for stone, glass, stairs, torch, lantern, redstone wire, poppy, lever,
-  ladder (invisible from behind), rail, glass pane, slab, trapdoor, leaves
-  (no biome tint: white), flower pot, campfire, bell, piston (no head) and
-  end portal frame. Water drew a missing-texture block. No mesh: door,
-  chest, ender chest, bed, sign, skull, shulker box (block entity
-  renderers, and the door reads its other half from the world).
-  `minecraft:white_banner` is not a block name. In cut-out blocks (poppy,
-  redstone, campfire, glass) the empty texels hid what is drawn later
-  (water), like real glass behind ghosts. Drawing in the cracks or name tag
-  passes instead (each runs once a frame) changed nothing. Round 9 tries
-  the alpha-test block material for the outlined look and an unlit
-  blended material without depth writes for the translucent look.
-- Round 9 (`7694edc`): the outlined look drawn with the moving-block
-  renderer's alpha-test material is stable, and gaps in cut-out blocks
-  (poppy, redstone, campfire, ghost glass) show water, ground and real
-  glass behind them correctly. This is the outlined look's material. The
-  unlit blended material without depth writes was very faint and varied
-  with what lay behind (dense over terrain, faint over water), so the
-  translucent option stays on the blend material with its limit (real
-  translucent blocks behind a ghost disappear). Ladders show from both
-  sides. Round 10 draws block-entity blocks through
-  `BlockActorRenderDispatcher::render` with block entities created by
-  `BlockActor::create` from NBT, as a `.mcstructure` stores them.
-- Round 10 (`6a6212a`): `BlockActor::create` from NBT returned null for
-  every block entity id (Chest, EnderChest, Bed, Sign, Skull, ShulkerBox,
-  Banner), so nothing was drawn. The game's own structure block preview
-  does not show chests, ender chests or shulker boxes either. Round 11
-  uses `VanillaBlockActorFactory::createBlockActor(pos, blockType)`.
-- Round 11 (`d7efc6b`): with `VanillaBlockActorFactory::createBlockActor`
-  and `BlockActorRenderDispatcher::render` (render position relative to
-  the camera), chest, ender chest, sign, banner and shulker box draw their
-  real models on the block grid. Bed and skull drew nothing (they likely
-  need their block entity data: bed parts and color, skull type and
-  rotation). These models look like real blocks, not tinted, and their
-  brightness follows the world's light; the outline still marks them.
-  Loading the schematic's block entity data into them is untested.
-- `.mcstructure` layout confirmed on the maintainer's export (2026-10-03,
-  `mixture.mcstructure`): root `format_version` (2 here), `size`,
-  `structure_world_origin`, `structure.block_indices` (layers),
-  `structure.palette.default.block_palette` (name, states, version),
-  `structure.palette.default.block_position_data` (index -> block_entity_data
-  with `id` such as Chest, EnderChest, MobSpawner, ShulkerBox, Campfire),
-  and `structure.entities` (e.g. an armor stand with `Pos`). Sample files
-  the maintainer allows for testing: `mixture.mcstructure` and
-  `broken_village_house.mcstructure` (in their Downloads folder; not
-  committed).
-- A possible path for the file browser preview: the game's
-  `StructureVolumeRenderer` (the structure block's 3D view) renders a
-  block volume into UI. Not tried yet.
-- Default look (decided 2026-10-03): tinted with a light-blue outline.
-  Translucent stays as an option: it looks right block by block, but with
-  many adjacent blocks (builds) its result is hard to predict.
-- Torches, chests and other blocks without a mesh on this path: explore
-  more render paths before falling back to an outline only (maintainer,
-  2026-10-03).
-- Still open before or during implementation: real translucent blocks
-  behind ghosts (draw later than the world's translucent layer, or without
-  depth writes now that quads are sorted); blocks without a mesh on this
-  path (torch, chest and other block entities, which need another path or
-  an outline only); shapes that depend on neighbors (fences, panes, stairs
-  corners, redstone) should follow the schematic's neighbors, not the real
-  world's; per-section cached meshes with sorting kept within the frame
-  budget instead of rebuilding everything each frame.
-- Fallback accepted by the maintainer if translucency fails: opaque blocks
-  drawn slightly differently (tinted) inside a light-blue outline, clearly
-  readable as schematic blocks.
+Pick the next follow-up with the maintainer; the list is not an implementation
+order. Runtime gaps stay under Pre-release checks and VALIDATION.
 
 ### L-57 Client info counters
 Kind: Research. Split from L-53 on 2026-09-27 (wave 2).

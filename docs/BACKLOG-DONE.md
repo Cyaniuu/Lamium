@@ -2579,3 +2579,7 @@ is held (`continueDestroyBlock` may be sufficient, but that must be verified).
 If it is, make the smallest hook/change and add pure choice/transition tests plus
 an in-game dirt/wood/stone hold check. If not, trace the attack/retarget path
 rather than polling arbitrary world state.
+
+## Refactor
+
+Completed refactors are recorded here once their remaining steps are finished.

@@ -1,7 +1,8 @@
 # Lamium design direction
 
 This is the source of truth for how Lamium looks and behaves. Sections marked
-**Decided** were agreed with the maintainer and verified in game. Sections
+**Decided** were agreed with the maintainer; in-game coverage is recorded
+separately in [VALIDATION.md](VALIDATION.md). Sections
 marked **Proposed** are the current direction but still need the
 maintainer's confirmation before an agent builds on them. Do not change a
 Decided rule without asking.
@@ -12,7 +13,7 @@ Decided rule without asking.
   client does not have; show "unavailable" instead.
 - One mod, many tools, still easy to handle: every feature is found, understood,
   switched and bound from one settings screen. Tools with their own state
-  (Shapes, later Schematics) get a dedicated view built from the same parts.
+  (Shapes, Waypoints, Schematics) get a dedicated view built from the same parts.
 - Settings apply and save immediately. Escape/Close only closes. Only a failed
   save is reported.
 - A feature's switch, any key and its options live together. There is no "Advanced"
@@ -144,7 +145,9 @@ demo and this text differ, this text wins. The first demo
 ([demos/hud.html](demos/hud.html)) is superseded where they differ; the
 rework came from using the first editor build (2026-09-24).
 
-Elements: **Info lines**, **Target**, **Status**, **Toast**. The **Debug**
+Elements: **Info lines**, **Target**, **Status**, **Toast**, **Zoom
+magnification**, **Durability**, **Minimap** and **Schematic HUD**. Feature
+docs describe the contents of the latter elements. The **Debug**
 panel is fixed to the screen edges and is not an element (see its bullet).
 
 Placement (every element):
@@ -282,8 +285,9 @@ Contents:
   drag the track; Left/Right step; clicking the value types a number.
   Settings that need precision (periodic intervals, shape coordinates)
   keep the arrows and number entry.
-- Appearance options stay at scale, background and shadow for now; add text
-  color or background opacity only if asked.
+- Element appearance options are scale, background and shadow; HUD cards and
+  line bands also use the shared Background opacity setting described above.
+  Text color is not a per-element option.
 
 ## World overlays (Decided unless noted)
 
@@ -367,8 +371,8 @@ Contents:
 
 ## Visual effect visibility (Decided 2026-09-30, L-42 follow-up)
 
-Hide effects has a saved master switch (no key) and individual effect
-switches (optionally bound). Revised 2026-09-30 before release: the master
+Hide effects has a saved master switch with a toggle key (L-83) and
+individual effect switches (optionally bound). Revised 2026-09-30 before release: the master
 defaults off and every effect switch defaults on, so turning on the one
 master switch hides everything; nothing is hidden until then. Master off restores drawing
 and retains selections; child switches and keys only edit selections while

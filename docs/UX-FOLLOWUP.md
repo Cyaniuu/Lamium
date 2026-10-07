@@ -17,7 +17,8 @@ The settings foundation is integrated and has been exercised in Minecraft:
   the same navigation.
 - Changes apply and persist immediately. Escape/Close dismisses the screen;
   failed saves keep the previous value active and report an error.
-- English is the fallback language and Japanese follows the game locale.
+- English is the fallback language; Japanese and Simplified Chinese follow
+  the game locale.
   Shared widgets handle text, descriptions, switches, key caps, steppers,
   sliders and text/numeric entry.
 - Bounded numeric options that do not need precision use Bedrock-style sliders.
@@ -33,7 +34,8 @@ The settings foundation is integrated and has been exercised in Minecraft:
 The HUD is now one shared element system rather than separate hard-coded
 positions. Info, Target, Status, Toast and Zoom Magnification elements use
 anchors plus offsets internally, but users place them directly in the HUD
-layout editor.
+layout editor. Durability, Minimap and Schematic HUD use the same element
+system; their feature-specific behavior is documented separately.
 
 The editor was reworked after in-game use and verified with:
 
@@ -48,7 +50,7 @@ translucent instead of being composited repeatedly. The normal settings screen
 hides the HUD for readability; the HUD editor intentionally shows live/sample
 content.
 
-The Target element is the current Jade/WAILA-style surface: block/entity icon,
+The Target element shows a block/entity icon,
 name, optional identifier and detail rows, vanilla heart sprites and progress
 bars. It follows the rendered camera during Freelook/FreeCamera and uses one
 2-64 block Range setting for every viewpoint, skipping water/lava in detached
@@ -78,12 +80,14 @@ action property.
 These are not reasons to redesign the shared settings UI:
 
 - Controller/touch and broad resource-pack/layout coverage are incomplete.
-- Hand Restock can select only a hotbar reserve; main-inventory transfer and
-  offhand replenishment have no safe vanilla-backed path yet.
+- Hand Restock supports main-inventory/hotbar sources, a threshold and source
+  order, and offhand totems. Remaining server/lifecycle checks are in
+  [HAND-RESTOCK.md](HAND-RESTOCK.md) and VALIDATION.
 - The L-15 breaking/placement restriction redesign and L-59 held-placement
   styles are planned but not built.
-- Schematic and Mass Craft remain later ideas and need design passes before
-  entering the backlog.
+- Map and Schematics are built, experimental subsystems; their follow-ups
+  are L-60 and L-93. See [MAP.md](MAP.md) and [SCHEMATIC.md](SCHEMATIC.md).
+- Mass Craft remains an untriaged idea (BACKLOG's Later / parked section).
 
 Runtime evidence, including exact tested builds, stays in
 [VALIDATION.md](VALIDATION.md).

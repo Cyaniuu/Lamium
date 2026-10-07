@@ -13,8 +13,9 @@
 
 Lamium 0.1.7 is an early (0.x) release. The main settings, hotkey, HUD,
 target card, camera and overlay flows have been exercised in Minecraft on a
-local single-player setup; multiplayer servers, controllers and broad
-resource-pack/graphics coverage are not verified yet. Features marked
+local single-player setup. Map features also have external BDS checks;
+server coverage for other features, controllers and broad resource-pack/graphics
+coverage remains incomplete. Features marked
 experimental in the settings are still settling (see
 [Known issues](#known-issues)). Runtime evidence and
 remaining gaps are tracked in [validation status](docs/VALIDATION.md).
@@ -126,7 +127,7 @@ Lamium owns its key bindings; they do not appear in Minecraft's keyboard
 settings. Bindings are edited under each feature or in the Hotkeys view.
 Clear unbinds an action and Reset restores its default. The Settings action
 cannot be cleared, so the UI cannot be locked out. New actions start unbound.
-Default keys: `L` settings,
+Default keys: `L` settings, `M` world map,
 `C` zoom (hold), `R` sort (in a container), `F` offhand swap, `F3` Debug
 View, `F3+B` Hitboxes and `F3+G` Chunk Borders. `C` replaces
 Minecraft's "copy coordinates" while Lamium is installed unless you rebind it.
@@ -155,20 +156,17 @@ Minecraft's "copy coordinates" while Lamium is installed unless you rebind it.
 - The breaking restriction modes will be redesigned.
 - Auto Attack/Use: whether several clicks per tick land on servers is not
   verified.
-- The map is experimental: it is checked in local worlds and, for the
-  radar's players, with other players; servers and very large worlds are
-  not verified. Some servers may treat seeing mobs and players through walls
-  as unfair. A few mob faces are not right yet (silverfish and tadpoles stay
+- The map is experimental: minimap, radar and world map have local and
+  external BDS checks with a large explored area. Waypoint storage per server,
+  distant players on dedicated servers, and the latest section-request/teleport
+  changes on servers remain unverified. Some servers may treat seeing mobs and
+  players through walls as unfair. A few mob faces are not right yet (silverfish and tadpoles stay
   dots; camel and hoglin faces may look off), and skins with custom head
   models are untested.
-- Schematics are experimental: they are checked in local worlds in the
-  Overworld; servers, other dimensions, very large files and block entity
-  contents (chest items, sign text) from files are not verified. Beds are
-  sometimes drawn half, and heads, doors and honey blocks show as outlines.
-
 - Schematics are experimental and checked in local worlds only; servers and
-  other dimensions are not verified. Heads, doors and honey blocks show as an
-  outline instead of a ghost block, and some beds draw only one half.
+  other dimensions, very large files and block entity contents (chest items,
+  sign text) from files are not verified. Heads, doors and honey blocks show
+  as an outline instead of a ghost block, and some beds draw only one half.
   Entities show as a dashed frame of one size and are checked by type near
   their spot. Saving an area keeps blocks and their states but no block data
   (container contents, sign text), and entities only by type, position and
@@ -182,6 +180,7 @@ requests are handled.
 
 The repository is the source of truth for development:
 
+- [Documentation guide](docs/README.md) indexes the docs and explains their roles.
 - [Design](docs/DESIGN.md) defines accepted product and UI behavior.
 - [Backlog](docs/BACKLOG.md) defines current work, ordering and model class.
 - [Validation](docs/VALIDATION.md) separates compiled/tested behavior from

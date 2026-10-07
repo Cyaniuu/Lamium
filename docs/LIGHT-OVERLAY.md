@@ -1,5 +1,9 @@
 # Light level overlay
 
+Current behavior is the L-16 redesign below; it no longer carries the
+Experimental badge. Current coverage is in [VALIDATION.md](VALIDATION.md).
+The initial implementation and smoke check are retained as dated history.
+
 ## Redesign (L-16, 2026-09-25)
 
 Decided in DESIGN "Light overlay" (mockup: docs/demos/light-overlay.html).
@@ -24,7 +28,7 @@ Decided in DESIGN "Light overlay" (mockup: docs/demos/light-overlay.html).
   FreeCamera center and direction, fixed directions, dimension changes.
   Not measured: frame time numbers on other machines.
 
-The sections below record the first implementation.
+## Initial implementation record (before the L-16 redesign)
 
 Experimental, disabled and unbound by default. Features and Hotkeys expose a
 toggle; the feature also selects stored sky light instead of stored block light.
@@ -53,7 +57,7 @@ Native value correctness, solid-surface filtering, depth/readability, light
 updates and dimension changes still require Minecraft validation. Do not classify
 this feature as runtime-validated based on build/tests alone.
 
-## Initial runtime smoke (2026-09-23)
+### Initial runtime smoke (2026-09-23)
 
 The normal (non-trace, non-probe) build of `a4213a0` displayed floor digits
 in a local creative world in rear third-person view. Switching from stored block
