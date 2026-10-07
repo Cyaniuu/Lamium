@@ -318,7 +318,7 @@ inline constexpr auto simplifiedChinese = std::to_array<Text>({
     {"schematic.noMistakes", "这里没有要显示的内容。"},
     {"schematic.noMaterials", "不需要材料。"},
     {"schematic.verifyHint", "将所选放置在显示的层中与世界对照的结果。「在世界中标出」会标记所选位置。"},
-    {"schematic.materialsHint", "携带数量包括物品栏和其中潜影盒里的物品。"},
+    {"schematic.materialsHint", "携带数量包括物品栏和其中潜影盒里的物品。ResourceCalculator 按 Java 版配方计算，可能与基岩版不同。"},
     {"schematic.column.material", "材料"},
     {"schematic.column.needed", "需要"},
     {"schematic.column.placed", "已放"},

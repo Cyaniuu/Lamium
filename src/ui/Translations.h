@@ -320,7 +320,7 @@ inline constexpr auto entries = std::to_array<Entry>({
     {"schematic.noMistakes", "Nothing to show here.", "ここに表示するものはありません。"},
     {"schematic.noMaterials", "No materials needed.", "必要な資材はありません。"},
     {"schematic.verifyHint", "The selected placement compared with the world, in the shown layers. \"Show in world\" marks the selected cell.", "選択中の配置を、表示中の層についてワールドと照らし合わせた結果です。「ワールドで示す」で選んだ場所に印を出します。"},
-    {"schematic.materialsHint", "Carried counts the inventory and the shulker boxes in it.", "手持ちはインベントリと、その中のシュルカーボックスの中身です。"},
+    {"schematic.materialsHint", "Carried counts the inventory and the shulker boxes in it. ResourceCalculator uses Java Edition recipes, which can differ from Bedrock.", "手持ちはインベントリと、その中のシュルカーボックスの中身です。ResourceCalculator は Java 版のレシピで計算するため、統合版と違うことがあります。"},
     {"schematic.column.material", "Material", "資材"},
     {"schematic.column.needed", "Need", "必要"},
     {"schematic.column.placed", "Placed", "設置済"},

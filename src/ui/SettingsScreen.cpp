@@ -3335,8 +3335,10 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
     }
 
     if (materialTip) {
+        // Text is batched: draw what is under the tip first, or it lands on top.
+        context.flushText(0, std::nullopt);
         float w = textWidth(context, materialTip->text) + 8, x = std::min(materialTip->x + 8, l.left + l.width - w - 2);
-        fill(context,x,materialTip->y+10,w,13,palette::panel,.95f);
+        fill(context,x,materialTip->y+10,w,13,palette::panel);
         frame(context,x,materialTip->y+10,w,13,palette::keyEdge);
         label(context,x+4,materialTip->y+12,w-6,materialTip->text,palette::text);
     }
