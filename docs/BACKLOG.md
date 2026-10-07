@@ -101,8 +101,9 @@ L-item wins. Every entry names what the task is, not only its number.
    step (order in the L-item); step 13 goes with L-15 breaking.
 7. **Before a release:** the pre-release checks below. 0.1.7: Schematic
    (L-93) is in a usable shape and its pre-release items were checked
-   locally (maintainer, 2026-10-07); README updated. Left: the version bump,
-   the release ZIP and its smoke test, then the tag. Server checks of the
+   locally (maintainer, 2026-10-07); README updated. Version bumped and the
+   release ZIP built (asset SHA-256 `2e0926e0...93b013b5`). Left: the
+   smoke test on the release-ZIP DLL, then the tag. Server checks of the
    2026-10-06/07 work stay listed below as known gaps (Release policy does
    not require a full regression).
 

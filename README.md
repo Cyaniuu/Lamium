@@ -11,7 +11,7 @@
 
 ## Status
 
-Lamium 0.1.6 is an early (0.x) release. The main settings, hotkey, HUD,
+Lamium 0.1.7 is an early (0.x) release. The main settings, hotkey, HUD,
 target card, camera and overlay flows have been exercised in Minecraft on a
 local single-player setup; multiplayer servers, controllers and broad
 resource-pack/graphics coverage are not verified yet. Features marked
@@ -161,6 +161,10 @@ Minecraft's "copy coordinates" while Lamium is installed unless you rebind it.
   as unfair. A few mob faces are not right yet (silverfish and tadpoles stay
   dots; camel and hoglin faces may look off), and skins with custom head
   models are untested.
+- Schematics are experimental: they are checked in local worlds in the
+  Overworld; servers, other dimensions, very large files and block entity
+  contents (chest items, sign text) from files are not verified. Beds are
+  sometimes drawn half, and heads, doors and honey blocks show as outlines.
 
 - Schematics are experimental and checked in local worlds only; servers and
   other dimensions are not verified. Heads, doors and honey blocks show as an
