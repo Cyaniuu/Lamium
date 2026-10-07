@@ -212,6 +212,20 @@ unmet gates for versions already published:
 
 ## Bugs
 
+### L-108 Target card text overflows the card during its resize animation
+Kind: Bug. Reported by the maintainer 2026-10-07 while checking L-107.
+Status: open; recorded only, implementation not started.
+With animations on, switching the target from one with few lines to one with
+more (for example a block showing its properties) briefly draws the text
+outside the card. Expected: no text outside the card at any point while it
+resizes.
+Starting point: `InfoHud.cpp::drawTargetCard` eases only the background
+(`cardMorph`) from the previous box while the header and rows are drawn at the
+final size from the first frame, although the comment there says the content
+appears once the card settles. Also check targets whose identity
+(identifier and name) is unchanged but whose rows change. Validate with
+animations on and off, small to large and large to small, and FreeCamera.
+
 ### L-73 Architecture review
 Kind: Refactor (strong model). Review done 2026-09-30 on main 4d1790b
 (read-only); classification and order agreed with the maintainer the same
@@ -678,6 +692,28 @@ breeding cooldown. The client SDK has `AgeableComponent::mAge` and
 - otherwise show only "baby" / "in love" states, and say so in the help text.
 Estimating from observed events (feeding speeds growth up) is not accurate
 enough to show as a time.
+
+### L-109 Restore the death-time hotbar and inventory layout on pickup
+Kind: Design. Idea from the maintainer 2026-10-07; not chosen for building yet.
+When the player picks up the items dropped at their death point, rearrange the
+inventory to be as close as possible to the layout at death: the same items
+back in the same hotbar, inventory, armor and offhand slots. When the feature
+is on, the rearrangement runs automatically.
+Requirements stated by the maintainer:
+- Never drop or destroy an item. Anything that cannot go back to its old slot
+  stays in the inventory.
+- Items picked up since death and items that were lost (burned, despawned,
+  taken by others) are handled by priorities so the result looks close to the
+  original to a person, not only by slot count.
+Open (needs the maintainer): the priority rules (hotbar and equipment first?
+items gained since death, partial stacks, changed durability or
+enchantments); when the rearrangement starts and stops (each pickup, after a
+quiet period, a manual key); behavior on servers where rearranging is many
+inventory transactions; and whether keepInventory disables it.
+Builds on the death-point tracking in L-60 (waypoints) and the inventory
+transaction path used by inventory transfer (DESIGN.md "Inventory transfer").
+Rearrangements must be confirmed from the authoritative inventory, never
+from sent transactions (DESIGN.md Engineering behavior).
 
 ### L-105 Performance: find the real bottleneck before optimizing
 Kind: Research **(strong model)**. Chosen by the maintainer 2026-10-07 from

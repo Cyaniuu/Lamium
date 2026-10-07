@@ -305,6 +305,9 @@ Contents:
   can follow Java's F3+G / F3+B color coding (see BACKLOG L-09 to L-11).
 - (Proposed) Overlays must not hide vanilla's block selection outline: skip or
   dim geometry on the targeted block.
+- (Decided 2026-10-07) World-space overlays (chunk borders, hitboxes, light
+  levels, Shapes, schematic ghosts) stay visible with vanilla Hide HUD (F1).
+  Screen HUD elements and in-world waypoint markers hide with it (L-106, L-107).
 
 ## Camera (Decided 2026-09-26 unless noted)
 
