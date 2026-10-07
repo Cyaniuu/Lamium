@@ -7,12 +7,15 @@
 #include "ui/ShapesLayout.h"
 #include "ui/WaypointPromptLayout.h"
 #include "ui/SavePromptLayout.h"
+#include "ui/RadialLayout.h"
 #include "ui/Toast.h"
 #include "features/map/WaypointSession.h"
 #include "features/schematic/SchematicSession.h"
 #include "features/schematic/GhostRenderer.h"
 #include "features/schematic/SchematicItems.h"
 #include "features/schematic/Selection.h"
+#include "features/schematic/SchematicActions.h"
+#include "features/schematic/MenuModel.h"
 #include "mc/deps/nbt/CompoundTag.h"
 #include "mc/deps/nbt/ListTag.h"
 #include "mc/deps/nbt/Tag.h"
@@ -187,6 +190,11 @@ struct SavePrompt {
     std::string problem;
 };
 std::optional<SavePrompt> savePrompt;
+// The schematic menu (L-93): a ring of categories, then of their items, over
+// the world. Replaces the whole panel while open, like the prompts.
+struct SchematicMenu { int category = -1; int hover = -1; };
+std::optional<SchematicMenu> schematicMenu;
+int schematicMenuClosedAt = -1; // the level shown when it last closed
 // World map (L-60): replaces the whole panel; the add prompt opened from it
 // returns to it.
 bool worldMapOpen = false, promptOnMap = false;
@@ -436,6 +444,8 @@ void clear() {
     shapePicking = false; shapeDeleteArmed = false;
     prompt.reset();
     savePrompt.reset();
+    if (schematicMenu) schematicMenuClosedAt = schematicMenu->category;
+    schematicMenu.reset();
     if (worldMapOpen) map::world::close();
     worldMapOpen = false; promptOnMap = false; pendingWheels.clear(); mapCacheArmed = false;
     mapFromSettings = false; waypointsFromMap = false;
@@ -3085,8 +3095,9 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
     if (shortFooter) label(context,textLeft,l.footerTop+3,available,std::move(text),error.empty() ? palette::text : palette::warning);
     else {
         paragraph(context,textLeft,l.footerTop+3,available,text,2,error.empty() ? palette::text : palette::warning);
-        label(context,textLeft,l.footerTop+30,available,translated(editingSchematicField >= 0 ? "shape.numberHint" : "schematic.screenHint"),
-            palette::faint);
+        bool menuUnbound = input::effectiveChord(Runtime::instance().preferences().bindings, input::Action::SchematicMenu).empty();
+        label(context,textLeft,l.footerTop+30,available,translated(editingSchematicField >= 0 ? "shape.numberHint"
+            : menuUnbound ? "schematic.menuKeyHint" : "schematic.screenHint"),menuUnbound && editingSchematicField < 0 ? palette::accent : palette::faint);
     }
 }
 ShapesLayout fitSchematics(SettingsTable const& t, glm::vec2 size, bool docked) {
@@ -3201,6 +3212,171 @@ void drawEditText(MinecraftUIRenderContext& context, float x, float top, float h
     label(context, x, top + 1 + boxTextInset(), width, value);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
     if (!input.selectedAll() && ms / 530 % 2 == 0) fill(context, x + w + 1, markTop, 1, markHeight, palette::text);
+}
+// ---- Schematic menu ----
+RadialLayout menuLayout(glm::vec2 size) {
+    int count = schematicMenu && schematicMenu->category >= 0
+        ? static_cast<int>(schematic::menu::categories[static_cast<size_t>(schematicMenu->category)].items.size())
+        : static_cast<int>(schematic::menu::categories.size());
+    return RadialLayout::at(size.x, size.y, count, Runtime::instance().preferences().schematic.menuSmall);
+}
+bool isKeyOf(input::Action action, int key) {
+    auto chord = input::effectiveChord(Runtime::instance().preferences().bindings, action);
+    return chord.size() == 1 && chord[0].device == input::Device::Key && chord[0].code == key;
+}
+// Leaves the menu for a view of the same screen (a tab, the save prompt, keys).
+void leaveMenu() {
+    if (schematicMenu) schematicMenuClosedAt = schematicMenu->category;
+    schematicMenu.reset();
+}
+void openSchematicTab(SchematicTab tab) {
+    leaveMenu();
+    selectNav(schematicsNav, true);
+    refreshSchematics(true);
+    selectSchematicTab(tab);
+}
+void runMenuItem(schematic::menu::Item const& item, int amount) {
+    namespace menu = schematic::menu;
+    using C = menu::Command;
+    if (!client) return;
+    if (item.stepper()) { schematic::actions::step(*client, std::get<menu::Stepper>(item.what), amount ? amount : 1); return; }
+    if (amount) return; // The wheel only changes steppers.
+    auto command = std::get<menu::Command>(item.what);
+    menu::Target target{};
+    if (menu::choosesTarget(command, target)) {
+        schematic::actions::setTarget(target);
+        schematicMenu->category = menu::moveCategory;
+        schematicMenu->hover = -1;
+        return;
+    }
+    auto toggle = [](char const* id, char const* name) {
+        if (auto option = settings::find(id)) adjustOption(*option, 1);
+        bool on = id == std::string_view("schematic.hud") ? Runtime::instance().preferences().schematic.hud
+            : Runtime::instance().preferences().schematic.enabled;
+        showMessageToast(translated(name) + ": " + translated(on ? "on" : "off"));
+    };
+    switch (command) {
+    case C::ToggleHud: toggle("schematic.hud", "schematic.menu.toggleHud"); return;
+    case C::ToggleFeature: toggle("schematic.enabled", "schematic.menu.toggleFeature"); return;
+    case C::SaveArea: {
+        auto state = schematic::selection::current();
+        auto area = state.area();
+        if (!area) { showMessageToast(translated("schematic.toast.noArea")); return; }
+        leaveMenu();
+        savePrompt = SavePrompt{*area, state.dimension, {}, false, false, {}};
+        savePrompt->name.append("schematic");
+        savePrompt->name.selectAll();
+        return;
+    }
+    case C::PlaceFile: case C::FilesTab: openSchematicTab(SchematicTab::Files); return;
+    case C::DeletePlacement: case C::PlacedTab: openSchematicTab(SchematicTab::Placements); return;
+    case C::CheckTab: openSchematicTab(SchematicTab::Verify); return;
+    case C::MaterialsTab: openSchematicTab(SchematicTab::Materials); return;
+    case C::KeySettings: leaveMenu(); openSchematicKeySettings(); return;
+    case C::NearestMistake:
+        // Its marker is in the world: close so it can be followed.
+        schematic::actions::run(*client, command);
+        close();
+        return;
+    default: schematic::actions::run(*client, command); return;
+    }
+}
+void handleMenuClick(bool right) {
+    if (!schematicMenu) return;
+    if (right) {
+        if (schematicMenu->category >= 0) { schematicMenu->category = -1; schematicMenu->hover = -1; }
+        else close();
+        return;
+    }
+    int hover = schematicMenu->hover;
+    if (hover < 0) return;
+    if (schematicMenu->category < 0) { schematicMenu->category = hover; schematicMenu->hover = -1; return; }
+    auto items = schematic::menu::categories[static_cast<size_t>(schematicMenu->category)].items;
+    if (hover < static_cast<int>(items.size())) runMenuItem(items[static_cast<size_t>(hover)], 0);
+}
+void handleMenuWheel(int direction) {
+    if (!schematicMenu || schematicMenu->category < 0 || schematicMenu->hover < 0) return;
+    auto items = schematic::menu::categories[static_cast<size_t>(schematicMenu->category)].items;
+    if (schematicMenu->hover < static_cast<int>(items.size())) runMenuItem(items[static_cast<size_t>(schematicMenu->hover)], direction);
+}
+void handleMenuKey(int key) {
+    if (key == 0x1b || isKeyOf(input::Action::SchematicMenu, key)) close();
+}
+// What an item shows under its name: a stepper's value or a switch's state.
+std::string menuValue(schematic::menu::Item const& item) {
+    namespace menu = schematic::menu;
+    if (item.stepper()) return schematic::actions::value(std::get<menu::Stepper>(item.what));
+    auto const preferences = Runtime::instance().preferences();
+    auto set = schematic::session::current();
+    auto const* p = set.selected >= 0 && set.selected < static_cast<int>(set.placements.size())
+        ? &set.placements[static_cast<size_t>(set.selected)] : nullptr;
+    switch (std::get<menu::Command>(item.what)) {
+    case menu::Command::ToggleHud: return translated(preferences.schematic.hud ? "on" : "off");
+    case menu::Command::ToggleFeature: return translated(preferences.schematic.enabled ? "on" : "off");
+    case menu::Command::ToggleShown: return p ? translated(p->visible ? "on" : "off") : std::string{};
+    case menu::Command::ToggleEntities: return p ? translated(p->entities ? "on" : "off") : std::string{};
+    case menu::Command::ToggleExtras: return p ? translated(p->countExtras ? "schematic.extras.show" : "schematic.extras.ignore") : std::string{};
+    default: return {};
+    }
+}
+void renderSchematicMenu(MinecraftUIRenderContext& context, glm::vec2 size, glm::vec2 pointer) {
+    namespace menu = schematic::menu;
+    auto const preferences = Runtime::instance().preferences();
+    static constexpr std::array<float, 3> dims{0.f, .12f, .35f};
+    float dim = dims[static_cast<size_t>(std::clamp(preferences.schematic.menuBackground, 0, 2))];
+    if (dim > 0) fill(context, 0, 0, size.x, size.y, Rgb{0, 0, 0}, dim);
+    auto l = menuLayout(size);
+    int hover = l.hit(pointer.x, pointer.y);
+    float s = l.scale, text = s < 1 ? .75f : 1.f;
+    bool list = schematicMenu->category < 0;
+    auto const& category = list ? menu::categories[0] : menu::categories[static_cast<size_t>(schematicMenu->category)];
+    menu::Item const* hovered = nullptr;
+    for (int i = 0; i < l.count; ++i) {
+        std::string name, value;
+        if (list) name = translated(menu::categories[static_cast<size_t>(i)].label);
+        else {
+            auto const& item = category.items[static_cast<size_t>(i)];
+            name = translated(item.label);
+            value = menuValue(item);
+            if (i == hover) hovered = &item;
+        }
+        float w = RadialLayout::itemWidth * s, h = (value.empty() ? 14 : RadialLayout::itemHeight) * s;
+        float x = std::round(l.itemX(i) - w / 2), y = std::round(l.itemY(i) - h / 2);
+        bool on = i == hover;
+        fill(context, x, y, w, h, on ? palette::accentDeep : palette::panel, on ? 1.f : .86f);
+        frame(context, x, y, w, h, on ? palette::accent : palette::keyEdge);
+        labelScaled(context, x + 2, y + 3 * s, w - 4, name, text, palette::text, Align::Center, false);
+        if (!value.empty()) labelScaled(context, x + 2, y + 12 * s, w - 4, value, text * .9f, on ? palette::text : palette::dim, Align::Center, false);
+    }
+    // The center: where the menu is, what Move moves, and what the pointer would do.
+    float cw = RadialLayout::centerWidth * s, ch = RadialLayout::centerHeight * s;
+    float cx = std::round(l.cx - cw / 2), cy = std::round(l.cy - ch / 2);
+    fill(context, cx, cy, cw, ch, palette::panel, .9f);
+    frame(context, cx, cy, cw, ch, palette::white, .14f);
+    float y = cy + 3 * s;
+    labelScaled(context, cx + 2, y, cw - 4, translated(list ? "schematic.menu.title" : category.label), text, palette::text, Align::Center, false);
+    y += 10 * s;
+    if (!list && schematicMenu->category == menu::moveCategory) {
+        static constexpr std::array<char const*, 4> targets{"schematic.target.placement", "schematic.target.corner1",
+            "schematic.target.corner2", "schematic.target.area"};
+        static constexpr std::array<Rgb, 4> colors{palette::accent, Rgb{1.f, .4f, .35f}, Rgb{.45f, .65f, 1.f}, palette::white};
+        auto t = static_cast<size_t>(schematic::actions::target());
+        labelScaled(context, cx + 2, y, cw - 4, translated("schematic.menu.target", translated(targets[t])), text * .9f, colors[t], Align::Center, false);
+        y += 9 * s;
+    }
+    std::string hint = list ? translated("schematic.menu.hintList")
+        : hovered ? translated(hovered->stepper() ? "schematic.menu.hintStep" : "schematic.menu.hintRun") : std::string{};
+    if (!hint.empty()) { labelScaled(context, cx + 2, y, cw - 4, hint, text * .85f, palette::dim, Align::Center, false); y += 9 * s; }
+    if (!list) labelScaled(context, cx + 2, y, cw - 4, translated("schematic.menu.hintBack"), text * .85f, palette::dim, Align::Center, false);
+    // Leads to the adjust key while it is unbound.
+    if (hovered && hovered->stepper() && input::effectiveChord(preferences.bindings, input::Action::AdjustSchematic).empty()) {
+        auto tip = translated("schematic.menu.hintAdjust");
+        float tw = std::min(textWidthScaled(context, tip, text * .85f) + 8, size.x - 8);
+        float tx = std::round(std::clamp(l.cx - tw / 2, 4.f, size.x - tw - 4)), ty = std::round(cy + ch + 4);
+        fill(context, tx, ty, tw, 11 * s, palette::panel, .8f);
+        labelScaled(context, tx + 4, ty + 1, tw - 8, tip, text * .85f, palette::accent, Align::Left, false);
+    }
+    context.flushText(0, std::nullopt);
 }
 // ---- Schematic save prompt ----
 void commitSave() {
@@ -3422,6 +3598,22 @@ void render(ll::event::UIRenderEvent& event) {
         renderPrompt(context, size, view.mPointerLocationPrevious);
         return;
     }
+    if (schematicMenu) {
+        pendingRelease = false;
+        glm::vec2 pointer = view.mPointerLocationPrevious;
+        if (!closing) {
+            schematicMenu->hover = menuLayout(size).hit(pointer.x, pointer.y);
+            if (auto click = std::exchange(pendingClick, std::nullopt)) handleMenuClick(click->right);
+            for (auto wheel : std::exchange(pendingWheels, {})) if (schematicMenu && !closing) handleMenuWheel(wheel.direction);
+            for (int key : std::exchange(pendingKeys, {})) if (schematicMenu && !closing) handleMenuKey(key);
+        }
+        if (!scene) return;
+        displayedInverseScale = current.getGuiData()->mInvGuiScale;
+        if (schematicMenu) {
+            renderSchematicMenu(context, size, pointer);
+            return;
+        }
+    }
     if (savePrompt) {
         pendingRelease = false;
         if (!closing) {
@@ -3556,6 +3748,14 @@ void openSchematicSave(IClientInstance& current) {
     savePrompt->name.append("schematic");
     savePrompt->name.selectAll();
 }
+void openSchematicMenu(IClientInstance& current) {
+    std::lock_guard lock(mutex);
+    if (scene) return; // From gameplay only.
+    open(current);
+    if (!scene) return;
+    auto const preferences = Runtime::instance().preferences();
+    schematicMenu = SchematicMenu{schematic::menu::openAt(preferences.schematic.menuReopen, schematicMenuClosedAt), -1};
+}
 void openWorldMap(IClientInstance& current) {
     std::lock_guard lock(mutex);
     if (scene) return;
@@ -3649,6 +3849,10 @@ void start() {
             return;
         }
         event.cancel();
+        if (schematicMenu && wheel) {
+            pendingWheels.push_back({x, y, event.buttonData() > 0 ? 1 : -1});
+            return;
+        }
         if (worldMapOpen && !prompt && wheel) {
             if (scaled) pendingWheels.push_back({x, y, event.buttonData() > 0 ? 1 : -1});
             return;

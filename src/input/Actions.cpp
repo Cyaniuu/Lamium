@@ -150,6 +150,8 @@ void executeAction(IClientInstance& client, input::Action action) {
         schematic::actions::press(client, action);
         return;
     }
+    if (action == input::Action::SchematicMenu) { ui::openSchematicMenu(client); return; }
+    if (action == input::Action::AdjustSchematic) { schematic::actions::setAdjustHeld(true); return; }
     if (action == input::Action::SaveSchematicArea) {
         if (schematic::selection::current().area()) ui::openSchematicSave(client);
         else ui::showMessageToast(ui::translated("schematic.toast.noArea"));
@@ -266,5 +268,6 @@ void releaseAction(input::Action action) {
     if (action == input::Action::MinimapEnlarge) map::setEnlarged(false);
     if (action == input::Action::RadarFaces) map::setFacesHeld(false);
     if (action == input::Action::HideWaypoints) map::markers::setHidden(false);
+    if (action == input::Action::AdjustSchematic) schematic::actions::setAdjustHeld(false);
 }
 }

@@ -26,6 +26,7 @@
 #include "features/schematic/GhostRenderer.h"
 #include "features/schematic/SchematicItems.h"
 #include "features/schematic/SchematicSession.h"
+#include "features/schematic/SchematicActions.h"
 #include "mc/world/item/ItemStack.h"
 #include "mc/world/item/Item.h"
 #include "mc/deps/shared_types/legacy/actor/ArmorSlot.h"
@@ -965,6 +966,7 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
         // Under every HUD element: they point into the world.
         map::markers::draw(context, width, height, runtime.map);
         if (auto message = schematic::ghosts::takeSaveMessage()) ui::showMessageToast(std::move(*message));
+        if (runtime.schematic.enabled) schematic::actions::adjustFrame(context, width, height);
     }
     // Drawn first so every other element sits on top of the map.
     if (preview || (runtime.map.minimap && !(settings.debug && runtime.map.debugHide)))

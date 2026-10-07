@@ -74,6 +74,8 @@ inline constexpr auto features = std::to_array<FeatureInfo>({
     {"waypoints", "feature.waypoints", "help.waypoints", "map.waypoints", true, input::Action::ToggleWaypoints},
     {"worldMap", "feature.worldMap", "help.worldMap", "map.worldMap", true, input::Action::ToggleWorldMap},
     {"schematic", "feature.schematic", "help.schematic", "schematic.enabled", true, input::Action::ToggleSchematic},
+    // The menu and the adjust key first: where to start (L-93, 2026-10-07).
+    {"schematicMenu", "feature.schematicMenu", "help.schematicMenu", "", false, input::Action::SchematicMenu},
     {"schematicHud", "feature.schematicHud", "help.schematicHud", "schematic.hud", true, input::Action::ToggleSchematicHud},
     // Key groups without a switch of their own (DESIGN: a keyless group heading).
     {"schematicPlacement", "feature.schematicPlacement", "help.schematicPlacement", ""},
@@ -91,7 +93,7 @@ inline constexpr auto features = std::to_array<FeatureInfo>({
 // would scatter related keys; others keep catalog order after these.
 inline int actionRank(input::Action action) {
     using A = input::Action;
-    static constexpr A order[] = {A::OpenSchematics, A::OpenSchematicFiles, A::OpenSchematicPlaced, A::OpenSchematicCheck,
+    static constexpr A order[] = {A::SchematicMenu, A::AdjustSchematic, A::OpenSchematics, A::OpenSchematicFiles, A::OpenSchematicPlaced, A::OpenSchematicCheck,
         A::OpenSchematicMaterials,
         A::SelectLookedPlacement, A::NextPlacement, A::MovePlacementForward, A::MovePlacementBack, A::MovePlacementLeft,
         A::MovePlacementRight, A::MovePlacementUp, A::MovePlacementDown, A::MovePlacementHere, A::RotatePlacement,

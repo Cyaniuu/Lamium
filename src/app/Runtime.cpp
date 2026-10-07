@@ -3,6 +3,7 @@
 #include "features/research/ResearchTrace.h"
 #include "features/schematic/GhostProbe.h"
 #include "features/schematic/GhostRenderer.h"
+#include "features/schematic/SchematicActions.h"
 #include "features/map/PlayerLocationTrace.h"
 #include "features/inspection/render/IconTrace.h"
 #include "features/interaction/EdgeGuard.h"
@@ -118,6 +119,7 @@ Feature const features[] = {
     {"World map store", started<map::store::start>, map::store::stop},
     {"Waypoint markers", started<map::markers::start>, map::markers::stop},
     {"Schematic ghosts", started<schematic::ghosts::start>, schematic::ghosts::stop},
+    {"Schematic adjust key", started<schematic::actions::startAdjust>, schematic::actions::stopAdjust},
     {"Breaking Restriction", started<interaction::breaking::start>, interaction::breaking::stop},
     {"Edge guard", started<interaction::edgeGuard::start>, interaction::edgeGuard::stop},
     {"Tool Protection", started<interaction::toolGuard::start>, interaction::toolGuard::stop},

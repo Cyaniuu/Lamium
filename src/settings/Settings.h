@@ -138,6 +138,9 @@ struct Settings {
         bool enabled = false; // Ghosts and outlines of the placements (L-93, experimental).
         bool hud = false; // The Schematic HUD element; only the player turns it on.
         bool hudVerify = true, hudMaterials = true; // Its two sections.
+        int menuBackground = 1;   // The menu's dimming: 0 none, 1 light, 2 dark.
+        bool menuSmall = false;   // Small in the lower right instead of centered.
+        bool menuReopen = false;  // Reopen where it was closed instead of at the list.
     } schematic;
     struct Overlays {
         bool chunkBorders = false;
@@ -232,6 +235,7 @@ struct Settings {
         information.targetHealth = std::clamp(information.targetHealth, 0, 2);
         information.targetArmor = std::clamp(information.targetArmor, 0, 2);
         information.debugLabels = std::clamp(information.debugLabels, 0, 1);
+        schematic.menuBackground = std::clamp(schematic.menuBackground, 0, 2);
         information.debugBackground = std::clamp(information.debugBackground, 0, 1);
         ui.hudRowHeight = std::clamp(ui.hudRowHeight, 9, 16);
         ui.hudBackgroundOpacity = std::clamp(ui.hudBackgroundOpacity, 0, 100);

@@ -4,6 +4,8 @@
 #include "features/schematic/Verification.h"
 #include "features/schematic/SaveArea.h"
 #include "ui/SavePromptLayout.h"
+#include "ui/RadialLayout.h"
+#include "features/schematic/MenuModel.h"
 #include <set>
 #include <cstdlib>
 #include <filesystem>
@@ -325,6 +327,31 @@ void verifyRules() {
           && materials["minecraft:oak_stairs"].placed == 0, "materials count needed and correctly placed blocks, not air");
 }
 
+void menuRules() {
+    using namespace lamium::schematic::menu;
+    bool sized = true, labeled = true;
+    for (auto const& c : categories) {
+        sized = sized && !c.items.empty() && c.items.size() <= 8;
+        for (auto const& item : c.items) labeled = labeled && item.label.starts_with("schematic.menu.");
+    }
+    check(sized && labeled && categories[moveCategory].label == "schematic.menu.cat.move",
+          "every menu category has one to eight labeled items, Move first");
+    Target target = Target::Placement;
+    check(choosesTarget(Command::MoveCorner2, target) && target == Target::Corner2 && !choosesTarget(Command::ClearArea, target),
+          "only the move commands choose a target");
+    check(openAt(false, 3) == -1 && openAt(true, 3) == 3 && openAt(true, -1) == -1 && openAt(true, 99) == -1,
+          "the menu opens at the list unless set to reopen where it was closed");
+
+    auto ring = lamium::ui::RadialLayout::at(480, 270, 8, false);
+    bool round = true;
+    for (int i = 0; i < 8; ++i) round = round && ring.hit(ring.itemX(i), ring.itemY(i)) == i;
+    check(round && ring.hit(ring.cx, ring.cy) == -1 && ring.itemY(0) < ring.cy, "the ring starts at the top and each item is hit by its direction");
+    auto small = lamium::ui::RadialLayout::at(480, 270, 8, true);
+    check(small.cx > ring.cx && small.cy > ring.cy && small.rx < ring.rx
+          && small.cx + small.rx + lamium::ui::RadialLayout::itemWidth * small.scale / 2 <= 480,
+          "the small menu sits smaller in the lower right, inside the screen");
+}
+
 void drawKeys() {
     SavedPlacement a;
     a.name = "hut";
@@ -388,6 +415,7 @@ void schematicTests() {
     verificationOrder();
     placementDocuments();
     drawKeys();
+    menuRules();
     placementTransforms();
     entityRules();
     saveRules();
