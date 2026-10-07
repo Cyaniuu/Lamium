@@ -87,7 +87,9 @@ L-item wins. Every entry names what the task is, not only its number.
 4. **Schematic — L-93 load, place, project, verify and list materials:**
    chosen 2026-10-03; the core is built and checked locally. The 0.1.7
    scope (entities, area save, open folder and large-file warning, an
-   outline for blocks without a mesh) was agreed 2026-10-07; see the L-item.
+   outline for blocks without a mesh) was agreed 2026-10-07, then the menu,
+   adjust key and drawing work; all built, the last parts not yet checked
+   in game (Pre-release checks).
 5. **Research when convenient:** L-37 FreeCamera seeing caves (wanted),
    L-79 carved pumpkin and spyglass frame draw path (cheap-model friendly
    trace/test steps), L-71 starting a glide from the mod, L-57
@@ -120,6 +122,17 @@ do not duplicate task details into this summary.
 Behavior confirmed only on trace builds or only locally. Check these on the
 trace-disabled release build before tagging (VALIDATION.md has the gaps per
 feature):
+- 0.1.7, schematics (L-93), built 2026-10-07 and not yet seen in game:
+  the menu (open, categories, wheel on steppers, right click back, Esc and
+  the menu key close it, "Move ... >" targets and their colors, save area
+  and tabs from it, the three menu settings, the adjust-key tip); the
+  adjust key (hold + wheel repeats the last stepper, hint under the
+  crosshair, the wheel left alone otherwise); the settings order and
+  "Shortcuts" groups; the footer tip while the menu key is unbound;
+  drawing (no blink of other placements on a move, large schematics
+  lighter, far sections appear, nothing missing when turning around,
+  enclosed cells skipped without holes); name tags not through walls; the
+  prompt spacing and caret; honey block and door outlines.
 - 0.1.6 was released on 2026-10-02 (`v0.1.6`, tag CI passed; asset SHA-256
   `3d864ca1...3946554f`): L-90 Simplified Chinese (first AI-assisted
   translation, corrections welcome), L-88 target hearts, L-75 offhand slot,
@@ -1063,6 +1076,29 @@ second round):
   distinction anywhere.
 - The single-purpose keys stay as advanced shortcuts, unbound by default.
 - A held stick (or any item) as a tool is not built; only if users ask.
+Built 2026-10-07 while the maintainer cannot test (none of it checked in
+game yet):
+- `7fe5324`: name tags hidden behind blocks (a ray from the camera); honey
+  block and door back to the outline alone; prompt line spacing, caret
+  margins, the large-file warning above its button.
+- `8a09567` drawing: a change keeps the built sections of placements whose
+  `drawKey` (PlacementStore) is unchanged, and the check keeps running
+  unless its own placement changed; a section is rebuilt only when a hash
+  of its world blocks changed (compared on the old 0.25 s / 2 s timers, at
+  most 8 sections per frame); sections outside the view are not drawn and
+  are built after those in view; a ghost with an opaque full block (real,
+  or an opaque ghost that will be drawn) on all six sides is not
+  tessellated. Known limit: a change in a neighboring section does not
+  rebuild an enclosed cell at the border until its own section changes.
+- `b80f4dc` menu and adjust key: as decided above. Pure parts:
+  `MenuModel.h` (categories, items, targets, where it opens) and
+  `RadialLayout.h` (ring geometry and pointer hit), with tests. The menu is
+  a mode of Lamium's screen like the prompts; the adjust key is a Hold
+  action whose wheel turns are counted on the input thread and applied by
+  the HUD frame. Settings rows: "Schematic menu (start here)" with the
+  three menu options right under Schematics, "Repeat the last adjustment
+  (recommended)", and the single-purpose groups renamed "Shortcuts: ...".
+To check before 0.1.7: see "Pre-release checks".
 - Menu settings (decided 2026-10-07): background dimming light by default
   (none and dark selectable); shown centered at full size by default, or
   as an option small in the lower right so the view stays free; it opens
