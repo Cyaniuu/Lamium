@@ -102,4 +102,9 @@ void targetCardTests() {
     check(plain.u0 == .5f && plain.u1 == .75f, "a uv set that already matches its file is unchanged");
     check(morphProgress(0) == 0 && morphProgress(morphSeconds) == 1 && morphProgress(1) == 1
           && morphProgress(morphSeconds / 2) > .5f, "the card eases out and settles");
+    check(cardContentFits(0, 0, 100, 50, 0, 0, 100, 50) && cardContentFits(-10, -5, 120, 60, 0, 0, 100, 50),
+          "the card content shows when the background covers its box");
+    check(!cardContentFits(0, 0, 80, 50, 0, 0, 100, 50) && !cardContentFits(0, 0, 100, 30, 0, 0, 100, 50)
+          && !cardContentFits(5, 0, 100, 50, 0, 0, 100, 50),
+          "the card content waits while a growing background is smaller than it");
 }

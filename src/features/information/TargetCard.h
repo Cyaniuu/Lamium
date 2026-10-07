@@ -159,4 +159,10 @@ inline float morphProgress(double elapsed) {
     double t = std::min(1.0, elapsed / morphSeconds);
     return static_cast<float>(1 - (1 - t) * (1 - t));
 }
+// The content is laid out at the final size, so it is drawn only while the
+// easing background already covers that box (shrinking, or settled).
+inline bool cardContentFits(float bgX, float bgY, float bgW, float bgH, float x, float y, float w, float h) {
+    constexpr float slack = .5f;
+    return bgX <= x + slack && bgY <= y + slack && bgX + bgW >= x + w - slack && bgY + bgH >= y + h - slack;
+}
 }

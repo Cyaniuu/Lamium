@@ -511,6 +511,9 @@ std::optional<ui::hud_editor::Box> drawTargetCard(MinecraftUIRenderContext& cont
         cardMorph.shown = background;
     }
     if (card) ui::card(context, background->x, background->y, background->w, background->h, cardOpacity);
+    if (!cardContentFits(background->x, background->y, background->w, background->h, finalBox.x, finalBox.y,
+                         finalBox.w, finalBox.h))
+        return finalBox;
     float left = finalBox.x + padX, top = finalBox.y + padY;
     if (icon) {
         if (auto* renderer = context.mClient.getItemRenderer()) {
