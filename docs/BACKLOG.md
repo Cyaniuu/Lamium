@@ -666,8 +666,13 @@ Requirements stated by the maintainer:
   original to a person, not only by slot count.
 Decided 2026-10-08 (agent's proposal, maintainer chose the trigger and armor):
 - Trigger: automatic. After an item pickup, once about one second passes
-  without another pickup, rearrange; later pickups trigger again. The death
-  layout expires 10 minutes after death (and on world exit).
+  without another pickup, rearrange; later pickups trigger again.
+- Lifetime (corrected by the maintainer 2026-10-08): no real-time expiry.
+  Dropped items despawn only while their chunk is loaded and ticking, so a
+  long trip back must still restore. The death layout lasts until the next
+  death, until everything in it is back, or until the death point is
+  removed; it is saved per world with the death point, so it survives
+  leaving and rejoining.
 - Order: armor and offhand, then hotbar, then the main inventory, each back
   in its death-time slot. Armor is put back on; a slot already wearing
   something else is left alone.
