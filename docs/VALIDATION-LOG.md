@@ -12,6 +12,17 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 sixth look at drawing; sidebar fixed (2026-10-07)
+
+By the maintainer, local world, `60b5fab` (DLL `e989a476...46263f4`), with
+a screenshot. The settings sidebar at UI Profile 100% is fine now. Inside a
+schematic no hollows showed, but z-fighting came back, most visible on
+east-west faces (the 0.4% inset was not enough). Changed in the next build
+(not yet checked): one face per touching pair again, the camera-facing
+one, for every pair where either cell is within one of the camera's cells
+(the earlier hollows were pairs between a near and a farther cell, where
+both faces were dropped); ghosts within two cells are never skipped.
+
 ## L-93 fifth look; settings sidebar at UI Profile 100% (2026-10-07)
 
 By the maintainer, local world, `931e0c4` (DLL `ff4e9a9f...08c59a0`), with

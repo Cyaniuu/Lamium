@@ -1131,7 +1131,11 @@ the one facing the camera; the menu opening follows the Animations setting
 where the near clip plane cut the kept face, so ghosts within one cell of
 the camera now keep every face, each shrunk by 0.4% toward its cell center
 so touching faces never share a plane. Also the settings sidebar fits short
-windows (`SettingsTable::navStep`, tested), found at UI Profile 100%.
+windows (`SettingsTable::navStep`, tested), found at UI Profile 100%
+(confirmed). Sixth look: the inset still z-fought east-west; now every
+pair of touching faces where either cell is within one of the camera's
+cells keeps only the camera-facing face (`faces::beyond`, tested), ghosts
+within two cells are never skipped, no inset (not yet checked).
 After 0.1.7 (maintainer, 2026-10-07): placements on the minimap and world
 map. (The menu animation was moved before 0.1.7 the same day.)
 To check before 0.1.7: see "Pre-release checks".
