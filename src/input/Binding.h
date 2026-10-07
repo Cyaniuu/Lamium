@@ -34,8 +34,9 @@ inline constexpr auto actions = std::to_array<ActionInfo>({
     {"targetinfo", "targetInfo", Behavior::Toggle},
     {"debugview", "debugView", Behavior::Toggle, 0x72},
     {"breakingrestriction", "restrictions", Behavior::Toggle},
-    {"capturebreaking", "restrictions", Behavior::Press},
-    {"resetbreaking", "restrictions", Behavior::Press},
+    // Retired by L-15 (the press anchors); kept because ids are saved.
+    {"capturebreaking", "", Behavior::Press},
+    {"resetbreaking", "", Behavior::Press},
     {"cyclebreakingmode", "restrictions", Behavior::Press},
     {"freelook", "freelook", Behavior::Hold, 0, Matching::Modifier},
     {"lightoverlay", "lightOverlay", Behavior::Toggle},
@@ -127,6 +128,8 @@ inline constexpr auto actions = std::to_array<ActionInfo>({
     {"adjustschematic", "schematicMenu", Behavior::Hold},
 });
 static_assert(actions.size() == static_cast<size_t>(Action::Count));
+// Kept for its saved id but no longer shown or dispatched.
+constexpr bool retired(Action action) { return actions[static_cast<size_t>(action)].feature.empty(); }
 using Chord = std::vector<Token>;
 // Absent means Lamium's default; an empty chord explicitly unbinds the
 // action. Reset removes the override, restoring the default.

@@ -22,4 +22,8 @@ void endSession();
 bool paused(IClientInstance& client);
 // Replay the registered vanilla use edge for a separate bound trigger.
 bool sendUseEdge(IClientInstance& client, bool down);
+// The attack button as vanilla's handlers last received it, from the player
+// or from Auto Attack; `press` changes with every new press (L-15).
+struct ButtonState { bool held; unsigned press; };
+ButtonState attackButton();
 }

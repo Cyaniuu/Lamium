@@ -1011,10 +1011,10 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
                 modeText += " | " + ui::translated("restrictionAxis",
                     axis == interaction::Axis::X ? "X" : axis == interaction::Axis::Y ? "Y" : "Z");
             }
-            auto text = anchor ? ui::translated("breakingAnchor",
-                                    std::format("{}, {}, {}", anchor->anchor.x, anchor->anchor.y, anchor->anchor.z))
-                               : ui::translated("breakingNeedsAnchor");
-            lines.push_back({std::move(text), ui::palette::warning});
+            // The anchor line only while a press holds a region (L-15).
+            if (anchor)
+                lines.push_back({ui::translated("breakingAnchor",
+                    std::format("{}, {}, {}", anchor->anchor.x, anchor->anchor.y, anchor->anchor.z)), ui::palette::warning});
             lines.push_back({std::move(modeText), ui::palette::warning});
         }
         if (preview && lines.empty()) lines.push_back({ui::translated("status.permanentSneak"), ui::palette::accent});

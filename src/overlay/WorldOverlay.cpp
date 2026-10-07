@@ -7,6 +7,7 @@
 #include "overlay/ShapeWorkspace.h"
 #include "overlay/LocalShapePath.h"
 #include "features/interaction/BreakingRestriction.h"
+#include "mc/world/phys/HitResult.h"
 #include "app/Runtime.h"
 #include "ll/api/memory/Hook.h"
 #include "ll/api/event/EventBus.h"
@@ -106,6 +107,8 @@ void joinWorld(ll::event::ClientJoinLevelEvent& event) noexcept {
 // A shape being created is previewed as lines and never persisted.
 ShapeCollection draftCollection(1);
 constexpr ShapeId draftKey = ~ShapeId{0};
+// The breaking region of the press in progress (L-15), drawn like a shape.
+constexpr ShapeId restrictionKey = draftKey - 1;
 bool hasShapes() {
     std::lock_guard lock(shapeMutex);
     return !shapeCollection.entries().empty() || !draftCollection.entries().empty();
@@ -494,16 +497,34 @@ LL_TYPE_INSTANCE_HOOK(WorldLines, ll::memory::HookPriority::Normal, LevelRendere
             // Release meshes of removed shapes.
             if (shapeMeshes.size() > shapeCollection.entries().size() + draftCollection.entries().size())
                 std::erase_if(shapeMeshes, [&](auto const& entry) {
+                    if (entry.first == restrictionKey) return false;
                     return entry.first == draftKey ? draftCollection.entries().empty() : !shapeCollection.find(entry.first);
                 });
         }
         if (breaking) {
+            // Faint faces around the allowed cells near the anchor while the
+            // button is held; the targeted block is left out so the vanilla
+            // outline stays visible.
             auto region = interaction::breaking::region();
             if (region) {
-                thread_local std::optional<interaction::RestrictionRegion> cached;
-                thread_local std::vector<Line> lines;
-                if (cached != region) { lines = gridSurfaceLines(region->preview(4)); cached = region; }
-                drawLines(context,lines);
+                std::optional<Cell> target;
+                auto const& hit = client.getLatestHitResult();
+                if (hit.mType == HitResultType::Tile) target = Cell{hit.mBlock.x, hit.mBlock.y, hit.mBlock.z};
+                thread_local std::optional<interaction::RestrictionRegion> cachedRegion;
+                thread_local std::optional<Cell> cachedTarget;
+                thread_local ManagedShape restriction;
+                if (cachedRegion != region || cachedTarget != target || !restriction.revision) {
+                    auto cells = region->preview(4);
+                    if (target) cells.erase(*target);
+                    restriction.definition.style = ShapeStyle::Face;
+                    restriction.definition.color = ShapeColor::White;
+                    restriction.faces = boundaryFaces(cells);
+                    restriction.lines = gridSurfaceLines(cells);
+                    ++restriction.revision;
+                    cachedRegion = region;
+                    cachedTarget = target;
+                }
+                drawShape(context, faceMaterial(client), restrictionKey, restriction, false);
             }
         }
         auto& dimension = player->getDimension();

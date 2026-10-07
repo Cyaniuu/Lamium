@@ -70,6 +70,7 @@ Json encode(Settings const& settings) {
                          {"elytraReturnSeconds", settings.interaction.elytraReturnSeconds},
                          {"elytraFireworkJump", settings.interaction.elytraFireworkJump},
                          {"breakingMode", interaction::restrictionNames[static_cast<size_t>(settings.interaction.breakingMode)]},
+                         {"breakingBand", settings.interaction.breakingBand},
                          {"placementMode", interaction::restrictionNames[static_cast<size_t>(settings.interaction.placementMode)]}}},
         {"information", {{"hud", settings.information.hud}, {"coordinates", settings.information.coordinates},
                          {"scaledCoordinates", settings.information.scaledCoordinates},
@@ -234,6 +235,7 @@ Settings decodeSettings(std::string_view text) {
         };
         value.interaction.breakingMode = mode("breakingMode");
         value.interaction.placementMode = mode("placementMode");
+        value.interaction.breakingBand = options.value("breakingBand", value.interaction.breakingBand);
     }
     if (data.contains("information")) {
         auto const& info = data.at("information");

@@ -39,7 +39,6 @@ struct Identity {
     bool operator==(Identity const&) const = default;
 };
 Identity stopped, overridden;
-bool restartPending = false;
 Identity heldSeen, chestSeen;
 // Set when the same held item or worn elytra wore down to breaking, so merely
 // selecting or wearing one kept at 1 (for Mending) never swaps it.
@@ -173,69 +172,50 @@ GuardMining decide(LocalPlayer& player, bool newPress) {
     if (action == GuardMining::Stop) stopped = id;
     return action;
 }
-LL_TYPE_INSTANCE_HOOK(GuardStart, ll::memory::HookPriority::High, GameMode,
-    &GameMode::$startDestroyBlock, bool, BlockPos const& pos, uchar face, bool& destroyed) {
+void reset() { stopped = overridden = heldSeen = chestSeen = {}; heldWornDown = chestWornDown = false; }
+}
+mining::Gate startGate(Player& actor, bool newPress) {
     try {
-        if (auto* player = localPlayer(&mPlayer)) {
-            restartPending = false;
-            switch (decide(*player,true)) {
+        if (auto* player = localPlayer(&actor)) {
+            switch (decide(*player,newPress)) {
             case GuardMining::Stop:
-                trace("start-stop"); stopToast(); destroyed = false; return false;
+                trace("start-stop"); stopToast(); return mining::Gate::End;
             case GuardMining::Wait:
                 // A fresh press after a pause can swap at once; right after a
                 // break it waits for the tick (press again then).
-                if (!quiet(lastHeldChange) || !swapHeld(*player)) { trace("start-wait"); destroyed = false; return false; }
+                if (!quiet(lastHeldChange) || !swapHeld(*player)) { trace("start-wait"); return mining::Gate::End; }
                 break;
             case GuardMining::Continue: break;
             }
             lastDestroy = Clock::now();
         }
     } catch (...) {}
-    return origin(pos,face,destroyed);
+    return mining::Gate::Proceed;
 }
-LL_TYPE_INSTANCE_HOOK(GuardContinue, ll::memory::HookPriority::High, GameMode,
-    &GameMode::$continueDestroyBlock, bool, BlockPos const& pos, uchar face, Vec3 const& playerPos, bool& destroyed) {
+mining::Gate continueGate(Player& actor) {
     try {
-        if (auto* player = localPlayer(&mPlayer)) {
+        if (auto* player = localPlayer(&actor)) {
             switch (decide(*player,false)) {
             case GuardMining::Stop:
-                // Returning false ends the session; a held button never
-                // restarts it (L-36), so only a new press mines on.
-                trace("continue-stop"); stopToast(); destroyed = false; return false;
+                // Ending the session: a held button never restarts it (L-36),
+                // so only a new press mines on.
+                trace("continue-stop"); stopToast(); return mining::Gate::End;
             case GuardMining::Wait:
                 // Keep the session but make no progress until the swap;
                 // mining with it is reason enough to swap it out.
                 heldWornDown = true;
-                destroyed = false;
-                if (static_cast<float const&>(mDestroyProgress) > 0.f) {
-                    stopDestroyBlock(static_cast<BlockPos const&>(mDestroyBlockPos));
-                    restartPending = true;
-                    trace("continue-wait");
-                }
-                return true;
+                trace("continue-wait");
+                return mining::Gate::Pause;
             case GuardMining::Continue: break;
             }
             lastDestroy = Clock::now();
-            if (restartPending) {
-                restartPending = false;
-                trace("continue-restart");
-                return startDestroyBlock(pos,face,destroyed);
-            }
         }
     } catch (...) {}
-    return origin(pos,face,playerPos,destroyed);
-}
-void reset() { stopped = overridden = heldSeen = chestSeen = {}; restartPending = heldWornDown = chestWornDown = false; }
-struct Hook { int (*install)(bool); bool (*remove)(bool); bool installed = false; };
-Hook hooks[] = {{GuardStart::hook,GuardStart::unhook},{GuardContinue::hook,GuardContinue::unhook}};
+    return mining::Gate::Proceed;
 }
 void start() {
     if (installed) return;
     try {
-        for (auto& hook : hooks) if (!hook.installed) {
-            if (hook.install(true) != 0) throw std::runtime_error("Could not install Tool Protection hook");
-            hook.installed = true;
-        }
         auto& bus = ll::event::EventBus::getInstance();
         tickListener = bus.emplaceListener<ll::event::ClientLevelTickEvent>([](auto&) { tick(); });
         exitListener = bus.emplaceListener<ll::event::ClientExitLevelEvent>([](auto&) { reset(); });
@@ -247,8 +227,6 @@ void stop() {
     for (auto* listener : {&tickListener,&exitListener}) if (*listener) {
         ll::event::EventBus::getInstance().removeListener(*listener); listener->reset();
     }
-    for (auto it = std::rbegin(hooks); it != std::rend(hooks); ++it)
-        if (it->installed && it->remove(true)) it->installed = false;
     reset();
     installed = false;
 }

@@ -1,4 +1,5 @@
 #include "features/interaction/BreakingRestriction.h"
+#include "features/interaction/PeriodicInput.h"
 #include "app/Runtime.h"
 #include "ui/SettingsScreen.h"
 #include "input/Actions.h"
@@ -10,9 +11,7 @@
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/client/renderer/game/LevelRendererPlayer.h"
 #include "mc/world/gamemode/GameMode.h"
-#include "mc/world/phys/HitResult.h"
-#include "mc/world/level/BlockSource.h"
-#include "mc/world/level/block/Block.h"
+#include <cmath>
 #include <format>
 #include <mutex>
 #include <string>
@@ -20,7 +19,7 @@
 namespace lamium::interaction::breaking {
 namespace {
 std::mutex mutex;
-std::optional<RestrictionRegion> anchor;
+PressAnchor anchor;
 ll::event::ListenerPtr exitListener;
 #ifdef LAMIUM_RESEARCH_TRACE
 // L-36: record how vanilla drives a held attack across a rejected block.
@@ -45,12 +44,11 @@ void traceBreak(char const* phase, Player& player, BlockPos const& pos, int allo
 #else
 void traceBreak(char const*, Player&, BlockPos const&, int, int) noexcept {}
 #endif
-// Set when a forbidden target aborted the session; the next allowed target
-// starts afresh (like a new click) so the server gets a start action again.
-bool restartPending = false;
-// In a local world the integrated server's player runs these calls too; only
-// the client's own player may take or clear the restart.
-bool clientPlayer(Player const& player) {
+// In a local world the integrated server's player runs the same GameMode
+// calls; only the client's own player is restricted or anchors.
+bool restricted(Player const& player) {
+    auto& runtime = Runtime::instance();
+    if (!runtime.enabled() || !runtime.snapshot()->interaction.breaking) return false;
     auto client = ll::service::getClientInstance();
     return client && client->getLocalPlayer() == &player;
 }
@@ -58,39 +56,23 @@ bool gameplayInput() {
     auto client = ll::service::getClientInstance();
     return client && !ui::ownsInput() && gameplayScreen(client->getScreenName());
 }
-LL_TYPE_INSTANCE_HOOK(StartBreak, ll::memory::HookPriority::Highest, GameMode,
-    &GameMode::$startDestroyBlock, bool, BlockPos const& pos, uchar face, bool& destroyed) {
-    if (!allows(mPlayer,pos)) { destroyed = false; traceBreak("start", mPlayer, pos, 0, 0); return false; }
-    if (clientPlayer(mPlayer)) restartPending = false;
-    bool result = origin(pos,face,destroyed);
-    traceBreak("start", mPlayer, pos, 1, result);
-    return result;
+RestrictionRegion regionAt(Player& player, BlockPos const& pos, unsigned char face) {
+    auto settings = Runtime::instance().snapshot();
+    auto mode = settings->interaction.breakingMode;
+    // Bedrock face IDs: down/up, north/south, west/east.
+    Axis axis = face < 2 || face > 5 ? Axis::Y : face < 4 ? Axis::Z : Axis::X;
+    if (mode == RestrictionMode::HeightBand) {
+        int feet = static_cast<int>(std::floor(player.getFeetPos().y + .01f));
+        return {mode, {pos.x, feet, pos.z}, Axis::Y, static_cast<int>(settings->interaction.breakingBand)};
+    }
+    return {mode, {pos.x, pos.y, pos.z}, axis};
 }
-LL_TYPE_INSTANCE_HOOK(ContinueBreak, ll::memory::HookPriority::Highest, GameMode,
-    &GameMode::$continueDestroyBlock, bool, BlockPos const& pos, uchar face, Vec3 const& playerPos, bool& destroyed) {
-    // Returning false here makes vanilla stop the breaking session, and a held
-    // button never restarts it (L-36). Skip a block outside the region but keep
-    // the session alive, so an allowed block reached later continues breaking.
-    // A menu or settings screen still ends the session.
-    if (!allows(mPlayer,pos)) {
-        destroyed = false;
-        bool keep = gameplayInput();
-        traceBreak("continue", mPlayer, pos, 0, keep);
-        // Abort the allowed block's progress through vanilla's own stop, or it
-        // keeps cracking while the crosshair rests on the forbidden block.
-        if (keep && static_cast<float const&>(mDestroyProgress) > 0.f) {
-            stopDestroyBlock(static_cast<BlockPos const&>(mDestroyBlockPos));
-            restartPending = true;
-        }
-        return keep;
-    }
-    if (restartPending && clientPlayer(mPlayer)) {
-        traceBreak("restart", mPlayer, pos, 1, -1);
-        return startDestroyBlock(pos, face, destroyed);
-    }
-    bool result = origin(pos,face,playerPos,destroyed);
-    traceBreak("continue", mPlayer, pos, 1, result);
-    return result;
+// Anchors on the first block of the press in progress.
+bool allowsAnchoring(Player& player, BlockPos const& pos, unsigned char face) {
+    auto button = periodic::attackButton();
+    std::lock_guard lock(mutex);
+    return anchor.allows({pos.x, pos.y, pos.z}, button.held, button.press,
+                         [&] { return regionAt(player, pos, face); });
 }
 LL_TYPE_INSTANCE_HOOK(FinishBreak, ll::memory::HookPriority::Highest, GameMode,
     &GameMode::$destroyBlock, bool, BlockPos const& pos, uchar face) {
@@ -110,35 +92,42 @@ LL_TYPE_INSTANCE_HOOK(ChangeDimension, ll::memory::HookPriority::Normal, LevelRe
     origin(player);
 }
 struct Hook { int (*install)(bool); bool (*remove)(bool); bool installed = false; };
-Hook hooks[]{{StartBreak::hook,StartBreak::unhook},{ContinueBreak::hook,ContinueBreak::unhook},
-             {FinishBreak::hook,FinishBreak::unhook},{ChangeDimension::hook,ChangeDimension::unhook},
+Hook hooks[]{{FinishBreak::hook,FinishBreak::unhook},{ChangeDimension::hook,ChangeDimension::unhook},
 #ifdef LAMIUM_RESEARCH_TRACE
              {StopBreak::hook,StopBreak::unhook},
 #endif
 };
 }
 void reset() { std::lock_guard lock(mutex); anchor.reset(); }
-std::optional<RestrictionRegion> region() { std::lock_guard lock(mutex); return anchor; }
-void capture(IClientInstance& client) {
-    auto* player = client.getLocalPlayer();
-    auto const& hit = client.getLatestHitResult();
-    if (!player || hit.mType != HitResultType::Tile || hit.mFacing > 5) return;
-    auto& source = player->getDimensionBlockSource();
-    if (!source.getChunkAt(hit.mBlock) || source.getBlock(hit.mBlock).isAir()) return;
-    // Bedrock face IDs: down/up, north/south, west/east.
-    Axis axis = hit.mFacing < 2 ? Axis::Y : hit.mFacing < 4 ? Axis::Z : Axis::X;
-    auto mode = Runtime::instance().snapshot()->interaction.breakingMode;
+std::optional<RestrictionRegion> region() {
+    auto button = periodic::attackButton();
     std::lock_guard lock(mutex);
-    anchor = RestrictionRegion{mode,{hit.mBlock.x,hit.mBlock.y,hit.mBlock.z},axis};
+    anchor.follow(button.held, button.press);
+    return anchor.region();
+}
+mining::Gate startGate(Player& player, BlockPos const& pos, unsigned char face) {
+    if (!restricted(player)) return mining::Gate::Proceed;
+    bool allowed = gameplayInput() && allowsAnchoring(player, pos, face);
+    traceBreak("start", player, pos, allowed, -1);
+    return allowed ? mining::Gate::Proceed : mining::Gate::End;
+}
+mining::Gate continueGate(Player& player, BlockPos const& pos, unsigned char face) {
+    if (!restricted(player)) return mining::Gate::Proceed;
+    // Ending here makes vanilla stop the session, and a held button never
+    // restarts it (L-36). Skip a block outside the region but keep the
+    // session, so an allowed block reached later continues breaking. A menu
+    // or settings screen still ends it.
+    bool gameplay = gameplayInput();
+    bool allowed = gameplay && allowsAnchoring(player, pos, face);
+    traceBreak("continue", player, pos, allowed, gameplay);
+    if (allowed) return mining::Gate::Proceed;
+    return gameplay ? mining::Gate::Pause : mining::Gate::End;
 }
 bool allows(Player& player, BlockPos const& pos) {
-    auto& runtime = Runtime::instance();
-    if (!runtime.enabled() || !runtime.snapshot()->interaction.breaking) return true;
-    auto client = ll::service::getClientInstance();
-    if (!client || client->getLocalPlayer() != &player) return true;
-    if (ui::ownsInput() || !gameplayScreen(client->getScreenName())) return false;
+    if (!restricted(player)) return true;
+    if (!gameplayInput()) return false;
     auto current = region();
-    return current && current->contains({pos.x,pos.y,pos.z});
+    return !current || current->contains({pos.x,pos.y,pos.z});
 }
 void start() {
     try {

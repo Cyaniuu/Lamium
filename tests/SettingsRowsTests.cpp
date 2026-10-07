@@ -124,7 +124,11 @@ void settingsRowsTests() {
     // HUD look options are edited in the layout editor, reached through the links.
     size_t listed = 0;
     for (auto const& option : settings::options) if (!option.id.starts_with("hud.")) ++listed;
-    check(options.size() == listed && actions.size() == input::actions.size(), "all settings and actions are reachable");
+    size_t live = 0;
+    for (size_t i = 0; i < input::actions.size(); ++i) if (!input::retired(static_cast<input::Action>(i))) ++live;
+    check(options.size() == listed && actions.size() == live, "all settings and actions are reachable");
+    check(input::retired(input::Action::CaptureBreaking) && input::retired(input::Action::ResetBreaking)
+          && !input::retired(input::Action::CycleBreakingMode), "only the L-15 capture and reset actions are retired");
     check(layouts.size() == 8, "every HUD element is reachable from the settings list");
     {
         auto sort = std::find_if(rows.begin(), rows.end(), [](auto const& row) {
@@ -237,7 +241,7 @@ void settingsRowsTests() {
         check(row.kind == RowKind::Section || (row.kind == RowKind::Action && row.action), "Hotkeys contains only bindings");
         if (row.action) ++actionRows;
     }
-    check(actionRows == input::actions.size(), "Hotkeys includes every action");
+    check(actionRows == live, "Hotkeys includes every action that is not retired");
     query.clear();
     {
         std::set<std::string_view> open = {"settings", "automationStatus", "toasts", "hudText"};

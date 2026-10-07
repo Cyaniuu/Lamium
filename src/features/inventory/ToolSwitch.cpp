@@ -25,11 +25,10 @@
 namespace lamium::inventory::tools {
 namespace {
 using Clock = std::chrono::steady_clock;
-bool installed = false;
 ToolTarget target;
 // L-69: a fetch waits until the last break is this far behind, so the move
 // reaches the server after that break's durability change (L-66 ordering).
-bool fetchPending = false, restartPending = false;
+bool fetchPending = false;
 Clock::time_point lastBreak{};
 bool quietSinceBreak() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - lastBreak).count() >= restockQuietMs;
@@ -98,58 +97,26 @@ Choice choose(Player& player, BlockPos const& pos, bool starting) {
     }
     return Choice::None;
 }
-LL_TYPE_INSTANCE_HOOK(ToolSwitchStart, ll::memory::HookPriority::Normal, GameMode,
-    &GameMode::$startDestroyBlock, bool, BlockPos const& pos, uchar face, bool& destroyed) {
-    if (clientPlayer(mPlayer)) restartPending = false;
-    choose(mPlayer,pos,true); // A waiting fetch is taken up by the continued breaking.
-    bool result = origin(pos,face,destroyed);
-    if (destroyed && clientPlayer(mPlayer)) lastBreak = Clock::now();
-    return result;
+}
+interaction::mining::Gate startGate(Player& player, BlockPos const& pos) {
+    choose(player,pos,true); // A waiting fetch is taken up by the continued breaking.
+    return interaction::mining::Gate::Proceed;
 }
 // Holding the attack button across blocks continues breaking on the new block
 // without a new start, so choose again when the position changes. A fetch
 // right after a break pauses progress until it can be sent, then restarts.
-LL_TYPE_INSTANCE_HOOK(ToolSwitchContinue, ll::memory::HookPriority::Normal, GameMode,
-    &GameMode::$continueDestroyBlock, bool, BlockPos const& pos, uchar face, Vec3 const& playerPos, bool& destroyed) {
-    auto choice = choose(mPlayer,pos,false);
-    if (choice == Choice::Wait) {
-        destroyed = false;
-        if (static_cast<float const&>(mDestroyProgress) > 0.f) {
-            stopDestroyBlock(static_cast<BlockPos const&>(mDestroyBlockPos));
-            restartPending = true;
-        }
-        return true;
+interaction::mining::Gate continueGate(Player& player, BlockPos const& pos) {
+    switch (choose(player,pos,false)) {
+    case Choice::Wait: return interaction::mining::Gate::Pause;
+    case Choice::Fetched: return interaction::mining::Gate::Restart;
+    default: return interaction::mining::Gate::Proceed;
     }
-    if (choice == Choice::Fetched || (restartPending && clientPlayer(mPlayer))) {
-        restartPending = false;
-        return startDestroyBlock(pos,face,destroyed);
-    }
-    bool result = origin(pos,face,playerPos,destroyed);
-    if (destroyed && clientPlayer(mPlayer)) lastBreak = Clock::now();
-    return result;
 }
-LL_TYPE_INSTANCE_HOOK(ToolSwitchStop, ll::memory::HookPriority::Normal, GameMode,
-    &GameMode::$stopDestroyBlock, void, BlockPos const& pos) {
-    if (clientPlayer(mPlayer) && !fetchPending) target.clear();
-    origin(pos);
-}
-struct Hook { int (*install)(bool); bool (*remove)(bool); bool installed = false; };
-Hook hooks[] = {{ToolSwitchStart::hook, ToolSwitchStart::unhook}, {ToolSwitchContinue::hook, ToolSwitchContinue::unhook},
-    {ToolSwitchStop::hook, ToolSwitchStop::unhook}};
-}
-void start() {
-    if (installed) return;
-    for (auto& hook : hooks) if (!hook.installed) {
-        if (hook.install(true) != 0) { stop(); throw std::runtime_error("Could not install tool switch hook"); }
-        hook.installed = true;
-    }
-    installed = true;
-}
+void mined(bool destroyed) { if (destroyed) lastBreak = Clock::now(); }
+void stopped() { if (!fetchPending) target.clear(); }
+void start() {}
 void stop() {
-    for (auto it = std::rbegin(hooks); it != std::rend(hooks); ++it)
-        if (it->installed && it->remove(true)) it->installed = false;
     target.clear();
-    fetchPending = restartPending = false;
-    installed = false;
+    fetchPending = false;
 }
 }

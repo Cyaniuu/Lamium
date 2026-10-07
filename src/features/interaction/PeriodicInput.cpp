@@ -15,6 +15,7 @@
 #include "mc/client/renderer/game/LevelRendererPlayer.h"
 #include "mc/deps/input/InputHandler.h"
 #include <array>
+#include <atomic>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -34,11 +35,18 @@ struct Button {
     std::vector<Callback> down, up;
     IClientInstance* client = nullptr;
     unsigned presses = 0, releases = 0;
+    bool attack = false;
 };
 struct Owner { std::array<Button, 2> buttons; };
 std::map<InputHandler*, std::shared_ptr<Owner>> owners;
 ll::event::ListenerPtr tickListener;
 bool enabled = false;
+std::atomic<bool> attackHeld{false};
+std::atomic<unsigned> attackPresses{0};
+// Several callbacks may share one press; only an edge counts.
+void attackEdge(bool down) {
+    if (attackHeld.exchange(down) != down && down) ++attackPresses;
+}
 int actionIndex(std::string_view name) {
     if (name == "button.destroy_or_attack") return 0;
     if (name == "button.build_or_interact") return 1;
@@ -54,6 +62,7 @@ bool eligible(IClientInstance& client) {
 void emit(Button& button, bool down, IClientInstance& client) {
     auto& count = down ? button.presses : button.releases;
     if (count < 1000) ++count;
+    if (button.attack) attackEdge(down);
 #ifdef LAMIUM_AUTOMATION_TRACE
     if (count <= 8) Runtime::instance().self().getLogger().info(
         "Auto input edge: down={} count={}", down, count);
@@ -76,6 +85,7 @@ Callback capture(InputHandler* handler, std::string const& name, bool down, Call
     auto& owner = owners[handler];
     if (!owner) owner = std::make_shared<Owner>();
     auto& button = owner->buttons[index];
+    button.attack = index == 0;
     // A changing registration invalidates synthetic state before adding callbacks.
     button.click.forgetHeld();
     suspend(button);
@@ -85,6 +95,7 @@ Callback capture(InputHandler* handler, std::string const& name, bool down, Call
         // The user's own press takes priority while held; automation resumes
         // after release. Fast click turns the held press into bursts.
         if (auto owner = weak.lock()) owner->buttons[index].click.physical(down);
+        if (index == 0) attackEdge(down);
         if (index == 1 && down) inventory::fakeOffhand::nativeDown(client, [&] { callback(focus, client); });
         else callback(focus, client);
     };
@@ -165,6 +176,7 @@ void followSettings() {
 void interrupt() {
     for (auto const& [_, owner] : owners)
         for (auto& button : owner->buttons) { button.click.forgetHeld(); suspend(button); }
+    attackEdge(false);
 }
 void endSession() {
     interrupt();
@@ -175,6 +187,7 @@ void endSession() {
     if (!runtime.save(value)) runtime.self().getLogger().error("Could not switch Auto Attack/Use off");
 }
 bool paused(IClientInstance& client) { return !eligible(client); }
+ButtonState attackButton() { return {attackHeld.load(), attackPresses.load()}; }
 bool sendUseEdge(IClientInstance& client, bool down) {
     auto* input = client.getInput();
     if (!input) return false;

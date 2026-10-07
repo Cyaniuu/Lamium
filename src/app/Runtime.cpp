@@ -8,6 +8,7 @@
 #include "features/inspection/render/IconTrace.h"
 #include "features/interaction/EdgeGuard.h"
 #include "features/interaction/ToolGuard.h"
+#include "features/interaction/MiningSessionHooks.h"
 #include "features/interaction/ElytraSwap.h"
 #include "features/interaction/PeriodicInput.h"
 #include "features/interaction/AutomationTrace.h"
@@ -123,6 +124,7 @@ Feature const features[] = {
     {"Breaking Restriction", started<interaction::breaking::start>, interaction::breaking::stop},
     {"Edge guard", started<interaction::edgeGuard::start>, interaction::edgeGuard::stop},
     {"Tool Protection", started<interaction::toolGuard::start>, interaction::toolGuard::stop},
+    {"Mining session", started<interaction::mining::start>, interaction::mining::stop},
     {"Auto Elytra", started<interaction::elytraSwap::start>, interaction::elytraSwap::stop},
     {"Placement diagnostics", started<interaction::placementTrace::start>, interaction::placementTrace::stop},
     {"Research diagnostics", started<researchTrace::start>, researchTrace::stop},

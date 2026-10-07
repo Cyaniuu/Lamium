@@ -37,6 +37,7 @@ struct Settings {
         float elytraReturnSeconds = 3; // Time after landing before the chestplate returns.
         bool elytraFireworkJump = true; // A jump holding fireworks puts the elytra on.
         interaction::RestrictionMode breakingMode = interaction::RestrictionMode::Plane;
+        float breakingBand = 2; // Height band mode: rows from the feet up (L-15).
         interaction::RestrictionMode placementMode = interaction::RestrictionMode::Plane;
     } interaction;
     struct Camera {
@@ -228,8 +229,12 @@ struct Settings {
             if (!std::isfinite(*clicks)) *clicks = 1;
             *clicks = std::clamp(std::round(*clicks), 1.f, 10.f);
         }
-        auto normalizeMode = [](auto& mode) { if (static_cast<unsigned>(mode) >= 4) mode = lamium::interaction::RestrictionMode::Plane; };
-        normalizeMode(interaction.breakingMode);
+        auto normalizeMode = [](auto& mode, size_t count) {
+            if (static_cast<unsigned>(mode) >= count) mode = lamium::interaction::RestrictionMode::Plane;
+        };
+        normalizeMode(interaction.breakingMode, lamium::interaction::restrictionLabels.size());
+        if (!std::isfinite(interaction.breakingBand)) interaction.breakingBand = 2;
+        interaction.breakingBand = std::clamp(std::round(interaction.breakingBand), 1.f, 16.f);
         for (auto* mode : {&interaction.attackMode, &interaction.useMode})
             if (static_cast<unsigned>(*mode) >= lamium::interaction::autoModeNames.size()) *mode = lamium::interaction::AutoMode::Periodic;
         information.targetHealth = std::clamp(information.targetHealth, 0, 2);
@@ -244,7 +249,7 @@ struct Settings {
         information.targetGrowth = std::clamp(information.targetGrowth, 0, 1);
         if (!std::isfinite(information.targetDistance)) information.targetDistance = 6;
         information.targetDistance = std::clamp(std::round(information.targetDistance), 2.f, 64.f);
-        normalizeMode(interaction.placementMode);
+        normalizeMode(interaction.placementMode, lamium::interaction::placementLabels.size());
         if (inventory.fakeOffhandSlot < 1 || inventory.fakeOffhandSlot > 9) inventory.fakeOffhandSlot = 9;
         inventory.toolSwitchSlot = std::clamp(inventory.toolSwitchSlot, 0, 9);
         inventory.weaponSwitchSlot = std::clamp(inventory.weaponSwitchSlot, 0, 9);

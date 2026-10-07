@@ -247,7 +247,7 @@ void settingsStoreTests() {
         auto* mode = settings::find("interaction.breakingMode");
         Settings value;
         mode->adjust(value,-1);
-        check(value.interaction.breakingMode == interaction::RestrictionMode::Layer, "choice wraps backward");
+        check(value.interaction.breakingMode == interaction::RestrictionMode::HeightBand, "choice wraps backward");
         mode->adjust(value,0);
         check(value.interaction.breakingMode == interaction::RestrictionMode::Plane, "click advances choice and wraps forward");
         check(!mode->numeric && std::get<settings::ChoiceValue>(mode->read(value)).label == "mode.plane",
@@ -259,6 +259,24 @@ void settingsStoreTests() {
         try { (void)decodeSettings(R"({"interaction":{"breakingMode":"unknown"}})"); }
         catch (...) { rejected = true; }
         check(rejected, "unknown stored restriction mode is not silently reinterpreted");
+    }
+    {
+        // L-15: Height band is a breaking mode only; old files keep their mode.
+        auto* placement = settings::find("interaction.placementMode");
+        Settings value;
+        placement->adjust(value,-1);
+        check(value.interaction.placementMode == interaction::RestrictionMode::Layer, "placement does not offer Height band");
+        value.interaction.placementMode = interaction::RestrictionMode::HeightBand;
+        value.normalize();
+        check(value.interaction.placementMode == interaction::RestrictionMode::Plane, "placement drops Height band");
+        auto decoded = decodeSettings(R"({"interaction":{"breakingMode":"heightBand","breakingBand":3}})");
+        check(decoded.interaction.breakingMode == interaction::RestrictionMode::HeightBand
+              && decoded.interaction.breakingBand == 3, "Height band and its rows load");
+        decoded = decodeSettings(R"({"interaction":{"breakingMode":"layer"}})");
+        check(decoded.interaction.breakingMode == interaction::RestrictionMode::Layer && decoded.interaction.breakingBand == 2,
+              "an older file keeps its mode and gets the default band");
+        decoded = decodeSettings(R"({"interaction":{"breakingBand":99}})");
+        check(decoded.interaction.breakingBand == 16, "the band is clamped");
     }
     {
         Settings value;

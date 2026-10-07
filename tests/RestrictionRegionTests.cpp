@@ -1,4 +1,5 @@
 #include "features/interaction/RestrictionRegion.h"
+#include "features/interaction/MiningSession.h"
 void check(bool,char const*);
 void restrictionRegionTests() {
     using namespace lamium::interaction;
@@ -31,4 +32,39 @@ void restrictionRegionTests() {
     check(rejected, "preview rejects excessive work rather than silently truncating");
     RestrictionRegion edge{RestrictionMode::Layer,{std::numeric_limits<int>::max()-1,0,0},Axis::Y};
     check(edge.preview(1).size() == 6, "preview avoids integer overflow and retains face headroom");
+
+    RestrictionRegion band{RestrictionMode::HeightBand,{3,64,3},Axis::X,2};
+    check(band.effectiveAxis() == Axis::Y, "height band reports Y");
+    check(band.contains({900,64,-900}) && band.contains({0,65,0}) && !band.contains({0,66,0})
+          && !band.contains({0,63,0}), "height band spans the feet row and the rows above it");
+    band.height = 1;
+    check(band.contains({0,64,0}) && !band.contains({0,65,0}), "height band of one is the feet row");
+    band.height = 3;
+    check(band.preview(1).size() == 18, "height band preview stays inside its rows");
+
+    PressAnchor press;
+    RestrictionRegion anchored{RestrictionMode::Layer,{10,70,10},Axis::Y};
+    auto make = [&] { return anchored; };
+    check(press.allows({10,70,10}, true, 1, make) && press.region() == anchored, "the first block of a press anchors");
+    check(press.allows({40,70,-3}, true, 1, make) && !press.allows({10,71,10}, true, 1, make),
+          "later blocks in the same press must be in the region");
+    anchored.anchor = {10,71,10};
+    check(press.allows({10,71,10}, true, 2, make) && press.region() == anchored, "a new press anchors afresh");
+    press.follow(false, 2);
+    check(!press.region(), "a release ends the region");
+    check(press.allows({0,0,0}, false, 2, make) && !press.region(), "a call without a held press does not anchor");
+
+    using namespace lamium::interaction::mining;
+    Session session;
+    check(session.next(Gate::Proceed, true) == Step::Vanilla, "proceed runs vanilla");
+    check(session.next(Gate::Pause, false) == Step::Keep && !session.pending(), "a pause without progress only waits");
+    check(session.next(Gate::Pause, true) == Step::StopAndKeep && session.pending(), "a pause aborts cracking");
+    check(session.next(Gate::Pause, false) == Step::Keep && session.pending(), "the restart stays owed while paused");
+    check(session.next(Gate::Proceed, false) == Step::Start && !session.pending(), "the next allowed call restarts once");
+    check(session.next(Gate::Proceed, false) == Step::Vanilla, "after the restart vanilla continues");
+    check(session.next(Gate::End, true) == Step::End, "an end refuses the call");
+    check(session.next(Gate::Restart, false) == Step::Start, "a fetched tool restarts");
+    session.next(Gate::Pause, true);
+    session.started();
+    check(session.next(Gate::Proceed, true) == Step::Vanilla, "a vanilla start settles an owed restart");
 }

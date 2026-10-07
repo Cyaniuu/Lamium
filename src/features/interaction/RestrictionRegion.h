@@ -14,16 +14,19 @@ inline Axis normalAxis(overlay::Face face) {
 }
 struct RestrictionRegion {
     RestrictionMode mode;
-    overlay::Cell anchor;
+    overlay::Cell anchor; // Height band: the feet cell at the press.
     Axis axis;
+    int height = 2; // Height band only: rows from the feet up.
     bool operator==(RestrictionRegion const&) const = default;
     Axis effectiveAxis() const {
-        return mode == RestrictionMode::Column || mode == RestrictionMode::Layer ? Axis::Y : axis;
+        return mode == RestrictionMode::Plane || mode == RestrictionMode::Line ? axis : Axis::Y;
     }
     bool contains(overlay::Cell cell) const {
         bool x = cell.x == anchor.x, y = cell.y == anchor.y, z = cell.z == anchor.z;
         switch (mode) {
         case RestrictionMode::Layer: return y;
+        case RestrictionMode::HeightBand:
+            return int64_t(cell.y) >= anchor.y && int64_t(cell.y) < int64_t(anchor.y) + height;
         case RestrictionMode::Column: return x && z;
         case RestrictionMode::Plane:
             switch (axis) { case Axis::X: return x; case Axis::Y: return y; case Axis::Z: return z; }
@@ -49,5 +52,32 @@ struct RestrictionRegion {
         }
         return result;
     }
+};
+// L-15: the region lives for one press of the attack button. The first block
+// mined in a press anchors it; a release or a new press ends it.
+class PressAnchor {
+public:
+    // Forgets the anchor once its press is over.
+    void follow(bool held, unsigned press) {
+        if (anchored && (!held || press != anchorPress)) anchored.reset();
+    }
+    // Anchors on the first block of the current press; later blocks must lie
+    // in that region.
+    template <class Make>
+    bool allows(overlay::Cell cell, bool held, unsigned press, Make&& make) {
+        follow(held, press);
+        if (!anchored) {
+            if (!held) return true; // No press to anchor (an echo after release).
+            anchored = make();
+            anchorPress = press;
+            return true;
+        }
+        return anchored->contains(cell);
+    }
+    std::optional<RestrictionRegion> const& region() const { return anchored; }
+    void reset() { anchored.reset(); }
+private:
+    std::optional<RestrictionRegion> anchored;
+    unsigned anchorPress = 0;
 };
 }
