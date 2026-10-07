@@ -12,6 +12,18 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-109 recheck: rejoin, death point removal, restore scope (2026-10-08)
+
+By the maintainer, deployed `1bd1102`, DLL
+`97a3a84a4a03157f8f15884240ea70a386bcb88ff68f8f05966e7b9b650a5331`,
+Minecraft 1.26.51.01, local world, all trace options off. Confirmed: the
+Hotbar scope restored only the hotbar; Hotbar and equipment also put armor
+back on and the offhand back; with Everything, picking up part, rejoining
+and picking up the rest restored everything; removing the death point on
+the map before any pickup, or after a partial restore, stopped further
+rearranging. The maintainer then asked for Hotbar & equipment as the
+default and no hotbar-only choice (changed after this check).
+
 ## L-110, L-93 target-card line, L-57 counts, L-109 death layout (2026-10-08)
 
 By the maintainer, deployed `8180fe2`, DLL

@@ -659,8 +659,10 @@ same day except two failures, fixed after (VALIDATION-LOG): rejoining read
 the player as not alive and dropped the layout (now `LifeWatch`: only a
 player seen alive in the world can die), and removing the death point
 before the first pickup went unnoticed (now watched every tick). Restore
-scope (maintainer, 2026-10-08): Hotbar (default), Hotbar and equipment,
-Everything; restoring everything takes a while. Both wait for a recheck. Planner `DeathLayout.h` (one move at a time: swap, or move part of a
+scope (maintainer, 2026-10-08): Hotbar & equipment (default; armor and offhand
+included) or Everything; restoring everything takes a while, and a
+hotbar-only choice was dropped as unneeded. The fixes and the first
+three-way scope passed the recheck on `1bd1102`. Planner `DeathLayout.h` (one move at a time: swap, or move part of a
 stack; equipment never emptied; tested, including 2000 random inventories
 for termination and conservation), document `DeathLayoutStore.cpp`
 (`death-layout.json` beside the waypoints), glue `DeathRestore.cpp`: the

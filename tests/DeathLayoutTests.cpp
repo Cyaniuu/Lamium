@@ -180,16 +180,16 @@ void deathLayoutTests() {
         now[6] = item("helmet", 1, "", 1);
         Slots after = now;
         for (int n = 0; n < 50; ++n) {
-            auto move = nextMove(layout, after, Scope::Hotbar);
+            auto move = nextMove(layout, after, Scope::HotbarEquipment);
             if (!move) break;
             after = applied(after, *move);
         }
-        check(after[0] == layout.slots[0] && after[36].empty() && after[20].empty(),
-              "the hotbar scope puts back only hotbar slots");
-        check(markDone(layout, after, Scope::Hotbar) && !markDone(layout, after, Scope::All),
+        check(after[0] == layout.slots[0] && after[36] == layout.slots[36] && after[20].empty(),
+              "the default scope puts back the hotbar and equipment only");
+        check(markDone(layout, after, Scope::HotbarEquipment) && !markDone(layout, after, Scope::All),
               "a scope is done when its own slots are");
-        check(inScope(40, Scope::HotbarEquipment) && !inScope(40, Scope::Hotbar) && !inScope(9, Scope::HotbarEquipment)
-              && inScope(9, Scope::All), "scopes name their slots");
+        check(inScope(40, Scope::HotbarEquipment) && !inScope(9, Scope::HotbarEquipment) && inScope(9, Scope::All),
+              "scopes name their slots");
     }
     {
         using E = LifeWatch::Event;

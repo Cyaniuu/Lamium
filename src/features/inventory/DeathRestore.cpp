@@ -125,7 +125,7 @@ bool deathPointRemoved(bool recording) {
     return state.deathPointSeen;
 }
 Scope scopeOf(Settings const& prefs) {
-    return static_cast<Scope>(std::clamp(prefs.inventory.deathRestoreScope, 0, 2));
+    return static_cast<Scope>(std::clamp(prefs.inventory.deathRestoreScope, 0, 1));
 }
 void step(LocalPlayer& player, Slots const& now, Settings const& prefs) {
     auto scope = scopeOf(prefs);

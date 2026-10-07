@@ -70,7 +70,7 @@ struct Settings {
         bool sorting = true;
         bool offhandSwap = true; // The Swap with offhand key works (L-94)
         bool deathRestore = false; // Put picked-up items back in their death-time slots (L-109, experimental)
-        int deathRestoreScope = 0; // 0 the hotbar, 1 the hotbar and equipment, 2 everything
+        int deathRestoreScope = 0; // 0 the hotbar and equipment, 1 everything
         // Fireworks swap with Fake Offhand's slot, not the real offhand, while
         // Fake Offhand is on: it can launch them (maintainer 2026-10-07).
         bool offhandSwapFireworks = true;
@@ -255,7 +255,7 @@ struct Settings {
         if (inventory.fakeOffhandSlot < 1 || inventory.fakeOffhandSlot > 9) inventory.fakeOffhandSlot = 9;
         inventory.toolSwitchSlot = std::clamp(inventory.toolSwitchSlot, 0, 9);
         inventory.weaponSwitchSlot = std::clamp(inventory.weaponSwitchSlot, 0, 9);
-        inventory.deathRestoreScope = std::clamp(inventory.deathRestoreScope, 0, 2);
+        inventory.deathRestoreScope = std::clamp(inventory.deathRestoreScope, 0, 1);
         inventory.restockThreshold = std::clamp(inventory.restockThreshold, 0, 63);
         if (inventory.restockOrder < 0 || inventory.restockOrder > 1) inventory.restockOrder = 1;
         information.lineOrder = information::mergeLineOrder(information.lineOrder);

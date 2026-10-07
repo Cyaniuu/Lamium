@@ -13,14 +13,12 @@ namespace lamium::inventory::death {
 // feet), 40 the offhand.
 inline constexpr int slotCount = 41, armorFirst = 36, offhandSlot = 40;
 inline bool equipment(int slot) { return slot >= armorFirst; }
-// Which slots are put back (maintainer, 2026-10-08: the hotbar by default,
-// since restoring everything takes a while). Items for other slots are still
-// taken from anywhere.
-enum class Scope { Hotbar, HotbarEquipment, All };
+// Which slots are put back (maintainer, 2026-10-08): the hotbar and
+// equipment by default, since restoring everything takes a while. Items for
+// them are still taken from anywhere.
+enum class Scope { HotbarEquipment, All };
 inline bool inScope(int slot, Scope scope) {
-    if (slot < 9) return true;
-    if (equipment(slot)) return scope != Scope::Hotbar;
-    return scope == Scope::All;
+    return slot < 9 || equipment(slot) || scope == Scope::All;
 }
 struct Stack {
     std::string kind;  // the item, e.g. minecraft:diamond_sword
