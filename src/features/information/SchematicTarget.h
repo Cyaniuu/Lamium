@@ -1,0 +1,59 @@
+#pragma once
+#include "features/information/TargetInfo.h"
+#include "features/schematic/Verify.h"
+#include <cstdlib>
+#include <functional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+// The target card's schematic rows (BACKLOG L-93, redesigned 2026-10-08):
+// what to do about the block under the crosshair, in the verifier's colors.
+// Pure; the caller supplies translation.
+namespace lamium::information {
+using Translate = std::function<std::string(std::string_view)>;
+// A raw state value as the card shows it: by name when L-112 knows it.
+struct StateName { std::string label, value; bool labelIsKey = false; };
+inline StateName stateName(std::string const& key, std::string const& raw, std::string_view identifier,
+                           Translate const& translate) {
+    if (raw == "-") return {key, raw};
+    std::optional<TargetInfo::DetailRow> row;
+    char* end = nullptr;
+    long long number = std::strtoll(raw.c_str(), &end, 10);
+    if (!raw.empty() && end && *end == '\0') row = interpretBlockState(key, StateKind::Integer, number, {}, identifier);
+    else row = interpretBlockState(key, StateKind::Text, 0, raw, identifier);
+    if (!row || row->progress) return {key, raw};
+    return {row->label, row->valueIsKey ? translate(row->value) : row->value, true};
+}
+inline std::vector<TargetInfo::DetailRow> schematicRows(schematic::CellState state, std::string const& expectedName,
+    std::string const& icon, std::vector<schematic::StateDifference> const& differences, std::string_view identifier,
+    Translate const& translate) {
+    using schematic::CellState;
+    std::vector<TargetInfo::DetailRow> rows;
+    auto row = [&](std::string label, std::string value, bool labelIsKey, Tone tone, std::string withIcon = {}) {
+        TargetInfo::DetailRow r{std::move(label), std::move(value)};
+        r.kind = DetailKind::Schematic;
+        r.labelIsKey = labelIsKey;
+        r.tone = tone;
+        r.icon = std::move(withIcon);
+        rows.push_back(std::move(r));
+    };
+    switch (state) {
+    case CellState::Wrong: row("schematic.shouldBe", expectedName, true, Tone::Wrong, icon); break;
+    case CellState::Extra: row("schematic.shouldBe", translate("schematic.air"), true, Tone::Wrong); break;
+    case CellState::Missing: row("schematic.placeHere", expectedName, true, Tone::Missing, icon); break;
+    case CellState::State:
+        // One row per differing state: "<state>: <now> → <should be>".
+        for (auto const& d : differences) {
+            auto now = stateName(d.key, d.actual, identifier, translate);
+            auto want = stateName(d.key, d.expected, identifier, translate);
+            auto const& named = now.labelIsKey ? now : want;
+            row(named.label, now.value + " → " + want.value, named.labelIsKey, Tone::State);
+        }
+        if (differences.empty()) row("target.schematic", translate("schematic.kind.state"), true, Tone::State);
+        break;
+    default: break;
+    }
+    return rows;
+}
+}

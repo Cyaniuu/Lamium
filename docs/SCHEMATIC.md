@@ -240,7 +240,13 @@ To check before 0.1.7: see [Pre-release checks](BACKLOG.md#pre-release-checks).
   details are on, with the expected block's item icon before the text. For a
   wrong state, up to three rows follow naming each differing state as
   "<state>: <expected> (now <actual>)", in key order, with raw values
-  (`stateDifferences`, tested).
+  (`stateDifferences`, tested). Checked in game 2026-10-08, then redesigned
+  the same day (`SchematicTarget.h`, not yet checked): rows say what to do
+  in the verifier's colors — "Should be [icon] <block>" (red) for a wrong
+  block, "Should be Air" (red) for an extra one, "Place [icon] <block>"
+  (light blue) for a missing one, and per differing state
+  "<state>: <now> → <should be>" (yellow) with readable names (L-112); the
+  card's own row for that state is left out so it is not listed twice.
 - Menu settings (decided 2026-10-07): background dimming light by default
   (none and dark selectable); shown centered at full size by default, or
   as an option small in the lower right so the view stays free; it opens

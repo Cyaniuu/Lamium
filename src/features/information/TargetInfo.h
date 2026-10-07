@@ -10,6 +10,9 @@ namespace lamium::information {
 // Schematic: the selected placement's block here when it differs (L-93),
 // shown whether or not other details are.
 enum class DetailKind { Other, Health, Armor, Growth, Schematic };
+// Schematic rows take the verifier's colors: red for a wrong or extra block,
+// yellow for a wrong state, light blue for a missing one.
+enum class Tone { Normal, Wrong, State, Missing };
 // What the card draws beside the name. Item is a real item stack (block items
 // and spawn eggs); Texture is the target's own texture for blocks that have no
 // item, with the region of the source image to draw (one animation frame).
@@ -34,6 +37,7 @@ struct TargetInfo {
         int current = 0, maximum = 0; // Health points, for hearts in absolute units.
         std::string icon;             // An item icon before the value (binary NBT), if any.
         bool labelIsKey = true;
+        Tone tone = Tone::Normal;
     };
     std::vector<DetailRow> details;
     struct BlockPosition { int x, y, z; };
@@ -80,11 +84,29 @@ inline std::optional<TargetInfo::DetailRow> interpretBlockState(std::string_view
             return DetailRow{"target.facing", std::string(directions[number]), true, {}};
         return {};
     }
-    if (key == "minecraft:cardinal_direction" && kind == StateKind::Text && !text.empty()) {
-        std::string direction(text);
-        direction[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(direction[0])));
-        return DetailRow{"target.facing", std::move(direction), false, {}};
+    // L-112: named directions as text.
+    if ((key == "minecraft:cardinal_direction" || key == "minecraft:facing_direction" || key == "minecraft:block_face")
+        && kind == StateKind::Text && !text.empty()) {
+        for (auto [name, label] : {std::pair{"down", "target.dirDown"}, {"up", "target.dirUp"}, {"north", "target.dirNorth"},
+                                   {"south", "target.dirSouth"}, {"west", "target.dirWest"}, {"east", "target.dirEast"}})
+            if (text == name) return DetailRow{"target.facing", label, true, {}};
+        return {};
     }
+    // Stairs, and trapdoors' "direction": 0 east, 1 west, 2 south, 3 north.
+    if ((key == "weirdo_direction" || (key == "direction" && identifier.find("trapdoor") != std::string_view::npos))
+        && kind == StateKind::Integer) {
+        constexpr std::string_view directions[] = {"target.dirEast", "target.dirWest", "target.dirSouth", "target.dirNorth"};
+        if (number >= 0 && number < 4) return DetailRow{"target.facing", std::string(directions[number]), true, {}};
+        return {};
+    }
+    if (key == "upside_down_bit" && kind == StateKind::Integer && (number == 0 || number == 1))
+        return DetailRow{"target.upsideDown", number ? "target.yes" : "target.no", true, {}};
+    if (key == "top_slot_bit" && kind == StateKind::Integer && (number == 0 || number == 1))
+        return DetailRow{"target.half", number ? "target.upper" : "target.lower", true, {}};
+    if (key == "minecraft:vertical_half" && kind == StateKind::Text && (text == "top" || text == "bottom"))
+        return DetailRow{"target.half", text == "top" ? "target.upper" : "target.lower", true, {}};
+    if (key == "pillar_axis" && kind == StateKind::Text && (text == "x" || text == "y" || text == "z"))
+        return DetailRow{"target.axis", text == "x" ? "X" : text == "y" ? "Y" : "Z", false, {}};
     if (key == "open_bit" && kind == StateKind::Integer && (number == 0 || number == 1))
         return DetailRow{"target.open", number ? "target.yes" : "target.no", true, {}};
     if (key == "upper_block_bit" && kind == StateKind::Integer && (number == 0 || number == 1))

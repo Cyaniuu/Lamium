@@ -1,4 +1,5 @@
 #include "features/information/TargetInfo.h"
+#include "features/information/SchematicTarget.h"
 #include "features/schematic/GhostRenderer.h"
 #include "ui/Localization.h"
 #include "features/information/TargetCard.h"
@@ -30,6 +31,7 @@
 #include "mc/locale/I18n.h"
 #include "mc/deps/nbt/CompoundTagVariant.h"
 #include <algorithm>
+#include <set>
 #ifdef LAMIUM_RESEARCH_TRACE
 #include "app/Runtime.h"
 #include <format>
@@ -281,12 +283,25 @@ std::optional<TargetInfo> collectTargetInfo(IClientInstance& client, bool includ
     // The pick-block item (seeds for crops, the block item otherwise).
     result.icon = blockIcon(source, hit.mBlock, block);
     if (result.name.empty()) result.name = result.identifier;
+    // The selected schematic placement's block here, when it differs (L-93):
+    // its rows replace the card's own rows for the same states.
+    std::vector<TargetInfo::DetailRow> schematicDetails;
+    std::set<std::string> fixedStates;
+    auto verification = schematic::ghosts::verification();
+    for (auto const& m : verification->mismatches) {
+        if (m.position.x != hit.mBlock.x || m.position.y != hit.mBlock.y || m.position.z != hit.mBlock.z) continue;
+        schematicDetails = schematicRows(m.state, m.expectedName, m.expected, m.states, result.identifier,
+                                         [](std::string_view key) { return ui::translated(key); });
+        for (auto const& d : m.states) fixedStates.insert(d.key);
+        break;
+    }
     if (includeStates) {
         auto const& tags = block.mSerializationId->mTags;
         auto found = tags.find("states");
         if (found != tags.end()) {
             if (auto* states = std::get_if<CompoundTag>(&found->second.mTagStorage)) {
                 for (auto const& [key,value] : states->mTags) {
+                    if (fixedStates.contains(key)) continue;
                     std::optional<TargetInfo::DetailRow> detail;
                     if (auto* v = std::get_if<ByteTag>(&value.mTagStorage))
                         detail = interpretBlockState(key, StateKind::Integer, v->data, {}, result.identifier);
@@ -307,27 +322,7 @@ std::optional<TargetInfo> collectTargetInfo(IClientInstance& client, bool includ
             }
         }
     }
-    // The selected schematic placement's block here, when it differs (L-93).
-    auto verification = schematic::ghosts::verification();
-    for (auto const& m : verification->mismatches) {
-        if (m.position.x != hit.mBlock.x || m.position.y != hit.mBlock.y || m.position.z != hit.mBlock.z) continue;
-        char const* kind = m.state == schematic::CellState::Wrong ? "schematic.kind.wrong"
-            : m.state == schematic::CellState::Extra ? "schematic.kind.extra"
-            : m.state == schematic::CellState::State ? "schematic.kind.state" : "schematic.kind.missing";
-        std::string expected = m.state == schematic::CellState::Extra ? ui::translated("schematic.air") : m.expectedName;
-        TargetInfo::DetailRow row{"target.schematic", expected + " (" + ui::translated(kind) + ")"};
-        row.kind = DetailKind::Schematic;
-        row.icon = m.expected;
-        result.details.push_back(std::move(row));
-        // Which states to change, as "facing: north (now east)".
-        for (auto const& d : m.states) {
-            TargetInfo::DetailRow state{d.key, ui::translated("schematic.stateNow", d.expected, d.actual)};
-            state.kind = DetailKind::Schematic;
-            state.labelIsKey = false;
-            result.details.push_back(std::move(state));
-        }
-        break;
-    }
+    for (auto& row : schematicDetails) result.details.push_back(std::move(row));
     return result;
 }
 void startTargetIcons() {

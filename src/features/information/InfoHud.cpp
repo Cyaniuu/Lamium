@@ -568,8 +568,10 @@ std::optional<ui::hud_editor::Box> drawTargetCard(MinecraftUIRenderContext& cont
             }
             x += rowIcon + 2 * z;
         }
-        ui::labelScaled(context, x, y, left + contentW - x + 2, values[i], z, ui::palette::text, ui::Align::Left,
-                        element.shadow);
+        // Schematic rows in the verifier's colors (the HUD and Check tab use the same).
+        auto color = row.tone == Tone::Wrong ? ui::Rgb{1.f, .35f, .3f} : row.tone == Tone::State ? ui::Rgb{1.f, .8f, .25f}
+            : row.tone == Tone::Missing ? ui::Rgb{.75f, .85f, .9f} : ui::palette::text;
+        ui::labelScaled(context, x, y, left + contentW - x + 2, values[i], z, color, ui::Align::Left, element.shadow);
     }
     context.flushText(0, std::nullopt);
     return finalBox;

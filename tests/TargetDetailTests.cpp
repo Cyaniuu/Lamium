@@ -28,7 +28,8 @@ void targetDetailTests() {
     check(!integer("facing_direction", 6, "minecraft:oak_door"), "unknown facing stays raw");
     auto cardinal = interpretBlockState(
         "minecraft:cardinal_direction", StateKind::Text, 0, "east", "minecraft:oak_door");
-    check(cardinal && cardinal->value == "East" && !cardinal->valueIsKey, "cardinal direction capitalizes");
+    check(cardinal && cardinal->value == "target.dirEast" && cardinal->valueIsKey,
+          "cardinal direction is a translated direction (L-112)");
     auto open = integer("open_bit", 1, "minecraft:oak_door");
     check(open && open->label == "target.open" && open->value == "target.yes", "open doors read open");
     auto half = integer("upper_block_bit", 0, "minecraft:oak_door");

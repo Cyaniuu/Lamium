@@ -27,6 +27,7 @@ struct CardRow {
     Meter meter = Meter::Number;
     int current = 0, maximum = 0; // Health points for Hearts
     std::string icon;             // Item icon before the value (binary NBT)
+    Tone tone = Tone::Normal;
 };
 // One heart is 2 HP and the slots follow the maximum (L-88), ten per line.
 // Past five lines the hearts can no longer be read, so the row becomes a bar.
@@ -61,6 +62,7 @@ inline std::vector<CardRow> cardRows(TargetInfo const& target, CardOptions const
         if (detail.kind == DetailKind::Schematic) {
             CardRow row{detail.label, detail.value, detail.labelIsKey, detail.valueIsKey};
             row.icon = detail.icon;
+            row.tone = detail.tone;
             add(std::move(row));
         }
     if (options.coordinates && target.blockPosition) {

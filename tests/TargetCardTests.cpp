@@ -1,4 +1,5 @@
 #include "features/information/TargetCard.h"
+#include "features/information/SchematicTarget.h"
 void check(bool, char const*);
 void targetCardTests() {
     using namespace lamium::information;
@@ -116,6 +117,36 @@ void targetCardTests() {
         auto shown = cardRows(block, plain);
         check(shown.size() == 2 && shown[0].icon == "icon" && shown[1].label == "weirdo_direction" && !shown[1].labelIsKey,
               "schematic rows show without details, the first with the expected block's icon");
+    }
+    {
+        // L-112: common states by name.
+        auto facing = interpretBlockState("weirdo_direction", StateKind::Integer, 3, {}, "minecraft:stone_stairs");
+        check(facing && facing->label == "target.facing" && facing->value == "target.dirNorth", "stairs facing is named");
+        auto trapdoor = interpretBlockState("direction", StateKind::Integer, 0, {}, "minecraft:oak_trapdoor");
+        auto other = interpretBlockState("direction", StateKind::Integer, 0, {}, "minecraft:bed");
+        check(trapdoor && trapdoor->value == "target.dirEast" && !other, "only a trapdoor's direction is named");
+        auto slab = interpretBlockState("minecraft:vertical_half", StateKind::Text, 0, "top", "minecraft:stone_slab");
+        auto axis = interpretBlockState("pillar_axis", StateKind::Text, 0, "x", "minecraft:oak_log");
+        auto flipped = interpretBlockState("upside_down_bit", StateKind::Integer, 1, {}, "minecraft:stone_stairs");
+        check(slab && slab->value == "target.upper" && axis && axis->value == "X" && flipped && flipped->value == "target.yes",
+              "slab half, axis and upside down are named");
+        check(!interpretBlockState("minecraft:corner", StateKind::Text, 0, "none", "minecraft:stone_stairs"),
+              "unknown states keep their raw rows");
+        // L-93: schematic rows say what to do.
+        auto translate = [](std::string_view key) { return "<" + std::string(key) + ">"; };
+        using lamium::schematic::CellState;
+        auto wrong = schematicRows(CellState::Wrong, "Dirt", "icon", {}, "minecraft:stone", translate);
+        check(wrong.size() == 1 && wrong[0].label == "schematic.shouldBe" && wrong[0].value == "Dirt"
+              && wrong[0].icon == "icon" && wrong[0].tone == Tone::Wrong, "a wrong block reads 'Should be' with its icon");
+        auto stairs = schematicRows(CellState::State, "Stairs", "icon",
+            {{"weirdo_direction", "0", "3"}, {"minecraft:corner", "none", "inner_left"}}, "minecraft:stone_stairs", translate);
+        check(stairs.size() == 2 && stairs[0].label == "target.facing" && stairs[0].labelIsKey
+              && stairs[0].value == "<target.dirNorth> → <target.dirEast>" && stairs[0].tone == Tone::State,
+              "a wrong state reads '<state>: now -> should be' by name");
+        check(stairs[1].label == "minecraft:corner" && !stairs[1].labelIsKey && stairs[1].value == "inner_left → none",
+              "an unknown state keeps its raw name and values");
+        auto extra = schematicRows(CellState::Extra, "", "", {}, "minecraft:dirt", translate);
+        check(extra.size() == 1 && extra[0].value == "<schematic.air>" && extra[0].icon.empty(), "an extra block should be air");
     }
     check(cardContentFits(0, 0, 100, 50, 0, 0, 100, 50) && cardContentFits(-10, -5, 120, 60, 0, 0, 100, 50),
           "the card content shows when the background covers its box");
