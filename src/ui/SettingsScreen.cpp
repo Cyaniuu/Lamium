@@ -2953,7 +2953,11 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         label(context,x,l.theadTop+2,w,translated(key),palette::faint,align);
     };
     auto* checked = checkedPlacement();
-    bool counting = checked && (!verification->complete || verification->placement != schematicSet.selected);
+    // A placement whose file cannot be loaded is never counted: say why instead.
+    std::string loadProblem;
+    bool unloadable = checked && (schematicTab == SchematicTab::Verify || schematicTab == SchematicTab::Materials)
+        && !schematic::session::structure(checked->file, &loadProblem);
+    bool counting = checked && !unloadable && (!verification->complete || verification->placement != schematicSet.selected);
     // Column positions for the Verify and Materials lists.
     // A narrow list (a large UI) drops the columns it can do without, so the
     // names keep their room: the position in Check, "placed" in Materials.
@@ -2994,13 +2998,14 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
             bool on = verifyFilter == i, hovered = verifyChipAt(l,pointer.x,pointer.y) == i;
             std::string text = translated(chips[static_cast<size_t>(i)]);
             if (counted) text += std::format(" {}", counts[static_cast<size_t>(i)]);
-            float w = std::min(textWidth(context, text) + 8, listRight - ShapesLayout::pad - cx);
+            constexpr float chipText = .8f;
+            float w = std::min(textWidthScaled(context, text, chipText) + 8, listRight - ShapesLayout::pad - cx);
             if (w <= 8) break;
             float top = l.theadTop + 1, h = ShapesLayout::theadHeight - 2;
             if (on) fill(context,cx,top,w,h,palette::accent,.15f);
             if (hovered) fill(context,cx,top,w,h,palette::white,.08f);
             frame(context,cx,top,w,h,on ? palette::accent : palette::keyEdge);
-            label(context,cx+4,top+(h-10)/2+boxTextInset()-1,w-6,std::move(text),on ? palette::accent : palette::dim);
+            labelScaled(context,cx+4,top+(h-8*chipText)/2-1+boxTextInset(),w-6,std::move(text),chipText,on ? palette::accent : palette::dim);
             verifyChipSpans[static_cast<size_t>(i)] = {cx, cx + w};
             cx += w + 4;
         }
@@ -3020,6 +3025,7 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         if (schematicTab == SchematicTab::Placements) empty = translated("schematic.noPlacements");
         else if (schematicTab == SchematicTab::Files) empty = translated("schematic.empty");
         else if (!checked) empty = translated("schematic.noSelection");
+        else if (unloadable) empty = translated("schematic.notLoaded", loadProblem);
         else if (counting) empty = translated("schematic.counting");
         else empty = translated(schematicTab == SchematicTab::Verify ? "schematic.noMistakes" : "schematic.noMaterials");
         paragraph(context,left,l.rowsTop+3,l.listWidth-2*ShapesLayout::pad,empty,4,palette::faint);
@@ -3248,7 +3254,8 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         auto const& t = verification->visible;
         // The whole placement first, then the selected position, each under a heading.
         label(context,dx,l.previewY-2,dw,translated("schematic.check.whole", layersText(*checked)),palette::faint);
-        if (counting) label(context,dx,l.previewY+10,dw,translated("schematic.counting"),palette::dim);
+        if (unloadable) paragraph(context,dx,l.previewY+10,dw,translated("schematic.notLoaded", loadProblem),3,palette::warning);
+        else if (counting) label(context,dx,l.previewY+10,dw,translated("schematic.counting"),palette::dim);
         else {
             label(context,dx,l.previewY+10,dw,translated("schematic.summary.correct", t.correct, t.total()),palette::accent);
             label(context,dx,l.previewY+21,dw,translated("schematic.summary.missing", t.missing),palette::dim);
@@ -3300,7 +3307,8 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
     case SchematicTab::Materials: {
         if (!checked) { paragraph(context,dx,l.detailTop+6,dw,translated("schematic.noSelection"),4,palette::faint); break; }
         label(context,dx,l.nameY+1+boxTextInset(),dw,checked->name);
-        if (counting) label(context,dx,l.previewY,dw,translated("schematic.counting"),palette::dim);
+        if (unloadable) paragraph(context,dx,l.previewY,dw,translated("schematic.notLoaded", loadProblem),3,palette::warning);
+        else if (counting) label(context,dx,l.previewY,dw,translated("schematic.counting"),palette::dim);
         else {
             auto carried = carriedItems();
             std::uint64_t needed = 0, remaining = 0;
