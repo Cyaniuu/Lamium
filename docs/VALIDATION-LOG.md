@@ -12,6 +12,18 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 fifth look; settings sidebar at UI Profile 100% (2026-10-07)
+
+By the maintainer, local world, `931e0c4` (DLL `ff4e9a9f...08c59a0`), with
+screenshots. The menu animation follows the Animations setting (done). No
+z-fighting inside a schematic, but some hollows still showed (likely where
+the near clip plane cut the one face kept per pair). New: at UI Profile
+100% (larger UI) the settings sidebar items overlapped ("General" ran into
+"Hotkeys"), since Schematics added a section and a pinned item. Both
+changed in `60b5fab` (not yet checked): ghosts near the camera keep every
+face, inset a hair; the sidebar narrows its items to fit and falls back to
+tabs.
+
 ## L-93 fourth look at drawing (2026-10-07)
 
 By the maintainer, local world, `efcbda7` (DLL `91167736...4d4d20`), with a
