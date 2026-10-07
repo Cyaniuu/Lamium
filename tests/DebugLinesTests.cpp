@@ -3,6 +3,21 @@ void check(bool, char const*);
 void debugLinesTests() {
     using namespace lamium::information;
     {
+        // L-57: counts follow the fps line; missing ones are left out.
+        DebugValues value;
+        value.timing = FrameStatistics{60.0, 16.7};
+        value.entities = 12;
+        value.particles = 30;
+        auto java = buildDebugColumns(value, DebugLabel::JavaF3, {});
+        check(java.left.size() == 2 && java.left[1].text == "E: 12 | P: 30", "java style counts line skips a missing count");
+        GameText game;
+        game.counts = "Entities: 12";
+        auto standard = buildDebugColumns(value, DebugLabel::GameStandard, game);
+        check(standard.left.size() == 2 && standard.left[1].text == "Entities: 12", "game style shows the counts line");
+        DebugValues none;
+        check(buildDebugColumns(none, DebugLabel::JavaF3, {}).left.empty(), "no counts line without counts");
+    }
+    {
         DebugValues value;
         value.header = "Minecraft 1.26.51 · Lamium 0.1.3";
         value.timing = FrameStatistics{120.0, 8.3};

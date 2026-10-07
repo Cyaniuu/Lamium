@@ -31,6 +31,7 @@
 #include "mc/world/item/Item.h"
 #include "mc/deps/shared_types/legacy/actor/ArmorSlot.h"
 #include "features/information/DurabilityHud.h"
+#include "features/information/ClientCounters.h"
 #include "features/information/OffhandSlot.h"
 #include "features/inspection/render/PreviewLayout.h"
 #include "mc/client/gui/CaretMeasureData.h"
@@ -647,6 +648,10 @@ std::optional<DebugValues> collectDebugValues(IClientInstance& client, std::opti
     value.header = debugHeader();
     value.timing = frameStatistics();
     value.ping = connectionPing(client);
+    auto counts = clientCounters(client);
+    value.entities = counts.entities;
+    value.chunks = counts.chunks;
+    value.particles = counts.particles;
     auto const& options = client.getOptions();
     value.renderDistance = options.getViewDistanceChunks();
     value.maxRenderDistance = options.getMaxViewDistanceChunksRaw();
@@ -696,6 +701,9 @@ GameText debugGameText(DebugValues const& value) {
         appendPart(perf, ui::translated("debugRenderDistance", distance), " | ");
     }
     text.perf = std::move(perf);
+    if (value.entities) appendPart(text.counts, ui::translated("debugEntities", *value.entities), " | ");
+    if (value.chunks) appendPart(text.counts, ui::translated("debugChunks", *value.chunks), " | ");
+    if (value.particles) appendPart(text.counts, ui::translated("debugParticles", *value.particles), " | ");
     if (value.x && value.y && value.z) {
         text.coordinates = ui::translated("hudXYZ", *value.x, *value.y, *value.z);
         text.blockChunk = ui::translated("hudBlock", static_cast<int>(std::floor(*value.x)),

@@ -583,6 +583,17 @@ gaps stay under Pre-release checks and VALIDATION.
 
 ### L-57 Client info counters
 Kind: Research. Split from L-53 on 2026-09-27 (wave 2).
+Status: first version built 2026-10-08, not yet checked in game. Debug View
+shows one line after the fps line, read once a second (`ClientCounters.cpp`;
+line model in `DebugLines.h`, tested): entities = `Level::getRuntimeActorList`
+filtered to the player's dimension; chunks = the size of the dimension chunk
+source's `getStorage()` map (never walked, other threads fill it); particles
+= the sum of `ParticleEngine::particleCount` plus
+`ParticleSystemEngine::mTotalParticleCount`. Each count fails open (left out).
+The help text names what stays out. In game, check that the numbers are
+plausible (entities against what is around, chunks against render distance,
+particles rising with rain/torches/explosions), in a local world and on a
+server, and that the frame time does not change.
 - Candidate lines: loaded entity count, loaded chunk count and particle
   count. The SDK exposes `Level::getRuntimeActorList()` and
   `Level::getEntities()`, chunk tracking under `LevelChunkViewTracker`, and

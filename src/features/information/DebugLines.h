@@ -27,6 +27,7 @@ struct DebugValues {
     std::optional<FrameStatistics> timing;
     std::optional<std::int64_t> ping;
     std::optional<int> renderDistance, maxRenderDistance;
+    std::optional<int> entities, chunks, particles; // Client counts (L-57)
     std::optional<double> x, y, z;
     std::optional<float> yaw, pitch;
     std::string dimension, biome;
@@ -44,7 +45,7 @@ struct DebugColumns { std::vector<DebugLine> left, right; };
 // Game-standard lines: the caller formats with ui::translated and passes only
 // the lines it can build; an empty string omits that line.
 struct GameText {
-    std::string perf, coordinates, blockChunk, facing, light, biome, time, lookAt, dimension,
+    std::string perf, counts, coordinates, blockChunk, facing, light, biome, time, lookAt, dimension,
         renderDistance, visuals, screen, client, system, memory, cpu, gpu, display, os;
 };
 // Same quarter mapping as facingKey: yaw 0 faces south (+Z), 90 west (-X).
@@ -117,6 +118,15 @@ inline DebugColumns buildDebugColumns(DebugValues const& value, DebugLabel style
         joinPart(perf, game.perf);
     }
     if (!perf.empty()) left.push_back({std::move(perf)});
+    if (style == DebugLabel::JavaF3) {
+        std::string counts;
+        if (value.entities) joinPart(counts, std::format("E: {}", *value.entities));
+        if (value.chunks) joinPart(counts, std::format("C: {}", *value.chunks));
+        if (value.particles) joinPart(counts, std::format("P: {}", *value.particles));
+        if (!counts.empty()) left.push_back({std::move(counts)});
+    } else if (!game.counts.empty()) {
+        left.push_back({game.counts});
+    }
     if (style == DebugLabel::JavaF3) {
         if (value.x && value.y && value.z)
             left.push_back({std::format("XYZ: {:.1f} / {:.1f} / {:.1f}", *value.x, *value.y, *value.z)});

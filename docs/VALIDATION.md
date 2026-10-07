@@ -68,6 +68,7 @@ game result.
 | Durability in the tooltip (L-92) | 2026-10-02, local on `8e7f8a9` | |
 | Saturation on the hunger bar (L-63) | 2026-10-02, local: outline, half marks, held-food preview, UI size, Pocket UI, creative on `70c440c`; values also on a server (trace `8a1214b`) | Resource packs with other drumsticks; hunger effect icons |
 | Offhand slot (L-75) | 2026-10-02, local: placement, count, empty frame, UI size, Pocket UI, F1 and inventory on `bb9cdb5` | Glint on shields (L-91); servers |
+| Debug View client counts (L-57) | Not seen in game (built 2026-10-08) | Plausible entity/chunk/particle values locally and on a server, no frame-time change |
 | Target card (L-08, L-55, L-58, L-88) | 2026-09-28, local; absolute-HP hearts, five-line limit and boss bar fallback on `c6378e8` (2026-10-02); hides with F1 (L-107, `18e2cc8`, 2026-10-07); no text outside the card while it resizes (L-108, `178dc00`, 2026-10-08) | |
 | Debug View and F3 keys (L-54, L-52) | 2026-09-28, local; 2026-10-06: LeviLamina in the first line, right column on screen at UI Profile 50/75/100% (`38373e9`) | |
 | Chunk Borders (L-10), Hitboxes (L-11, L-51) | 2026-09-27, local | Exact border shades side by side |
