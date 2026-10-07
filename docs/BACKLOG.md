@@ -99,13 +99,10 @@ L-item wins. Every entry names what the task is, not only its number.
    optimization).
 6. **L-73 architecture review:** agreed 2026-09-30, in progress step by
    step (order in the L-item); step 13 goes with L-15 breaking.
-7. **Before a release:** the pre-release checks below. 0.1.7: Schematic
-   (L-93) is in a usable shape and its pre-release items were checked
-   locally (maintainer, 2026-10-07); README updated. Version bumped and the
-   release ZIP built (asset SHA-256 `2e0926e0...93b013b5`). Left: the
-   smoke test on the release-ZIP DLL, then the tag. Server checks of the
-   2026-10-06/07 work stay listed below as known gaps (Release policy does
-   not require a full regression).
+7. **Before a release:** the pre-release checks below. 0.1.7 was released
+   on 2026-10-07; server checks of the 2026-10-06/07 work stay listed
+   below as known gaps (Release policy does not require a full
+   regression).
 
 Ideas that are not yet chosen (for example more inventory transfer gestures,
 an arrow-count HUD line, a fall-rescue elytra, Mass Craft) stay
@@ -125,26 +122,17 @@ do not duplicate task details into this summary.
 Behavior confirmed only on trace builds or only locally. Check these on the
 trace-disabled release build before tagging (VALIDATION.md has the gaps per
 feature):
-- 0.1.7, schematics (L-93). Seen in game on 2026-10-07: the menu, its
-  look, ring spacing and animation (with the Animations setting), the
-  adjust key, drawing (lighter, no blink, no z-fighting or hollows inside),
-  the sidebar at UI Profile 100%. Not yet seen: the Move target item, the
-  adjust key reporting through toasts, the three menu settings (background,
-  small, reopen where closed), the adjust-key tip in the menu, the footer
-  tip while the menu key is unbound, the key group names; layer direction
-  turned to the opposite side keeping its layer; a waiting save's compass
-  toast and yellow column frames; name tags hidden behind blocks; the save
-  prompt's line spacing and caret; the large-file warning above its
-  button; honey block and door back to outlines (all looked at 2026-10-07,
-  fine but for two fixed in `7535a0d`: results under the menu, one adjust
-  toast). Review fixes in `5faf83b` (replaced files, border invalidation,
-  block-entity cache, section listing, per-column entities) and the two
-  above were seen working; then two-line adjust toasts, full-width
-  parentheses and lighter dense mistake marks (seen fine); then list
-  scrolling under the pointer with draggable scrollbars (Shapes,
-  Waypoints, Schematics), narrow-list columns, the warning and button fit,
-  HUD rule spacing (not yet seen). Then the release build smoke test and
-  the server checks of the 2026-10-06/07 work (below).
+- 0.1.7 was released on 2026-10-07 (`v0.1.7`, tag CI passed; asset SHA-256
+  `2e0926e0...93b013b5`): L-93 Schematics (experimental), L-67 Weapon
+  Switch, L-97 fixed fetch slot, L-94 offhand swap (`F`), L-95 Fake Offhand
+  item use, L-102/L-103 Hand Restock threshold/order and inventory-screen
+  transfer, L-104 map follow-ups, L-89 distant players, L-98 HUD density,
+  L-99 Zoom below 2x, L-101 version display. The maintainer's smoke test
+  passed on the release-ZIP DLL `2c3e7546...fd903806b` (`b3c6555`). No
+  settings migration. After tagging: check that the registry PR picks up
+  `v0.1.7` and that LeviLauncher/Bedrinth offer it. Schematic gaps (servers,
+  other dimensions, large files, block entities from files, half-drawn beds)
+  are in VALIDATION.md and the README's Known issues.
 - 0.1.6 was released on 2026-10-02 (`v0.1.6`, tag CI passed; asset SHA-256
   `3d864ca1...3946554f`): L-90 Simplified Chinese (first AI-assisted
   translation, corrections welcome), L-88 target hearts, L-75 offhand slot,

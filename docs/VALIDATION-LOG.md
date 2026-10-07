@@ -12,6 +12,15 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## 0.1.7 release smoke test (2026-10-07)
+
+By the maintainer, local world, release build `b3c6555`, DLL
+`2c3e7546...fd903806b` taken from the release ZIP
+`Lamium-0.1.7-client-windows-x64.zip` (`2e0926e0...93b013b5`), all trace
+options off: reported OK (the mod loads at 0.1.7, settings open, schematics
+and the other changed features work, no crash). Not covered: servers and
+the server checks listed under BACKLOG's Pre-release checks.
+
 ## L-93 list scrolling and pane fit fine; follow-ups (2026-10-07)
 
 By the maintainer, local world, `f4e402d` (DLL `314a043e...098f3a`), with
