@@ -63,6 +63,17 @@ lightning/strong-line fallbacks). Runtime work established the current
 translucent/line strategy, but alternate packs and graphics modes are not
 exhaustively covered.
 
+Depth (L-110, 2026-10-08): every face overlay follows the rules in
+`overlay/Depth.h` (tested in OverlayGeometryTests). Faces lie on their cell's
+own plane and the mesh is pulled toward the eye by a fraction, so it stays in
+front of the block face there at any distance and angle. The earlier 0.005
+inset into the cell (2026-09-23) fell behind the block face when looking at a
+grazing angle a few blocks away, which made Shapes and the breaking
+restriction's faces fight with the terrain; it is gone. Offsets along the
+normal are allowed only toward the side the camera must be on (light tints
+lift into their air cell). Pulls per layer: ghosts .998, faces and tints
+.997, light digits .995, digit lines .993.
+
 Pure tests cover type definitions, editor rows, stepping and validation,
 reference placement, preview layers and runs, and the view's hit testing.
 

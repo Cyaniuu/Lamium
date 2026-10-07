@@ -1,6 +1,7 @@
 #include "overlay/Geometry.h"
 #include "overlay/ChunkBorders.h"
 #include "overlay/Hitboxes.h"
+#include "overlay/Depth.h"
 void check(bool, char const*);
 void overlayGeometryTests() {
     using namespace lamium::overlay;
@@ -159,4 +160,32 @@ void overlayGeometryTests() {
     rejected = false;
     try { (void)boundaryFaces({{std::numeric_limits<int>::max(),0,0}}); } catch (std::out_of_range const&) { rejected = true; }
     check(rejected, "boundary neighbour arithmetic cannot overflow");
+    // L-110 depth rules: a face on a block's own plane, pulled toward the
+    // eye, stays nearer than that block face from any angle and distance; an
+    // inset into the block does not at a grazing angle.
+    {
+        using namespace lamium::overlay::depth;
+        bool pullHolds = true;
+        for (double d : {1.5, 3.0, 8.0, 40.0, 160.0})
+            for (double angle : {0.0, 45.0, 75.0, 85.0, 88.0}) {
+                double r = angle * 3.14159265358979 / 180;
+                Point eye{0, d * std::cos(r), d * std::sin(r)}, onPlane{0, 0, 0};
+                pullHolds = pullHolds && distance(eye, pulled(onPlane, eye, facePull)) < distance(eye, onPlane);
+            }
+        check(pullHolds, "a pulled face stays in front of its coplanar block face");
+        double r = 80 * 3.14159265358979 / 180;
+        Point eye{0, 3 * std::cos(r), 3 * std::sin(r)}, inset{0, -.005, 0};
+        // Compare along the same view ray: the inset point's ray meets the
+        // terrain plane farther out, so measure by depth past the plane.
+        double t = eye.y / (eye.y - inset.y);
+        Point hit{eye.x + (inset.x - eye.x) * t, 0, eye.z + (inset.z - eye.z) * t};
+        check(distance(eye, pulled(inset, eye, facePull)) > distance(eye, hit),
+              "an inset face falls behind its block face at a grazing angle");
+        auto quad = faceVertices({{3, 64, -2}, Face::Up});
+        bool flat = true;
+        for (auto const& p : quad) flat = flat && p.y == 65;
+        check(flat, "face vertices lie on the cell's own plane");
+        check(ghostPull > facePull && facePull > digitPull && digitPull > linePull,
+              "layers drawn later are pulled nearer");
+    }
 }

@@ -221,7 +221,11 @@ unmet gates for versions already published:
 ### L-110 Overlay faces z-fight with the blocks they cover
 Kind: Bug **(strong model)**. Reported by the maintainer 2026-10-08 while
 checking L-15 step 1.
-Status: open; recorded only.
+Status: fixed 2026-10-08, not yet checked in game. Cause: Shapes and the
+restriction faces were inset 0.005 into their cell; along a grazing view ray
+that inset outgrew the pull toward the eye. Faces now stay on their plane and
+every overlay takes its pull from `overlay/Depth.h` (rules and tests; see
+OVERLAYS.md "Depth").
 The breaking restriction's allowed-region faces flicker against the faces of
 the blocks they lie on, and Shapes faces show the same problem (seen earlier,
 not recorded until now). Schematic ghosts went through several rounds of the

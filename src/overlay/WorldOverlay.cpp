@@ -1,6 +1,7 @@
 #include "overlay/WorldOverlay.h"
 #include "overlay/ChunkBorders.h"
 #include "overlay/Hitboxes.h"
+#include "overlay/Depth.h"
 #include "features/camera/CameraSessions.h"
 #include "overlay/LightOverlay.h"
 #include "overlay/ShapeSession.h"
@@ -166,20 +167,6 @@ std::array<float,3> shapeColor(ShapeColor color, bool draft) {
     default: return {.25f,.82f,.88f};
     }
 }
-// Faces sit a hair inside their block so they never share a plane with the
-// terrain face next to them, which otherwise flickers (z-fighting).
-Point inset(Point p, Face face) {
-    constexpr double depth = .005;
-    switch (face) {
-    case Face::West: p.x += depth; break;
-    case Face::East: p.x -= depth; break;
-    case Face::Down: p.y += depth; break;
-    case Face::Up: p.y -= depth; break;
-    case Face::North: p.z += depth; break;
-    case Face::South: p.z -= depth; break;
-    }
-    return p;
-}
 void buildShapeMesh(ScreenContext& screen, ShapeMesh& mesh, ManagedShape const& shape, bool draft, FaceMaterial const& material) {
     bool twoSided = material.twoSided;
     mesh.faces.reset(); mesh.lines.reset();
@@ -201,8 +188,9 @@ void buildShapeMesh(ScreenContext& screen, ShapeMesh& mesh, ManagedShape const& 
         batch.begin({}, mce::PrimitiveMode::QuadList, static_cast<int>(shape.faces.size()*4*sides), false);
         batch.color(r, g, b, material.alpha);
         for (auto const& face : shape.faces) {
+            // On the cell's own plane: the pull toward the eye keeps it in
+            // front of the block face there (depth rules, Depth.h).
             auto corners = faceVertices(face);
-            for (auto& corner : corners) corner = inset(corner, face.face);
             for (auto p : corners) relative(batch, p);
             // The reverse winding keeps faces visible from inside the shape.
             if (twoSided) for (auto it = corners.rbegin(); it != corners.rend(); ++it) relative(batch, *it);
@@ -225,7 +213,7 @@ void buildShapeMesh(ScreenContext& screen, ShapeMesh& mesh, ManagedShape const& 
 // distance, so faces that run along or through existing blocks stay in front
 // of those blocks' own faces instead of flickering against them.
 template <class Draw>
-void withTowardEye(BaseActorRenderContext& context, Cell origin, Draw&& draw, float towardEye = .997f) {
+void withTowardEye(BaseActorRenderContext& context, Cell origin, Draw&& draw, float towardEye = depth::facePull) {
     ScreenContext& screen = context.mScreenContext;
     Vec3 const camera = context.mImpl->mCameraPosition;
     auto ref = screen.camera.worldMatrixStack->push(false);
@@ -460,13 +448,13 @@ void drawLightOverlay(BaseActorRenderContext& context, IClientInstance& client, 
                     vertices, OffscreenCaptureDescription{}, nullptr);
             }, towardEye);
         };
-        faces(chunk.tints, chunk.tintVertices, .997f);
-        faces(chunk.digits, chunk.digitVertices, .995f);
+        faces(chunk.tints, chunk.tintVertices, depth::facePull);
+        faces(chunk.digits, chunk.digitVertices, depth::digitPull);
         if (chunk.lines && lineMaterial.mRenderMaterialInfoPtr)
             withTowardEye(context, origin, [&] {
                 chunk.lines->renderMesh(screen, lineMaterial, gsl::span<mce::ClientTexture const*>{}, 0,
                     chunk.lineVertices, OffscreenCaptureDescription{}, nullptr);
-            }, .993f);
+            }, depth::linePull);
     }
 }
 LL_TYPE_INSTANCE_HOOK(WorldLines, ll::memory::HookPriority::Normal, LevelRendererPlayer,

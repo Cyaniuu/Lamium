@@ -3,6 +3,7 @@
 #include "features/schematic/SchematicItems.h"
 #include "features/schematic/Selection.h"
 #include "features/schematic/GhostFaces.h"
+#include "overlay/Depth.h"
 #include "app/AtomicFile.h"
 #include "ui/Localization.h"
 #include "app/Runtime.h"
@@ -88,7 +89,7 @@ constexpr std::chrono::milliseconds refreshNear{250}, refreshFar{2000};
 constexpr double nearDistance = 24;
 constexpr std::chrono::milliseconds lookedDelay{100};
 constexpr double drawDistance = 192;  // Sections farther than this are not built or drawn.
-constexpr float towardEye = .998f;    // Like shapes: stay in front of coplanar terrain faces.
+constexpr float towardEye = overlay::depth::ghostPull; // Depth rules: overlay/Depth.h.
 
 struct Outline { glm::vec3 min, max; float r, g, b; };
 struct EntityCell { BlockPos pos; Block const* block; };
