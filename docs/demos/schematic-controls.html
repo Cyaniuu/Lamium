@@ -11,72 +11,77 @@
   color-scheme: dark;
   --ground:#15181a; --ground-2:#1c2124; --line:#2c3337; --ink:#e6ebe8; --ink-2:#a6b0ab; --ink-3:#77827c;
   --accent:#6cc349; --accent-deep:#3c8527;
-  --mc-panel:16,17,19; --mc-edge:rgba(255,255,255,.14); --mc-dim:#b4b8b6; --mc-faint:#7f8583;
-  --mc-key:#2b2c2d; --mc-key-edge:#5a5b5c; --mc-warn:#ffc24a; --mc-bad:#ff5a4e;
+  --mc-panel:16,17,19; --mc-dim:#b4b8b6; --mc-faint:#7f8583;
+  --mc-key:#2b2c2d; --mc-key-edge:#5a5b5c; --mc-warn:#ffc24a;
   --mc-font:"DotGothic16","MS Gothic","Osaka-Mono",monospace;
 }
 *{box-sizing:border-box}
 body{background:var(--ground);color:var(--ink);font:15px/1.65 "Noto Sans JP",system-ui,sans-serif;margin:0}
-.wrap{max-width:1120px;margin:0 auto;padding:28px 16px 64px;display:grid;gap:22px}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 16px 64px;display:grid;gap:22px}
 h1{font:700 26px/1.25 "Noto Sans JP",sans-serif;margin:0}
 h2{font:700 18px/1.4 "Noto Sans JP",sans-serif;margin:0 0 8px}
 p{margin:0}
-.lede{color:var(--ink-2);max-width:78ch;margin-top:8px}
+.lede{color:var(--ink-2);max-width:80ch;margin-top:8px}
 .eyebrow{font:500 12px/1 "Noto Sans JP",sans-serif;letter-spacing:.12em;color:var(--accent);margin-bottom:10px}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
 .tabs button{all:unset;cursor:pointer;background:var(--ground-2);color:var(--ink-2);border:1px solid var(--line);font-size:13.5px;padding:7px 14px}
 .tabs button[aria-selected=true]{background:var(--accent-deep);border-color:var(--accent);color:#fff}
 .demo{display:grid;grid-template-columns:minmax(0,640px) minmax(0,1fr);gap:18px;align-items:start}
-@media (max-width:900px){.demo{grid-template-columns:1fr}}
+@media (max-width:960px){.demo{grid-template-columns:1fr}}
 .stage{position:relative;width:100%;aspect-ratio:4/3;background:#000;border:1px solid var(--line);overflow:hidden;user-select:none;font-family:var(--mc-font);color:#fff;outline:none}
 .stage:focus{border-color:var(--accent)}
 .stage canvas{position:absolute;inset:0;width:100%;height:100%}
-.hint{position:absolute;left:50%;top:calc(50% + 22px);transform:translateX(-50%);background:rgba(var(--mc-panel),.72);padding:4px 8px;font-size:12px;line-height:16px;white-space:nowrap;text-align:center}
+.hint{position:absolute;left:50%;top:calc(50% + 24px);transform:translateX(-50%);background:rgba(var(--mc-panel),.72);padding:4px 8px;font-size:12px;line-height:16px;white-space:nowrap;text-align:center}
 .hint .k{color:var(--accent)} .hint .d{color:var(--mc-dim);font-size:11px}
 .toast{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:rgba(var(--mc-panel),.72);padding:3px 8px;font-size:12px;white-space:nowrap}
-.focus{position:absolute;inset:auto 8px 8px auto;font-size:11px;color:var(--mc-faint)}
-.radial{position:absolute;left:50%;top:50%;width:0;height:0}
-.radial .it{position:absolute;transform:translate(-50%,-50%);background:rgba(var(--mc-panel),.82);box-shadow:inset 0 0 0 1px var(--mc-key-edge);padding:3px 7px;font-size:12px;white-space:nowrap}
-.radial .it.on{background:#3c8527;box-shadow:inset 0 0 0 1px #6cc349}
-.radial .page{position:absolute;transform:translate(-50%,-50%);font-size:11px;color:var(--mc-dim);white-space:nowrap;text-align:center}
+.focus{position:absolute;right:8px;bottom:8px;font-size:11px;color:var(--mc-faint)}
+.menu{position:absolute;inset:0;background:rgba(0,0,0,.25)}
+.menu .it{position:absolute;transform:translate(-50%,-50%);background:rgba(var(--mc-panel),.86);box-shadow:inset 0 0 0 1px var(--mc-key-edge);padding:3px 8px;font-size:12px;line-height:15px;white-space:nowrap;text-align:center;min-width:64px}
+.menu .it .v{display:block;color:var(--mc-dim);font-size:11px}
+.menu .it.cat{color:#fff}
+.menu .it.on{background:#3c8527;box-shadow:inset 0 0 0 1px #6cc349}
+.menu .it.on .v{color:#e8ffe0}
+.menu .center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:170px;text-align:center;background:rgba(var(--mc-panel),.86);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);padding:6px 8px;font-size:12px;line-height:16px}
+.menu .center .t{font-size:13px} .menu .center .d{color:var(--mc-dim);font-size:11px}
 .side{display:grid;gap:12px}
 .card{background:var(--ground-2);border:1px solid var(--line);padding:12px 14px}
 .card h3{font:700 14.5px/1.4 "Noto Sans JP",sans-serif;margin:0 0 6px}
-.keys{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:13.5px}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:13px;align-items:baseline}
 kbd{font:12px var(--mc-font);background:var(--mc-key);box-shadow:inset 0 0 0 1px var(--mc-key-edge);padding:1px 6px;white-space:nowrap;color:#fff}
 .small{font-size:13px;color:var(--ink-2)}
 ul{margin:0;padding-left:1.2em} li{margin:2px 0}
 .pro{color:var(--accent)} .con{color:var(--mc-warn)}
+.state{display:grid;grid-template-columns:auto 1fr;gap:1px 12px;font:12.5px/1.55 var(--mc-font)}
+.state .k{color:var(--mc-dim)} .state .flash{color:#b8ff9a}
+.state .sec{grid-column:1/-1;color:var(--accent);margin-top:4px;font-size:12px}
+.ctrl{display:flex;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2);align-items:center}
+.ctrl button{all:unset;cursor:pointer;background:var(--ground-2);border:1px solid var(--line);padding:3px 9px}
+.ctrl button[aria-pressed=true]{background:var(--accent-deep);border-color:var(--accent);color:#fff}
 table{border-collapse:collapse;width:100%;font-size:13.5px}
 th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
 th{color:var(--ink-2);font-weight:500}
 .tablewrap{overflow-x:auto}
-.ctrl{display:flex;gap:6px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-2);align-items:center}
-.ctrl button{all:unset;cursor:pointer;background:var(--ground-2);border:1px solid var(--line);padding:3px 9px}
-.ctrl button[aria-pressed=true]{background:var(--accent-deep);border-color:var(--accent);color:#fff}
 .box{border:1px solid var(--line);padding:14px 16px;background:var(--ground-2)}
 .box h2{font-size:16px}
 </style>
 <div class="wrap">
   <header>
-    <div class="eyebrow">L-93 SCHEMATIC · 操作方法の比較</div>
-    <h1>設計図の操作：キーを減らす 4 つの案</h1>
-    <p class="lede">今は単機能のキーが 20 個以上あります。同じことを少ないキーでできる案を、上から見た簡易ワールドで試せるようにしました。
-      ワールドの枠をクリックしてから、案ごとの操作を試してください。<b>緑の枠</b>は選択中の配置、<b>白い枠</b>は保存範囲（<span style="color:#ff6a5e">角 1</span>・<span style="color:#7aa6ff">角 2</span>）です。</p>
+    <div class="eyebrow">L-93 SCHEMATIC · 操作方法の比較（2 回目）</div>
+    <h1>設計図の操作：メニュー＋α の 2 案</h1>
+    <p class="lede">前回の 4 案（長押し＋ホイール / ラジアルメニュー / 併用 / 棒）を踏まえた折衷案です。どちらも同じ<b>設計図メニュー</b>を使い、メニューからは設定画面で配置・範囲についてできることのほとんどに届きます。
+      違いはメニューの外の操作で、<b>E</b> は機能ごとの個別キー（任意）、<b>F</b> は「直前の調整をホイールで繰り返すキー」を別に持ちます。ワールドをクリックしてから試してください。</p>
   </header>
 
   <div class="tabs" role="tablist">
-    <button role="tab" data-opt="A" aria-selected="true">A 長押し＋ホイール</button>
-    <button role="tab" data-opt="B" aria-selected="false">B ラジアルメニュー</button>
-    <button role="tab" data-opt="C" aria-selected="false">C A＋B の併用（推し）</button>
-    <button role="tab" data-opt="D" aria-selected="false">D 棒を持って操作（参考）</button>
+    <button role="tab" data-opt="E" aria-selected="true">E メニュー＋機能ごとのキー</button>
+    <button role="tab" data-opt="F" aria-selected="false">F メニュー＋調整キー（別のキー）</button>
   </div>
 
   <div class="demo">
     <div>
       <div class="stage" id="stage" tabindex="0">
         <canvas id="cv" width="640" height="480"></canvas>
-        <div class="radial" id="radial" hidden></div>
+        <div class="menu" id="menu" hidden></div>
         <div class="hint" id="hint" hidden></div>
         <div class="toast" id="toast" hidden></div>
         <div class="focus" id="focus">クリックして操作開始</div>
@@ -84,34 +89,41 @@ th{color:var(--ink-2);font-weight:500}
       <div class="ctrl" style="margin-top:8px">
         <span>向き:</span>
         <button data-look="0">東</button><button data-look="1">南</button><button data-look="2">西</button><button data-look="3">北</button>
-        <button data-look="down" id="lookdown">見下ろす</button>
-        <span style="margin-left:8px">（マウスを左右に動かしても向きが変わります）</span>
+        <span style="margin-left:6px">視線:</span>
+        <button data-pitch="0">水平</button><button data-pitch="1">見下ろす</button>
       </div>
     </div>
-    <div class="side" id="side"></div>
+    <div class="side">
+      <div id="explain"></div>
+      <div class="card"><h3>今の値（設定画面と同じ項目）</h3><div class="state" id="state"></div></div>
+    </div>
   </div>
+
+  <section>
+    <h2>設計図メニューの中身</h2>
+    <p class="small" style="margin-bottom:8px">8 つの分類 → 項目。<b>クリック</b>で実行、<b>ホイール</b>で値を変える（「ステッパー」の項目）。右クリックで 1 つ戻る、メニューのキーか Esc で閉じる。名前の変更とファイル選び・削除の確認は今どおり画面で。</p>
+    <div class="tablewrap"><table id="menutable"></table></div>
+  </section>
 
   <section>
     <h2>比べると</h2>
     <div class="tablewrap"><table>
-      <tr><th></th><th>A 長押し＋ホイール</th><th>B ラジアルメニュー</th><th>C 併用</th><th>D 棒</th></tr>
-      <tr><th>最低限のキー</th><td>1（＋画面を開くキー）</td><td>1（＋画面を開くキー）</td><td>1（＋画面を開くキー）</td><td>0（棒を持つだけ）</td></tr>
-      <tr><th>少しずつ動かす</th><td class="pro">得意（ホイール 1 目盛り = 1 ブロック）</td><td class="con">毎回メニューを開く</td><td class="pro">得意</td><td class="pro">得意（スニーク＋ホイール）</td></tr>
-      <tr><th>1 回きりの操作</th><td class="con">モード切替が増える</td><td class="pro">得意（向けて離すだけ）</td><td class="pro">得意</td><td class="con">クリックの割り当てが足りない</td></tr>
-      <tr><th>覚えやすさ</th><td>モードを覚える必要</td><td class="pro">項目が見える</td><td>2 つの使い分け</td><td class="pro">直感的</td></tr>
-      <tr><th>ほかの操作との衝突</th><td>長押し中だけホイールを奪う</td><td>開いている間だけマウスを奪う</td><td>同左</td><td class="con">棒を持つと通常の右・左クリックを奪う。持ち替えが必要</td></tr>
-      <tr><th>今の単機能キー</th><td colspan="4">どの案でも残し、割り当てたい人だけ使う上級者向けにする（既定は未割り当てのまま）</td></tr>
+      <tr><th></th><th>E メニュー＋機能ごとのキー</th><th>F メニュー＋調整キー</th></tr>
+      <tr><th>必須のキー</th><td>1（メニュー）</td><td>2（メニュー・調整）</td></tr>
+      <tr><th>よく使う操作を速く</th><td>使う機能だけ個別キーを割り当てる（今のキーをそのまま使える）</td><td>メニューで一度選んだ調整（例: 上下、層）を、調整キー＋ホイールで何度でも</td></tr>
+      <tr><th>覚えること</th><td>自分で割り当てたキーだけ</td><td>「調整キーは直前の調整を繰り返す」だけ</td></tr>
+      <tr><th>キーの数</th><td class="con">割り当てを増やすほど多くなる</td><td class="pro">2 つのまま</td></tr>
+      <tr><th>短押し / 長押しの区別</th><td class="pro">なし</td><td class="pro">なし（キーが別）</td></tr>
     </table></div>
   </section>
 
   <section class="box">
     <h2>確認したいこと</h2>
     <ul>
-      <li>どの案（または組み合わせ）が良いか。推しは C：<b>長押し＋ホイール</b>で少しずつ動かし、<b>短く押す</b>とメニューで 1 回きりの操作。</li>
-      <li>「対象」の考え方：選択中の配置・角 1・角 2・範囲全体を 1 つの「対象」として切り替え、同じ操作で動かす形でよいか。</li>
-      <li>A/C の長押しキーの既定：未割り当てにするか、空いているキー（例: <kbd>R</kbd>）を既定にするか。</li>
-      <li>メニューの項目と並び（下のページ分け）。照合（最寄りの間違い）や画面を開く項目も入れるか。</li>
-      <li>D（棒）は要望が出たら追加、でよいか。</li>
+      <li>E と F のどちらが良いか（両方入れて、個別キーも調整キーも任意にする手もある）。</li>
+      <li>メニューの分類と項目（下の表）に足りないもの・要らないものはないか。</li>
+      <li>「移動」は<b>動かす対象</b>（選択中の配置 / 角 1 / 角 2 / 範囲全体）に効く形でよいか。</li>
+      <li>メニューを開いている間はゲームが止まらない（今の Lamium の画面と同じくマウスを奪うだけ）想定でよいか。</li>
     </ul>
   </section>
 </div>
@@ -119,221 +131,294 @@ th{color:var(--ink-2);font-weight:500}
 <script>
 (() => {
 const cv = document.getElementById('cv'), g = cv.getContext('2d');
-const stage = document.getElementById('stage'), hintEl = document.getElementById('hint'), toastEl = document.getElementById('toast');
-const radialEl = document.getElementById('radial'), side = document.getElementById('side'), focusEl = document.getElementById('focus');
-const CELL = 20, W = 32, H = 24;
+const stage = document.getElementById('stage'), menuEl = document.getElementById('menu'), hintEl = document.getElementById('hint');
+const toastEl = document.getElementById('toast'), focusEl = document.getElementById('focus'), stateEl = document.getElementById('state');
+const CELL = 20;
 const DIRS = [[1,0,'東'],[0,1,'南'],[-1,0,'西'],[0,-1,'北']];
-const st = {
-  opt:'A', look:0, down:false, player:{x:8,y:15},
-  placement:{x:12,y:6,w:6,d:4,rot:0,mirror:0,layer:'すべて',layerN:0}, other:{x:22,y:14,w:5,d:5},
-  sel:{a:{x:4,y:3},b:{x:8,y:7}},
-  target:0, mode:0, held:false, heldAt:0, usedWheel:false, radial:false, page:0, pick:-1, stick:false,
-  toast:'', toastAt:0, mouse:{x:0,y:0},
-};
+const AXES = ['下から','上から','西から','東から','北から','南から'];
+const LMODES = ['すべて','この層だけ','ここまで'];
+const MIRRORS = ['なし','東西','南北'];
 const TARGETS = ['選択中の配置','角 1','角 2','範囲全体'];
-const MODES = ['移動','回転・反転','層'];
-const PAGES = [
-  {name:'配置', items:['足元へ','右に 90°','反転','層 ↑','層 ↓','この層だけ','次の配置','見ている配置']},
-  {name:'範囲', items:['角 1 をここに','角 2 をここに','範囲を保存…','範囲を消す','対象: 角 1','対象: 角 2','対象: 範囲全体','対象: 配置']},
-  {name:'照合・画面', items:['最寄りの間違い','照合タブ','資材タブ','配置タブ','ファイル','HUD 切替','表示切替','設計図を隠す']},
-];
+const st = {
+  opt:'E', look:0, pitch:0, player:{x:7,y:64,z:16},
+  places:[
+    {name:'hut', x:12,y:64,z:6, w:6,h:5,d:4, rot:0, mirror:0, visible:true, axis:0, mode:0, layer:0, extras:true, entities:true},
+    {name:'farm', x:22,y:63,z:14, w:5,h:3,d:5, rot:0, mirror:0, visible:true, axis:0, mode:0, layer:0, extras:false, entities:true},
+  ],
+  selected:0, sel:{a:{x:3,y:64,z:3}, b:{x:7,y:67,z:7}}, target:0, hud:true, enabled:true,
+  menu:null, hover:-1, last:null, adjustHeld:false, changed:new Set(), toast:'', toastAt:0, mouse:{x:0,y:0},
+};
+const P = () => st.places[st.selected];
+const looked = () => { const d = DIRS[st.look]; return st.pitch ? {x:st.player.x+d[0], y:st.player.y-1, z:st.player.z+d[1]} : {x:st.player.x+d[0]*3, y:st.player.y, z:st.player.z+d[1]*3}; };
+const layerCount = p => { const turned = p.rot % 2; const w = turned ? p.d : p.w, d = turned ? p.w : p.d; return p.axis < 2 ? p.h : p.axis < 4 ? w : d; };
 
-function toast(t){ st.toast = t; st.toastAt = performance.now(); render(); }
-function lookStep(){ return st.down ? null : DIRS[st.look]; }
-function lookedCell(){ const d = DIRS[st.look]; return {x:st.player.x + d[0]*3, y:st.player.y + d[1]*3}; }
-function moveTarget(n){
-  const d = lookStep();
-  const dx = d ? d[0]*n : 0, dy = d ? d[1]*n : 0, up = d ? 0 : n;
-  const t = TARGETS[st.target];
-  const sh = (p) => { p.x += dx; p.y += dy; };
-  if (t === '選択中の配置'){ sh(st.placement); }
-  else if (t === '角 1') sh(st.sel.a);
-  else if (t === '角 2') sh(st.sel.b);
-  else { sh(st.sel.a); sh(st.sel.b); }
-  toast(`${t} を${d ? d[2] : (up > 0 ? '上' : '下')}へ ${Math.abs(n)} ブロック` + (d && n < 0 ? '（手前）' : ''));
+function mark(...keys){ keys.forEach(k => st.changed.add(k)); setTimeout(() => { keys.forEach(k => st.changed.delete(k)); renderState(); }, 900); }
+function toast(t){ st.toast = t; st.toastAt = performance.now(); }
+function shift(dx, dy, dz){
+  const t = st.target;
+  const mv = o => { o.x += dx; o.y += dy; o.z += dz; };
+  if (t === 0){ mv(P()); mark('X','Y','Z'); }
+  if (t === 1 || t === 3) { if (st.sel.a) mv(st.sel.a); mark('a'); }
+  if (t === 2 || t === 3) { if (st.sel.b) mv(st.sel.b); mark('b'); }
 }
-function wheel(n){
-  if (st.opt === 'D'){ if (!st.stick) return; if (!st.sneak) return; moveTarget(n); return; }
-  if (st.radial){ st.page = (st.page + (n > 0 ? 1 : PAGES.length - 1)) % PAGES.length; render(); return; }
-  if (!st.held || st.opt === 'B') return;
-  st.usedWheel = true;
-  if (MODES[st.mode] === '移動') moveTarget(n);
-  else if (MODES[st.mode] === '回転・反転'){
-    if (st.shift){ st.placement.mirror = (st.placement.mirror + 1) % 3; toast('反転: ' + ['なし','東西','南北'][st.placement.mirror]); }
-    else { st.placement.rot = (st.placement.rot + (n > 0 ? 1 : 3)) % 4; const p = st.placement; [p.w,p.d] = [p.d,p.w]; toast(`配置を ${st.placement.rot*90}° に`); }
-  } else { st.placement.layerN = Math.max(0, st.placement.layerN + n); st.placement.layer = 'この層だけ'; toast(`層 ${st.placement.layerN + 1} だけ表示`); }
+// Moves relative to the view: forward/back and left/right follow the facing.
+function along(kind, n){
+  const d = DIRS[st.look];
+  if (kind === 'fb') shift(d[0]*n, 0, d[1]*n);
+  else if (kind === 'lr') shift(-d[1]*n, 0, d[0]*n);
+  else shift(0, n, 0);
 }
-function runItem(label){
-  const c = lookedCell();
-  switch(label){
-    case '足元へ': st.placement.x = st.player.x; st.placement.y = st.player.y; break;
-    case '右に 90°': { st.placement.rot = (st.placement.rot+1)%4; const p = st.placement; [p.w,p.d]=[p.d,p.w]; break; }
-    case '反転': st.placement.mirror = (st.placement.mirror+1)%3; break;
-    case '角 1 をここに': st.sel.a = {...c}; break;
-    case '角 2 をここに': st.sel.b = {...c}; break;
-    case '範囲を消す': st.sel.a = null; st.sel.b = null; break;
-    case '対象: 角 1': st.target = 1; break; case '対象: 角 2': st.target = 2; break;
-    case '対象: 範囲全体': st.target = 3; break; case '対象: 配置': st.target = 0; break;
-    case '次の配置': { const o = st.other; st.other = {x:st.placement.x,y:st.placement.y,w:st.placement.w,d:st.placement.d}; Object.assign(st.placement,o); break; }
-  }
-  toast(label.startsWith('対象') ? label + ' に切り替え（ホイールで動かす）' : '実行: ' + label);
+
+// ---- the menu: categories, then items. step(n) for the wheel, act() for a click.
+function item(label, value, act, step){ return {label, value, act, step}; }
+function categories(){
+  const p = P();
+  return [
+    {name:'移動', items:[
+      item('前後', () => '奥 / 手前', () => along('fb', 1), n => along('fb', n)),
+      item('左右', () => '右 / 左', () => along('lr', 1), n => along('lr', n)),
+      item('上下', () => '上 / 下', () => along('ud', 1), n => along('ud', n)),
+      item('足元へ', () => '', () => { const t = st.player; if (st.target === 0){ Object.assign(p,{x:t.x,y:t.y,z:t.z}); mark('X','Y','Z'); } else { const o = st.target===2 ? st.sel.b : st.sel.a; if (o){ Object.assign(o,{x:t.x,y:t.y,z:t.z}); mark(st.target===2?'b':'a'); } } }),
+      item('X', () => target3().x, () => shift(1,0,0), n => shift(n,0,0)),
+      item('Y', () => target3().y, () => shift(0,1,0), n => shift(0,n,0)),
+      item('Z', () => target3().z, () => shift(0,0,1), n => shift(0,0,n)),
+      item('動かす対象', () => TARGETS[st.target], () => { st.target = (st.target+1)%4; mark('target'); }, n => { st.target = (st.target+n+4)%4; mark('target'); }),
+    ]},
+    {name:'向き', items:[
+      item('回転', () => `${p.rot*90}°`, () => turn(1), n => turn(n)),
+      item('反転', () => MIRRORS[p.mirror], () => { p.mirror = (p.mirror+1)%3; mark('mirror'); }, n => { p.mirror = (p.mirror+n+3)%3; mark('mirror'); }),
+      item('元に戻す', () => '0° / なし', () => { while (p.rot) turn(1); p.mirror = 0; mark('rot','mirror'); }),
+    ]},
+    {name:'層', items:[
+      item('層の向き', () => AXES[p.axis], () => setAxis(1), n => setAxis(n)),
+      item('表示のしかた', () => LMODES[p.mode], () => { p.mode = (p.mode+1)%3; mark('mode'); }, n => { p.mode = (p.mode+n+3)%3; mark('mode'); }),
+      item('層', () => `${p.layer+1} / ${layerCount(p)}`, () => setLayer(1), n => setLayer(n)),
+      item('今いる層', () => '', () => { p.layer = Math.max(0, Math.min(layerCount(p)-1, st.player.y - p.y)); if (!p.mode) p.mode = 1; mark('layer','mode'); }),
+      item('すべて表示', () => '', () => { p.mode = 0; mark('mode'); }),
+    ]},
+    {name:'表示', items:[
+      item('この配置', () => p.visible ? '表示' : '隠す', () => { p.visible = !p.visible; mark('visible'); }, () => { p.visible = !p.visible; mark('visible'); }),
+      item('余計なブロック', () => p.extras ? '赤で示す' : '無視', () => { p.extras = !p.extras; mark('extras'); }, () => { p.extras = !p.extras; mark('extras'); }),
+      item('エンティティ', () => p.entities ? '表示・照合' : 'なし', () => { p.entities = !p.entities; mark('entities'); }, () => { p.entities = !p.entities; mark('entities'); }),
+      item('設計図の HUD', () => st.hud ? 'オン' : 'オフ', () => { st.hud = !st.hud; mark('hud'); }, () => { st.hud = !st.hud; mark('hud'); }),
+      item('設計図', () => st.enabled ? 'オン' : 'オフ', () => { st.enabled = !st.enabled; mark('enabled'); }, () => { st.enabled = !st.enabled; mark('enabled'); }),
+    ]},
+    {name:'範囲', items:[
+      item('角 1 をここに', () => '見ているブロック', () => { st.sel.a = looked(); mark('a'); }),
+      item('角 2 をここに', () => '見ているブロック', () => { st.sel.b = looked(); mark('b'); }),
+      item('角 1 を足元に', () => '', () => { st.sel.a = {...st.player}; mark('a'); }),
+      item('角 2 を足元に', () => '', () => { st.sel.b = {...st.player}; mark('b'); }),
+      item('動かす対象', () => TARGETS[st.target], () => { st.target = (st.target+1)%4; mark('target'); }, n => { st.target = (st.target+n+4)%4; mark('target'); }),
+      item('範囲を保存…', () => '保存の画面', () => toast('保存の画面を開く（名前・エンティティ）')),
+      item('範囲を消す', () => '', () => { st.sel.a = st.sel.b = null; mark('a','b'); }),
+    ]},
+    {name:'配置', items:[
+      item('選択中の配置', () => P().name, () => nextPlace(1), n => nextPlace(n)),
+      item('見ている配置', () => '視線の先', () => toast('視線の先の配置を選択')),
+      item('ファイルから置く…', () => '画面のファイル', () => toast('設計図の画面をファイルタブで開く')),
+      item('配置を消す…', () => '画面で確認', () => toast('配置タブで削除の確認')),
+    ]},
+    {name:'照合', items:[
+      item('最寄りの間違い', () => '箱と光の柱', () => toast('最寄りの間違い: 違う 4 m 先')),
+      item('次の間違い', () => '', () => toast('次の間違い: 状態違い 7 m 先')),
+      item('照合タブ', () => '画面', () => toast('設計図の画面を照合タブで開く')),
+      item('資材タブ', () => '画面', () => toast('設計図の画面を資材タブで開く')),
+    ]},
+    {name:'画面', items:[
+      item('ファイル', () => '', () => toast('設計図の画面: ファイル')),
+      item('配置', () => '', () => toast('設計図の画面: 配置')),
+      item('照合', () => '', () => toast('設計図の画面: 照合')),
+      item('資材', () => '', () => toast('設計図の画面: 資材')),
+      item('キーの設定', () => '', () => toast('設定の「設計図」へ')),
+    ]},
+  ];
 }
-function pickFromMouse(){
-  const r = stage.getBoundingClientRect(), cx = r.width/2, cy = r.height/2;
-  const dx = st.mouse.x - cx, dy = st.mouse.y - cy;
-  if (Math.hypot(dx,dy) < 30) return -1;
-  let a = Math.atan2(dy, dx) + Math.PI/2; if (a < 0) a += Math.PI*2;
-  return Math.round(a / (Math.PI*2/8)) % 8;
+function target3(){ return st.target === 0 ? P() : st.target === 2 ? (st.sel.b || {x:'-',y:'-',z:'-'}) : (st.sel.a || {x:'-',y:'-',z:'-'}); }
+function turn(n){ const p = P(); for (let i = 0; i < (n+4)%4; ++i){ p.rot = (p.rot+1)%4; } mark('rot'); }
+function setAxis(n){ const p = P(); p.axis = (p.axis+n+6)%6; p.layer = Math.min(p.layer, layerCount(p)-1); mark('axis','layer'); }
+function setLayer(n){ const p = P(); if (!p.mode) p.mode = 1; p.layer = Math.max(0, Math.min(layerCount(p)-1, p.layer+n)); mark('layer','mode'); }
+function nextPlace(n){ st.selected = (st.selected+n+st.places.length)%st.places.length; mark('place'); }
+
+function menuItems(){ const cats = categories(); return st.menu.cat < 0 ? cats.map(c => ({label:c.name, cat:true})) : cats[st.menu.cat].items; }
+function positions(n){ const R = 150; return Array.from({length:n}, (_, i) => { const a = i*Math.PI*2/n - Math.PI/2; return [Math.cos(a)*R, Math.sin(a)*R*.72]; }); }
+function hoverFromMouse(){
+  const r = stage.getBoundingClientRect(), sx = 640 / r.width, sy = 480 / r.height;
+  const mx = st.mouse.x * sx - 320, my = st.mouse.y * sy - 240;
+  if (Math.hypot(mx, my/0.72) < 70) return -1;
+  const n = menuItems().length;
+  let a = Math.atan2(my/0.72, mx) + Math.PI/2; if (a < 0) a += Math.PI*2;
+  return Math.round(a / (Math.PI*2/n)) % n;
+}
+function use(it, n){
+  if (n === undefined){ if (it.act) it.act(); } else if (it.step) it.step(n); else return;
+  if (it.step) st.last = it.label === '動かす対象' ? st.last : {cat:st.menu.cat, label:it.label};
+  toast(`${it.label}${it.value && it.value() !== '' ? ': ' + it.value() : ''}`);
 }
 
 // ---- input
-const KEY = 'g';
+const MENU = 'm', ADJ = 'g';
 stage.addEventListener('keydown', e => {
-  st.shift = e.shiftKey;
-  if (e.key.toLowerCase() === KEY && !e.repeat){
-    e.preventDefault();
-    if (st.opt === 'D') return;
-    st.held = true; st.heldAt = performance.now(); st.usedWheel = false;
-    if (st.opt === 'B'){ st.radial = true; st.pick = -1; }
-    render();
-  } else if (e.key === 'Tab' && st.held && st.opt === 'A'){
-    e.preventDefault(); st.target = (st.target + 1) % TARGETS.length; toast('対象: ' + TARGETS[st.target]);
-  } else if (e.key === 'Shift' && st.opt === 'D'){ st.sneak = true; render(); }
+  const k = e.key.toLowerCase();
+  if (k === MENU && !e.repeat){ e.preventDefault(); st.menu = st.menu ? null : {cat:-1}; st.hover = -1; render(); return; }
+  if (k === 'escape' && st.menu){ st.menu = null; render(); return; }
+  if (st.opt === 'F' && k === ADJ && !e.repeat){ e.preventDefault(); st.adjustHeld = true; render(); return; }
+  if (st.opt === 'E' && !st.menu && /^[1-8]$/.test(k)){
+    const binds = [['移動','前後',1],['移動','前後',-1],['移動','上下',1],['移動','上下',-1],['向き','回転',1],['層','層',1],['層','層',-1],['範囲','角 1 をここに']];
+    const [cn, label, n] = binds[+k-1];
+    const it = categories().find(c => c.name === cn).items.find(i => i.label === label);
+    if (n === undefined) it.act(); else it.step(n);
+    toast(`個別キー ${k}: ${label}${n !== undefined ? (n > 0 ? ' +' : ' −') : ''}${it.value() ? '（' + it.value() + '）' : ''}`); render();
+  }
 });
-stage.addEventListener('keyup', e => {
-  st.shift = e.shiftKey;
-  if (e.key === 'Shift' && st.opt === 'D'){ st.sneak = false; render(); }
-  if (e.key.toLowerCase() !== KEY) return;
-  if (st.opt === 'D') return;
-  const quick = performance.now() - st.heldAt < 250 && !st.usedWheel;
-  st.held = false;
-  if (st.opt === 'B' || (st.opt === 'C' && st.radial)){
-    if (st.pick >= 0) runItem(PAGES[st.page].items[st.pick]);
-    st.radial = false;
-  } else if (st.opt === 'C' && quick){ st.radial = true; st.pick = -1; }
-  render();
-});
-stage.addEventListener('wheel', e => { e.preventDefault(); wheel(e.deltaY < 0 ? 1 : -1); }, {passive:false});
+stage.addEventListener('keyup', e => { if (e.key.toLowerCase() === ADJ){ st.adjustHeld = false; render(); } });
+stage.addEventListener('wheel', e => {
+  e.preventDefault();
+  const n = e.deltaY < 0 ? 1 : -1;
+  if (st.menu){
+    if (st.menu.cat < 0 || st.hover < 0) return;
+    use(menuItems()[st.hover], n); render(); return;
+  }
+  if (st.opt === 'F' && st.adjustHeld && st.last){
+    const it = categories()[st.last.cat].items.find(i => i.label === st.last.label);
+    it.step(n); toast(`${it.label}: ${it.value()}`); render();
+  }
+}, {passive:false});
 stage.addEventListener('mousedown', e => {
   stage.focus();
-  if (st.opt === 'D' && st.stick){
-    const c = lookedCell();
-    if (e.button === 0){ st.sel.a = {...c}; toast('角 1 をここに（棒で左クリック）'); }
-    if (e.button === 2){ st.sel.b = {...c}; toast('角 2 をここに（棒で右クリック）'); }
-    return;
-  }
-  if (st.radial && e.button === 0){ if (st.pick >= 0) runItem(PAGES[st.page].items[st.pick]); st.radial = false; render(); return; }
-  if (st.held && e.button === 2 && (st.opt === 'A' || st.opt === 'C')){ st.mode = (st.mode + 1) % MODES.length; st.usedWheel = true; toast('モード: ' + MODES[st.mode]); }
+  if (!st.menu) return;
+  if (e.button === 2){ if (st.menu.cat >= 0) st.menu.cat = -1; else st.menu = null; st.hover = -1; render(); return; }
+  if (e.button !== 0 || st.hover < 0) return;
+  if (st.menu.cat < 0){ st.menu.cat = st.hover; st.hover = -1; render(); return; }
+  use(menuItems()[st.hover]); render();
 });
 stage.addEventListener('contextmenu', e => e.preventDefault());
-let lastX = null;
 stage.addEventListener('mousemove', e => {
   const r = stage.getBoundingClientRect(); st.mouse = {x:e.clientX - r.left, y:e.clientY - r.top};
-  if (st.radial){ st.pick = pickFromMouse(); render(); return; }
-  if (lastX !== null && Math.abs(e.clientX - lastX) > 60){ st.look = (st.look + (e.clientX > lastX ? 1 : 3)) % 4; lastX = e.clientX; render(); }
-  if (lastX === null) lastX = e.clientX;
+  if (st.menu){ const h = hoverFromMouse(); if (h !== st.hover){ st.hover = h; render(); } }
 });
-stage.addEventListener('mouseleave', () => { lastX = null; });
 stage.addEventListener('focus', () => { focusEl.hidden = true; });
-stage.addEventListener('blur', () => { focusEl.hidden = false; st.held = false; st.radial = false; render(); });
-document.querySelectorAll('[data-look]').forEach(b => b.addEventListener('click', () => {
-  if (b.dataset.look === 'down') st.down = !st.down; else { st.look = +b.dataset.look; st.down = false; }
-  render(); stage.focus();
-}));
+stage.addEventListener('blur', () => { focusEl.hidden = false; st.adjustHeld = false; render(); });
+document.querySelectorAll('[data-look]').forEach(b => b.addEventListener('click', () => { st.look = +b.dataset.look; render(); stage.focus(); }));
+document.querySelectorAll('[data-pitch]').forEach(b => b.addEventListener('click', () => { st.pitch = +b.dataset.pitch; render(); stage.focus(); }));
 document.querySelectorAll('[role=tab]').forEach(b => b.addEventListener('click', () => {
-  st.opt = b.dataset.opt; st.held = false; st.radial = false; st.mode = 0;
+  st.opt = b.dataset.opt; st.menu = null; st.adjustHeld = false;
   document.querySelectorAll('[role=tab]').forEach(x => x.setAttribute('aria-selected', x === b));
   render(); stage.focus();
 }));
+setInterval(() => { if (st.toast && performance.now() - st.toastAt > 1800){ st.toast = ''; render(); } }, 300);
 
-// ---- drawing
-function cellRect(x,y,w=1,d=1){ return [x*CELL, y*CELL, w*CELL, d*CELL]; }
+// ---- drawing (seen from above: x to the right, z down)
+function boxOf(p){ const turned = p.rot % 2; return {x:p.x, z:p.z, w:turned ? p.d : p.w, d:turned ? p.w : p.d}; }
 function drawWorld(){
   g.fillStyle = '#2f4a2a'; g.fillRect(0,0,640,480);
-  for (let y=0;y<H;y++) for (let x=0;x<W;x++){ if ((x*7+y*13)%5===0){ g.fillStyle='#35532f'; g.fillRect(x*CELL,y*CELL,CELL,CELL); } }
-  g.strokeStyle = 'rgba(255,255,255,.05)'; g.lineWidth = 1;
-  for (let x=0;x<=W;x++){ g.beginPath(); g.moveTo(x*CELL+.5,0); g.lineTo(x*CELL+.5,480); g.stroke(); }
-  for (let y=0;y<=H;y++){ g.beginPath(); g.moveTo(0,y*CELL+.5); g.lineTo(640,y*CELL+.5); g.stroke(); }
-  // other placement (grey frame)
-  const o = st.other; g.fillStyle='rgba(98,180,230,.18)'; g.fillRect(...cellRect(o.x,o.y,o.w,o.d));
-  g.strokeStyle='rgba(200,200,200,.7)'; g.lineWidth=2; g.strokeRect(...cellRect(o.x,o.y,o.w,o.d));
-  // selected placement (green frame)
-  const p = st.placement; g.fillStyle='rgba(98,180,230,.32)'; g.fillRect(...cellRect(p.x,p.y,p.w,p.d));
-  g.strokeStyle = TARGETS[st.target]==='選択中の配置' && (st.held||st.opt==='D') ? '#b8ff9a' : '#6cc349'; g.lineWidth = TARGETS[st.target]==='選択中の配置' ? 3 : 2;
-  g.strokeRect(...cellRect(p.x,p.y,p.w,p.d));
-  g.fillStyle='#fff'; g.font='12px DotGothic16, monospace'; g.fillText(`hut  ${p.rot*90}°${p.mirror?' 反転':''}`, p.x*CELL+3, p.y*CELL-4);
-  // selection
-  if (st.sel.a && st.sel.b){
-    const lx=Math.min(st.sel.a.x,st.sel.b.x), ly=Math.min(st.sel.a.y,st.sel.b.y), hx=Math.max(st.sel.a.x,st.sel.b.x), hy=Math.max(st.sel.a.y,st.sel.b.y);
-    g.strokeStyle = st.target===3 ? '#ffffff' : 'rgba(255,255,255,.75)'; g.lineWidth = st.target===3 ? 3 : 1.5;
-    g.strokeRect(lx*CELL, ly*CELL, (hx-lx+1)*CELL, (hy-ly+1)*CELL);
-  }
-  [[st.sel.a,'#ff5a4e',1],[st.sel.b,'#5a8cff',2]].forEach(([c,col,i]) => {
-    if (!c) return; g.fillStyle = col + '55'; g.fillRect(...cellRect(c.x,c.y)); g.strokeStyle = col; g.lineWidth = st.target===i ? 3 : 2; g.strokeRect(...cellRect(c.x,c.y));
+  for (let z=0;z<24;z++) for (let x=0;x<32;x++) if ((x*7+z*13)%5===0){ g.fillStyle='#35532f'; g.fillRect(x*CELL,z*CELL,CELL,CELL); }
+  g.strokeStyle='rgba(255,255,255,.05)'; g.lineWidth=1;
+  for (let x=0;x<=32;x++){ g.beginPath(); g.moveTo(x*CELL+.5,0); g.lineTo(x*CELL+.5,480); g.stroke(); }
+  for (let z=0;z<=24;z++){ g.beginPath(); g.moveTo(0,z*CELL+.5); g.lineTo(640,z*CELL+.5); g.stroke(); }
+  g.font = '12px DotGothic16, monospace';
+  st.places.forEach((p, i) => {
+    if (!st.enabled) return;
+    const b = boxOf(p), sel = i === st.selected;
+    g.globalAlpha = p.visible ? 1 : .35;
+    g.fillStyle = 'rgba(98,180,230,.28)'; g.fillRect(b.x*CELL, b.z*CELL, b.w*CELL, b.d*CELL);
+    if (p.mode && p.axis >= 2){
+      // A side layer seen from above: the shown slice.
+      g.fillStyle = 'rgba(98,180,230,.55)';
+      const along = p.axis < 4, from = p.axis % 2 === 0, n = p.layer;
+      for (let k = 0; k <= (p.mode === 2 ? n : 0); ++k){
+        const idx = p.mode === 2 ? k : n;
+        if (along) { const x = from ? b.x + idx : b.x + b.w - 1 - idx; g.fillRect(x*CELL, b.z*CELL, CELL, b.d*CELL); }
+        else { const z = from ? b.z + idx : b.z + b.d - 1 - idx; g.fillRect(b.x*CELL, z*CELL, b.w*CELL, CELL); }
+      }
+    }
+    g.strokeStyle = sel ? '#6cc349' : 'rgba(200,200,200,.7)'; g.lineWidth = sel && st.target === 0 ? 3 : 2;
+    g.strokeRect(b.x*CELL, b.z*CELL, b.w*CELL, b.d*CELL);
+    g.fillStyle = '#fff';
+    g.fillText(`${p.name} y${p.y} ${p.rot*90}°${p.mirror ? ' ' + MIRRORS[p.mirror] : ''}${p.mode && p.axis < 2 ? ` 層${p.layer+1}` : ''}`, b.x*CELL + 2, b.z*CELL - 4);
+    g.globalAlpha = 1;
   });
-  // player and view
-  const pl = st.player, d = DIRS[st.look], c = lookedCell();
-  g.strokeStyle='rgba(255,255,255,.35)'; g.setLineDash([4,4]); g.beginPath(); g.moveTo((pl.x+.5)*CELL,(pl.y+.5)*CELL); g.lineTo((c.x+.5)*CELL,(c.y+.5)*CELL); g.stroke(); g.setLineDash([]);
-  g.strokeStyle='rgba(255,255,255,.8)'; g.lineWidth=1.5; g.strokeRect(c.x*CELL+3,c.y*CELL+3,CELL-6,CELL-6);
-  g.save(); g.translate((pl.x+.5)*CELL,(pl.y+.5)*CELL); g.rotate(Math.atan2(d[1],d[0]));
+  const {a, b} = st.sel;
+  if (a && b){
+    const lx = Math.min(a.x,b.x), lz = Math.min(a.z,b.z), hx = Math.max(a.x,b.x), hz = Math.max(a.z,b.z);
+    g.strokeStyle = '#fff'; g.lineWidth = st.target === 3 ? 3 : 1.5; g.strokeRect(lx*CELL, lz*CELL, (hx-lx+1)*CELL, (hz-lz+1)*CELL);
+  }
+  [[a,'#ff5a4e',1],[b,'#5a8cff',2]].forEach(([c,col,i]) => {
+    if (!c) return; g.fillStyle = col + '55'; g.fillRect(c.x*CELL, c.z*CELL, CELL, CELL);
+    g.strokeStyle = col; g.lineWidth = st.target === i || st.target === 3 ? 3 : 2; g.strokeRect(c.x*CELL, c.z*CELL, CELL, CELL);
+  });
+  const pl = st.player, d = DIRS[st.look], c = looked();
+  g.strokeStyle='rgba(255,255,255,.35)'; g.setLineDash([4,4]); g.beginPath(); g.moveTo((pl.x+.5)*CELL,(pl.z+.5)*CELL); g.lineTo((c.x+.5)*CELL,(c.z+.5)*CELL); g.stroke(); g.setLineDash([]);
+  g.strokeStyle='rgba(255,255,255,.85)'; g.lineWidth=1.5; g.strokeRect(c.x*CELL+3, c.z*CELL+3, CELL-6, CELL-6);
+  g.save(); g.translate((pl.x+.5)*CELL,(pl.z+.5)*CELL); g.rotate(Math.atan2(d[1],d[0]));
   g.fillStyle='#f0d9b5'; g.beginPath(); g.moveTo(9,0); g.lineTo(-7,-7); g.lineTo(-3,0); g.lineTo(-7,7); g.closePath(); g.fill(); g.restore();
-  g.fillStyle='rgba(0,0,0,.55)'; g.fillRect(4,4,200,20); g.fillStyle='#fff'; g.fillText(`向き: ${st.down ? '見下ろし（上下に動く）' : d[2]}`, 10, 18);
-  if (st.opt==='D'){ g.fillStyle='rgba(0,0,0,.55)'; g.fillRect(4,28,200,20); g.fillStyle = st.stick ? '#b8ff9a' : '#aaa'; g.fillText(st.stick ? '手に棒を持っている' : '棒を持っていない', 10, 42); }
+  g.fillStyle='rgba(0,0,0,.55)'; g.fillRect(4,4,230,20); g.fillStyle='#fff';
+  g.fillText(`向き: ${d[2]}・${st.pitch ? '見下ろし' : '水平'}　足元 y${pl.y}`, 10, 18);
 }
 function render(){
   drawWorld();
-  // hint near crosshair
-  let h = '';
-  if ((st.opt==='A' || st.opt==='C') && st.held && !st.radial)
-    h = `<span class="k">対象: ${TARGETS[st.target]}</span>　モード: ${MODES[st.mode]}<br><span class="d">ホイール: ${MODES[st.mode]==='移動' ? '視線方向へ 1 ブロック' : MODES[st.mode]==='層' ? '層 ±1' : '回す（Shift: 反転）'}　右クリック: モード${st.opt==='A' ? '　Tab: 対象' : ''}</span>`;
-  else if (st.opt==='D' && st.stick)
-    h = `<span class="k">棒</span>　左: 角 1　右: 角 2<br><span class="d">${st.sneak ? 'スニーク中: ホイールで配置を動かす' : 'スニーク＋ホイール: 配置を動かす'}</span>`;
-  hintEl.innerHTML = h; hintEl.hidden = !h || st.radial;
-  // radial
-  radialEl.hidden = !st.radial;
-  if (st.radial){
-    const page = PAGES[st.page], R = 120;
-    radialEl.innerHTML = page.items.map((t,i) => { const a = i*Math.PI*2/8 - Math.PI/2; return `<div class="it ${st.pick===i?'on':''}" style="left:${Math.cos(a)*R}px;top:${Math.sin(a)*R*.8}px">${t}</div>`; }).join('')
-      + `<div class="page" style="left:0;top:0">${page.name}<br>${st.page+1}/${PAGES.length}<br><span style="font-size:10px">ホイール: ページ</span></div>`;
+  // the menu
+  menuEl.hidden = !st.menu;
+  if (st.menu){
+    const items = menuItems(), pos = positions(items.length);
+    const hovered = st.hover >= 0 ? items[st.hover] : null;
+    const cat = st.menu.cat >= 0 ? categories()[st.menu.cat].name : '設計図';
+    menuEl.innerHTML = items.map((it, i) => `<div class="it ${it.cat ? 'cat' : ''} ${st.hover === i ? 'on' : ''}" style="left:${(320 + pos[i][0]) / 6.4}%;top:${(240 + pos[i][1]) / 4.8}%">${it.label}${!it.cat && it.value && it.value() !== '' ? `<span class="v">${it.value()}</span>` : ''}</div>`).join('')
+      + `<div class="center"><div class="t">${cat}</div><div class="d">${
+        st.menu.cat < 0 ? 'クリック: 分類を開く<br>Esc / メニューのキー: 閉じる'
+        : hovered ? (hovered.step ? 'ホイール: 値を変える<br>クリック: 1 つ進める' : 'クリック: 実行') + '<br>右クリック: 戻る'
+        : '項目にマウスを向ける<br>右クリック: 戻る'}</div></div>`;
   }
-  const fresh = performance.now() - st.toastAt < 1800 && st.toast;
-  toastEl.hidden = !fresh; toastEl.textContent = st.toast || '';
-  renderSide();
+  let h = '';
+  if (st.opt === 'F' && !st.menu){
+    h = st.last ? `<span class="k">調整キー＋ホイール</span>: ${st.last.label}${st.adjustHeld ? '（押している）' : ''}<br><span class="d">メニューで最後に使ったステッパー項目を繰り返す</span>`
+                : `<span class="d">メニューでステッパー項目（前後・上下・層など）を使うと、<br>調整キー＋ホイールで繰り返せます</span>`;
+  }
+  hintEl.innerHTML = h; hintEl.hidden = !h;
+  toastEl.hidden = !st.toast; toastEl.textContent = st.toast;
+  renderState(); renderExplain();
 }
-setInterval(() => { if (st.toast && performance.now() - st.toastAt > 1800){ st.toast=''; render(); } }, 300);
-
-function renderSide(){
-  const S = {
-    A: `<div class="card"><h3>A 長押し＋ホイール</h3><p class="small">1 つのキーを押している間だけ、ホイールが「対象」を動かします。押している間は照準の下に対象とモードが出ます。</p></div>
-      <div class="card"><h3>試し方</h3><div class="keys">
-        <kbd>G</kbd><span>押したまま（ゲームでは任意のキー）</span>
-        <span><kbd>G</kbd>＋<kbd>ホイール</kbd></span><span>対象を視線方向へ 1 ブロック（手前に回すと逆）。「見下ろす」と上下</span>
-        <span><kbd>G</kbd>＋<kbd>右クリック</kbd></span><span>モード: 移動 → 回転・反転 → 層</span>
-        <span><kbd>G</kbd>＋<kbd>Tab</kbd></span><span>対象: 配置 → 角 1 → 角 2 → 範囲全体</span></div></div>
-      <div class="card"><h3>向き・不向き</h3><ul class="small"><li class="pro">少しずつ動かす操作が速い</li><li class="con">角を「ここに」置く、保存、範囲を消すなどは別のキーか画面が必要</li><li class="con">モードと対象を覚える必要がある</li></ul></div>`,
-    B: `<div class="card"><h3>B ラジアルメニュー</h3><p class="small">キーを押すと照準の周りにメニューが出ます。マウスを項目の方向へ動かし、キーを離す（またはクリック）と実行。ホイールでページを切り替えます。</p></div>
-      <div class="card"><h3>試し方</h3><div class="keys">
-        <kbd>G</kbd><span>押したまま → マウスで項目を選ぶ → 離すと実行</span>
-        <kbd>ホイール</kbd><span>ページ: 配置 / 範囲 / 照合・画面</span></div></div>
-      <div class="card"><h3>向き・不向き</h3><ul class="small"><li class="pro">何ができるか見えるので覚えなくてよい</li><li class="pro">キー 1 つで全部の操作に届く</li><li class="con">1 ブロックずつ何度も動かすのは毎回メニューになり遅い</li></ul></div>`,
-    C: `<div class="card"><h3>C A＋B の併用（推し）</h3><p class="small">同じキーで、<b>押したままホイール</b>なら A（少しずつ動かす）、<b>短く押して離す</b>なら B のメニュー。対象の切り替えや「角をここに」「保存」「範囲を消す」はメニューから。</p></div>
-      <div class="card"><h3>試し方</h3><div class="keys">
-        <span><kbd>G</kbd>＋<kbd>ホイール</kbd></span><span>対象を動かす（右クリックでモード）</span>
-        <span><kbd>G</kbd> 短押し</span><span>メニューが開く → マウスで選んでクリック</span>
-        <kbd>ホイール</kbd><span>（メニュー中）ページ切替</span></div></div>
-      <div class="card"><h3>向き・不向き</h3><ul class="small"><li class="pro">細かい移動も 1 回きりの操作も 1 キーで足りる</li><li class="pro">配置と保存範囲を同じ「対象」として同じ操作で動かせる</li><li class="con">「長押し」と「短押し」の区別に慣れが要る</li></ul></div>`,
-    D: `<div class="card"><h3>D 棒を持って操作（参考）</h3><p class="small">ゲーム内の棒を持っている間だけ、クリックとホイールが設計図の操作になります。要望があれば追加する扱いの参考案です。</p>
-        <div class="ctrl" style="margin-top:8px"><button id="stickbtn" aria-pressed="${st.stick}">棒を持つ</button></div></div>
-      <div class="card"><h3>試し方</h3><div class="keys">
-        <kbd>左クリック</kbd><span>角 1 を見ているブロックに</span>
-        <kbd>右クリック</kbd><span>角 2 を見ているブロックに</span>
-        <span><kbd>Shift</kbd>＋<kbd>ホイール</kbd></span><span>選択中の配置を動かす</span></div></div>
-      <div class="card"><h3>向き・不向き</h3><ul class="small"><li class="pro">持ち替えるだけで分かりやすい</li><li class="con">棒の間は通常の破壊・設置ができない。持ち替えの手間</li><li class="con">ボタンが足りず、回転・層・保存などは結局キーか画面</li></ul></div>`,
-  };
-  side.innerHTML = S[st.opt];
-  const sb = document.getElementById('stickbtn');
-  if (sb) sb.addEventListener('click', () => { st.stick = !st.stick; render(); stage.focus(); });
+function renderState(){
+  const p = P(), f = k => st.changed.has(k) ? 'flash' : '';
+  const corner = c => c ? `${c.x}, ${c.y}, ${c.z}` : '—';
+  stateEl.innerHTML = `
+    <span class="sec">選択中の配置: <span class="${f('place')}">${p.name}</span></span>
+    <span class="k">X Y Z</span><span class="${f('X')}">${p.x}, ${p.y}, ${p.z}</span>
+    <span class="k">回転・反転</span><span class="${f('rot')} ${f('mirror')}">${p.rot*90}° ・ ${MIRRORS[p.mirror]}</span>
+    <span class="k">表示</span><span class="${f('visible')}">${p.visible ? '表示' : '隠す'}</span>
+    <span class="k">層</span><span class="${f('axis')} ${f('mode')} ${f('layer')}">${AXES[p.axis]} ・ ${LMODES[p.mode]}${p.mode ? ` ・ ${p.layer+1}/${layerCount(p)}` : ''}</span>
+    <span class="k">余計なブロック</span><span class="${f('extras')}">${p.extras ? '赤で示す' : '無視'}</span>
+    <span class="k">エンティティ</span><span class="${f('entities')}">${p.entities ? '表示・照合' : 'なし'}</span>
+    <span class="sec">保存範囲・その他</span>
+    <span class="k">角 1</span><span class="${f('a')}" style="color:#ff8a80">${corner(st.sel.a)}</span>
+    <span class="k">角 2</span><span class="${f('b')}" style="color:#8cb0ff">${corner(st.sel.b)}</span>
+    <span class="k">動かす対象</span><span class="${f('target')}">${TARGETS[st.target]}</span>
+    <span class="k">HUD・設計図</span><span class="${f('hud')} ${f('enabled')}">${st.hud ? 'HUD オン' : 'HUD オフ'} ・ ${st.enabled ? '表示' : 'オフ'}</span>`;
 }
+function renderExplain(){
+  const E = `<div class="card"><h3>E メニュー＋機能ごとのキー</h3>
+      <p class="small">メニューのキー 1 つで全部の操作に届き、よく使う操作だけ今の個別キーを割り当てます（既定は未割り当て）。モックでは 1〜8 を割り当て済みの例にしています。</p></div>
+    <div class="card"><h3>試し方</h3><div class="keys">
+      <kbd>M</kbd><span>メニューを開く / 閉じる</span>
+      <span><kbd>クリック</kbd></span><span>分類を開く・項目を実行</span>
+      <span><kbd>ホイール</kbd></span><span>（項目に向けて）値を変える。前後・上下・層・回転など</span>
+      <span><kbd>右クリック</kbd></span><span>1 つ戻る</span>
+      <span><kbd>1</kbd> <kbd>2</kbd></span><span>個別キーの例: 奥へ / 手前へ</span>
+      <span><kbd>3</kbd> <kbd>4</kbd></span><span>上へ / 下へ</span>
+      <span><kbd>5</kbd></span><span>右に 90°</span>
+      <span><kbd>6</kbd> <kbd>7</kbd></span><span>層 + / −</span>
+      <span><kbd>8</kbd></span><span>角 1 をここに</span></div></div>`;
+  const F = `<div class="card"><h3>F メニュー＋調整キー</h3>
+      <p class="small">E と同じメニューに、<b>調整キー</b>を別に 1 つ足します。メニューで最後に使ったステッパー項目（前後・上下・層・回転など）を、調整キーを押したままホイールで繰り返せます。短押し・長押しの区別はありません。</p></div>
+    <div class="card"><h3>試し方</h3><div class="keys">
+      <kbd>M</kbd><span>メニューを開く / 閉じる</span>
+      <span><kbd>ホイール</kbd></span><span>（メニューで項目に向けて）値を変える</span>
+      <span><kbd>G</kbd>＋<kbd>ホイール</kbd></span><span>メニューで最後に使った調整を繰り返す（照準の下に何を繰り返すか表示）</span>
+      <span><kbd>右クリック</kbd></span><span>（メニュー中）1 つ戻る</span></div></div>`;
+  document.getElementById('explain').innerHTML = st.opt === 'E' ? E : F;
+}
+// The menu table below the demo.
+document.getElementById('menutable').innerHTML = '<tr><th>分類</th><th>項目（ホイールで変えられるものは ⇕）</th></tr>' + categories().map(c =>
+  `<tr><th>${c.name}</th><td>${c.items.map(i => i.label + (i.step ? ' ⇕' : '')).join('　')}</td></tr>`).join('');
 render();
 })();
 </script>
