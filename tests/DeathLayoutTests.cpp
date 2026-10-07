@@ -170,6 +170,38 @@ void deathLayoutTests() {
         check(tolerant.slots[3].count == 2 && tolerant.slots[3].exact == "y", "bad slots are skipped, missing fields default");
     }
     {
+        Layout layout;
+        layout.slots[0] = item("sword", 1, "a", 1);
+        layout.slots[20] = item("bread", 10);
+        layout.slots[36] = item("helmet", 1, "", 1);
+        Slots now{};
+        now[0] = item("bread", 10);
+        now[5] = item("sword", 1, "a", 1);
+        now[6] = item("helmet", 1, "", 1);
+        Slots after = now;
+        for (int n = 0; n < 50; ++n) {
+            auto move = nextMove(layout, after, Scope::Hotbar);
+            if (!move) break;
+            after = applied(after, *move);
+        }
+        check(after[0] == layout.slots[0] && after[36].empty() && after[20].empty(),
+              "the hotbar scope puts back only hotbar slots");
+        check(markDone(layout, after, Scope::Hotbar) && !markDone(layout, after, Scope::All),
+              "a scope is done when its own slots are");
+        check(inScope(40, Scope::HotbarEquipment) && !inScope(40, Scope::Hotbar) && !inScope(9, Scope::HotbarEquipment)
+              && inScope(9, Scope::All), "scopes name their slots");
+    }
+    {
+        using E = LifeWatch::Event;
+        LifeWatch joining;
+        check(joining.update(false) == E::None && joining.update(true) == E::None,
+              "reading as not alive while joining is not a death");
+        check(joining.update(false) == E::Died && joining.update(false) == E::None && joining.update(true) == E::Respawned
+              && joining.update(true) == E::None, "a death and its respawn are seen once each");
+        LifeWatch rejoined;
+        check(rejoined.update(true) == E::None, "joining alive is not a respawn");
+    }
+    {
         auto order = targetOrder();
         check(order[0] == 36 && order[4] == offhandSlot && order[5] == 0 && order[13] == 8 && order[40] == 35,
               "equipment first, then the hotbar, then the inventory");

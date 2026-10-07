@@ -13,6 +13,15 @@ namespace lamium::inventory::death {
 // feet), 40 the offhand.
 inline constexpr int slotCount = 41, armorFirst = 36, offhandSlot = 40;
 inline bool equipment(int slot) { return slot >= armorFirst; }
+// Which slots are put back (maintainer, 2026-10-08: the hotbar by default,
+// since restoring everything takes a while). Items for other slots are still
+// taken from anywhere.
+enum class Scope { Hotbar, HotbarEquipment, All };
+inline bool inScope(int slot, Scope scope) {
+    if (slot < 9) return true;
+    if (equipment(slot)) return scope != Scope::Hotbar;
+    return scope == Scope::All;
+}
 struct Stack {
     std::string kind;  // the item, e.g. minecraft:diamond_sword
     std::string exact; // kind plus what tells two of it apart (damage, enchantments, ...)
@@ -42,11 +51,11 @@ inline bool satisfied(Stack const& want, Stack const& now) {
     return !want.empty() && now.exact == want.exact && now.count >= want.count;
 }
 // Marks the slots that hold their death-time item; true when every slot is done.
-inline bool markDone(Layout& layout, Slots const& now) {
+inline bool markDone(Layout& layout, Slots const& now, Scope scope = Scope::All) {
     bool all = true;
     for (int s = 0; s < slotCount; ++s) {
         auto const& want = layout.slots[s];
-        if (want.empty()) continue;
+        if (want.empty() || !inScope(s, scope)) continue;
         if (!layout.done[s] && satisfied(want, now[s])) layout.done[s] = true;
         all = all && layout.done[s];
     }
@@ -56,6 +65,25 @@ inline bool markDone(Layout& layout, Slots const& now) {
 inline bool anyItem(Slots const& slots) {
     return std::any_of(slots.begin(), slots.end(), [](Stack const& s) { return !s.empty(); });
 }
+// Deaths and respawns of the local player. Only a player first seen alive in
+// this world can die: while joining a world the player briefly reads as not
+// alive, and taking that for a death threw away a saved layout.
+class LifeWatch {
+public:
+    enum class Event { None, Died, Respawned };
+    Event update(bool alive) {
+        Event event = Event::None;
+        if (seenAlive && wasAlive && !alive) event = Event::Died;
+        else if (dead && alive) event = Event::Respawned;
+        if (event == Event::Died) dead = true;
+        if (event == Event::Respawned) dead = false;
+        seenAlive = seenAlive || alive;
+        wasAlive = alive;
+        return event;
+    }
+private:
+    bool seenAlive = false, wasAlive = false, dead = false;
+};
 enum class MoveKind { Swap, Transfer };
 struct Move {
     MoveKind kind;
@@ -67,7 +95,7 @@ struct Move {
 // transfer only moves items between the player's own slots. Equipment slots
 // already wearing something else are left alone, and items are never taken
 // out of equipment.
-inline std::optional<Move> nextMove(Layout const& layout, Slots const& now) {
+inline std::optional<Move> nextMove(Layout const& layout, Slots const& now, Scope scope = Scope::All) {
     // Slots whose contents stay: done, or already holding their own item.
     std::array<bool, slotCount> reserved{};
     for (int s = 0; s < slotCount; ++s)
@@ -95,7 +123,7 @@ inline std::optional<Move> nextMove(Layout const& layout, Slots const& now) {
     };
     for (int t : targetOrder()) {
         auto const& want = layout.slots[t];
-        if (want.empty() || layout.done[t] || satisfied(want, now[t])) continue;
+        if (!inScope(t, scope) || want.empty() || layout.done[t] || satisfied(want, now[t])) continue;
         auto const& cur = now[t];
         auto exact = sources(t, [&](Stack const& s) { return s.exact == want.exact; });
         auto kind = sources(t, [&](Stack const& s) { return s.kind == want.kind; });
@@ -151,10 +179,10 @@ inline int countOf(Slots const& slots, std::string const& kind) {
     for (auto const& s : slots) if (!s.empty() && s.kind == kind) n += s.count;
     return n;
 }
-inline bool pickedUp(Layout const& layout, Slots const& before, Slots const& after) {
+inline bool pickedUp(Layout const& layout, Slots const& before, Slots const& after, Scope scope = Scope::All) {
     for (int s = 0; s < slotCount; ++s) {
         auto const& kind = layout.slots[s].kind;
-        if (layout.slots[s].empty() || layout.done[s]) continue;
+        if (layout.slots[s].empty() || layout.done[s] || !inScope(s, scope)) continue;
         if (countOf(after, kind) > countOf(before, kind)) return true;
     }
     return false;

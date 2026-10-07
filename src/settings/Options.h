@@ -75,6 +75,8 @@ inline constexpr auto elementBackgroundLabels = std::to_array<std::string_view>(
 inline constexpr auto lineBackgroundLabels = std::to_array<std::string_view>(
     {"hudBackgroundNone", "hudBackgroundCard", "hudBackgroundLine"});
 inline constexpr std::array<std::string_view,2> debugBackgroundLabels{"hudBackgroundNone","hudBackgroundLine"};
+inline constexpr std::array<std::string_view,3> deathRestoreScopeLabels{"deathRestoreScope.hotbar",
+    "deathRestoreScope.equipment", "deathRestoreScope.all"};
 inline constexpr std::array<std::string_view,3> menuBackgroundLabels{"menuBackground.none", "menuBackground.light", "menuBackground.dark"};
 // L-97: the selected slot, then hotbar slots 1-9.
 inline constexpr std::array<std::string_view,10> fetchSlotLabels{"fetchSlot.selected", "hotbarSlot.1", "hotbarSlot.2",
@@ -314,6 +316,7 @@ inline constexpr auto options = std::to_array<Option>({
     toggle<&Settings::inventory, &Settings::Inventory::offhandSwap>("inventory.offhandSwap", "offhandSwap", "offhandSwap"),
     toggle<&Settings::inventory, &Settings::Inventory::offhandSwapFireworks>("inventory.offhandSwapFireworks", "offhandSwap", "offhandSwapFireworks"),
     toggle<&Settings::inventory, &Settings::Inventory::deathRestore>("inventory.deathRestore", "deathRestore", "deathRestore"),
+    choice<&Settings::inventory, &Settings::Inventory::deathRestoreScope, deathRestoreScopeLabels>("inventory.deathRestoreScope", "deathRestore", "deathRestoreScope"),
     toggle<&Settings::inventory, &Settings::Inventory::sortContainers>("inventory.sortContainers", "sorting", "storage"),
     toggle<&Settings::inventory, &Settings::Inventory::transfer>("inventory.transfer", "transfer", "transfer"),
     toggle<&Settings::inventory, &Settings::Inventory::transferWheelOne>("inventory.transferWheelOne", "transfer", "transferWheelOne"),

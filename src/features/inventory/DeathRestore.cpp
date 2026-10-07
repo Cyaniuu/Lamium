@@ -37,7 +37,9 @@ struct State {
     std::optional<Layout> layout;
     bool deathPointSeen = false; // The waypoints' death point matched this layout once.
     Slots lastAlive{}, previous{};
-    bool haveAlive = false, havePrevious = false, wasAlive = true, awaitingRespawn = false;
+    LifeWatch life;
+    bool haveAlive = false, havePrevious = false;
+    int busy = 0; // Moves refused in a row (another transaction in progress).
     bool armed = false;
     Clock::time_point lastPickup{}, nextStep{};
     std::optional<Move> lastMove;
@@ -110,25 +112,33 @@ void follow() {
 }
 // The layout ends when the player removes or replaces the death point it
 // belongs to; a death point never recorded (switched off) does not end it.
+// It is looked for every tick until seen, so removing it before any pickup
+// counts too.
+bool deathPointMatches() {
+    auto death = map::waypoints::current().death;
+    return death && death->x == state.layout->x && death->y == state.layout->y && death->z == state.layout->z
+        && death->dimension == state.layout->dimension;
+}
 bool deathPointRemoved(bool recording) {
     if (!recording) return false;
-    auto death = map::waypoints::current().death;
-    bool same = death && death->x == state.layout->x && death->y == state.layout->y && death->z == state.layout->z
-        && death->dimension == state.layout->dimension;
-    if (same) state.deathPointSeen = true;
-    return !same && state.deathPointSeen;
+    if (deathPointMatches()) { state.deathPointSeen = true; return false; }
+    return state.deathPointSeen;
+}
+Scope scopeOf(Settings const& prefs) {
+    return static_cast<Scope>(std::clamp(prefs.inventory.deathRestoreScope, 0, 2));
 }
 void step(LocalPlayer& player, Slots const& now, Settings const& prefs) {
+    auto scope = scopeOf(prefs);
     if (deathPointRemoved(prefs.map.waypointsDeath)) { log("death point removed"); forget(); return; }
     auto before = state.layout->done;
-    bool all = markDone(*state.layout, now);
+    bool all = markDone(*state.layout, now, scope);
     if (all) {
         forget();
         try { ui::showMessageToast(ui::translated("deathRestore.done")); } catch (...) {}
         return;
     }
     if (state.layout->done != before) save();
-    auto move = nextMove(*state.layout, now);
+    auto move = nextMove(*state.layout, now, scope);
     if (!move) { state.armed = false; return; }
     // A move the inventory keeps undoing (the server refused it) or a run
     // that does not settle stops until the next pickup.
@@ -139,7 +149,13 @@ void step(LocalPlayer& player, Slots const& now, Settings const& prefs) {
         state.repeats = 0;
     }
     if (++state.moves > movesPerRun) { log("too many moves; waiting for the next pickup"); state.armed = false; return; }
-    if (!perform(player, *move)) { --state.moves; state.nextStep = Clock::now() + whenBusy; return; }
+    if (!perform(player, *move)) {
+        --state.moves;
+        if (++state.busy >= 50) { log("inventory stayed busy; waiting for the next pickup"); state.armed = false; return; }
+        state.nextStep = Clock::now() + whenBusy;
+        return;
+    }
+    state.busy = 0;
     state.nextStep = Clock::now() + betweenMoves;
 }
 void tick() noexcept {
@@ -152,7 +168,8 @@ void tick() noexcept {
         auto* player = client ? client->getLocalPlayer() : nullptr;
         if (!player || !player->mInventory) return;
         bool alive = player->isAlive();
-        if (state.wasAlive && !alive) {
+        auto event = state.life.update(alive);
+        if (event == LifeWatch::Event::Died) {
             // The snapshot from the last tick alive: by now the server may
             // already be emptying the inventory.
             if (state.haveAlive && anyItem(state.lastAlive) && !player->isCreative()) {
@@ -170,23 +187,21 @@ void tick() noexcept {
             } else if (state.layout) {
                 forget(); // A new death replaces the old layout, even an empty one.
             }
-            state.awaitingRespawn = true;
         }
-        state.wasAlive = alive;
         if (!alive) { state.havePrevious = false; return; }
         auto now = read(*player);
         state.lastAlive = now;
         state.haveAlive = true;
-        if (state.awaitingRespawn) {
-            state.awaitingRespawn = false;
+        if (event == LifeWatch::Event::Respawned) {
             // keepInventory: nothing was dropped, so there is nothing to restore.
             if (state.layout && anyItem(now)) { log("inventory kept at respawn"); forget(); }
         }
         if (!state.layout) { state.previous = now; state.havePrevious = true; return; }
-        if (state.havePrevious && !game::moving() && pickedUp(*state.layout, state.previous, now)) {
+        if (!state.deathPointSeen && prefs->map.waypointsDeath && deathPointMatches()) state.deathPointSeen = true;
+        if (state.havePrevious && !game::moving() && pickedUp(*state.layout, state.previous, now, scopeOf(*prefs))) {
             state.armed = true;
             state.lastPickup = Clock::now();
-            state.moves = state.repeats = 0;
+            state.moves = state.repeats = state.busy = 0;
             state.lastMove.reset();
         }
         state.previous = now;
