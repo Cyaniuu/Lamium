@@ -225,13 +225,18 @@ void drawSchematicEntityNames(MinecraftUIRenderContext& context, float width, fl
     if (names.empty()) return;
     auto view = map::markers::lastCamera();
     if (!view) return;
-    constexpr float textScale = .75f;
+    // Sized like text floating over the frame: a quarter block tall, so it
+    // shrinks with distance and is dropped once too small to read.
+    constexpr double textHeight = .25, lineHeight = 9;
     for (auto const& [at, name] : names) {
         auto p = map::project(*view, at.x, at.y, at.z, width, height, 12);
         if (!p) continue;
+        double unitsPerBlock = view->scaleY * height / (2 * p->depth);
+        float textScale = static_cast<float>(std::min(1.0, textHeight * unitsPerBlock / lineHeight));
+        if (textScale < .35f) continue;
         float w = ui::textWidthScaled(context, name, textScale);
         float x = static_cast<float>(std::round(p->x)), y = static_cast<float>(std::round(p->y));
-        ui::labelScaled(context, x - w / 2, y - 4, w + 2, name, textScale, ui::palette::text, ui::Align::Left, true);
+        ui::labelScaled(context, x - w / 2, y - lineHeight * textScale, w + 2, name, textScale, ui::palette::text, ui::Align::Left, true);
     }
     context.flushText(0, std::nullopt);
 }

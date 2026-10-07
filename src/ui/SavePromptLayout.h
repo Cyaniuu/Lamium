@@ -12,7 +12,7 @@ struct SavePromptLayout {
     static SavePromptLayout at(float screenW, float screenH) {
         return {std::max(0.f, (screenW - width) / 2), std::max(0.f, (screenH - height()) / 2)};
     }
-    static constexpr float height() { return pad + 14 + 2 * 16 + 12 + 17 + 12 + 16 + 17 + 22 + 10 + pad; }
+    static constexpr float height() { return pad + 14 + 2 * 16 + 12 + 17 + 12 + 16 + 17 + 22 + 13 + pad; }
     float inner() const { return width - 2 * pad; }
     float titleY() const { return top + pad; }
     float cornerY(int corner) const { return top + pad + 14 + 16 * corner; }
@@ -28,7 +28,9 @@ struct SavePromptLayout {
     float switchX() const { return left + width - pad - switchWidth; }
     float cancelX() const { return left + width - pad - buttonWidth; }
     float saveX() const { return cancelX() - 4 - buttonWidth; }
-    enum class Part { None, Field, Minus, Plus, Entities, Save, Cancel };
+    // "Clear area" sits on the last row, apart from Save and Cancel.
+    float clearX() const { return cancelX(); }
+    enum class Part { None, Field, Minus, Plus, Entities, Save, Cancel, Clear };
     struct Hit { Part part = Part::None; int corner = -1, axis = -1; };
     Hit hit(float x, float y) const {
         auto in = [&](float bx, float by, float bw, float bh) { return x >= bx && x < bx + bw && y >= by && y < by + bh; };
@@ -41,6 +43,7 @@ struct SavePromptLayout {
         if (in(left + pad, entitiesY() - 1, inner(), rowHeight)) return {Part::Entities};
         if (in(saveX(), buttonY(), buttonWidth, buttonHeight)) return {Part::Save};
         if (in(cancelX(), buttonY(), buttonWidth, buttonHeight)) return {Part::Cancel};
+        if (in(clearX(), keysY() - 2, buttonWidth, buttonHeight)) return {Part::Clear};
         return {};
     }
 };

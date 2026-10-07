@@ -3204,7 +3204,7 @@ void commitSave() {
         return;
     }
     if (!schematic::ghosts::save({p.area, p.dimension, p.entities, path, file})) { p.problem = translated("schematic.save.busy"); return; }
-    schematic::selection::clear();
+    // The area stays chosen, so it can be saved again after more building.
     showMessageToast(translated("schematic.save.started", file));
     close();
 }
@@ -3231,6 +3231,10 @@ void handleSavePromptClick(float x, float y, glm::vec2 size) {
     case Part::Entities: p.entities = !p.entities; break;
     case Part::Save: commitSave(); break;
     case Part::Cancel: close(); break;
+    case Part::Clear:
+        schematic::selection::clear();
+        close();
+        break;
     default: break;
     }
 }
@@ -3246,8 +3250,9 @@ void renderSavePrompt(MinecraftUIRenderContext& context, glm::vec2 size, glm::ve
     for (int corner = 0; corner < 2; ++corner) {
         float y = l.cornerY(corner);
         auto const& c = corner == 0 ? p.area.a : p.area.b;
+        // In the colors of the corner blocks in the world.
         label(context, x, y + boxTextInset(), L::labelWidth - 4, translated(corner == 0 ? "schematic.save.corner1" : "schematic.save.corner2"),
-            palette::dim);
+            corner == 0 ? palette::accent : palette::warning);
         for (int axis = 0; axis < 3; ++axis) {
             float cx = l.cellX(axis), w = l.cellWidth();
             int value = axis == 0 ? c.x : axis == 1 ? c.y : c.z;
@@ -3278,8 +3283,10 @@ void renderSavePrompt(MinecraftUIRenderContext& context, glm::vec2 size, glm::ve
         p.overwrite ? Rgb{.54f, .18f, .16f} : palette::accentDeep, p.overwrite ? Rgb{.54f, .23f, .2f} : palette::accent);
     drawSmallButton(context, l.cancelX(), l.buttonY(), L::buttonWidth, L::buttonHeight, translated("schematic.save.cancel"),
         hover.part == L::Part::Cancel);
+    drawSmallButton(context, l.clearX(), l.keysY() - 2, L::buttonWidth, L::buttonHeight, translated("schematic.save.clear"),
+        hover.part == L::Part::Clear);
     paragraph(context, x, l.hintY(), l.inner(), translated("schematic.save.hint"), 2, palette::faint);
-    label(context, x, l.keysY(), l.inner(), translated("schematic.save.keys"), palette::faint);
+    label(context, x, l.keysY(), l.clearX() - x - 4, translated("schematic.save.keys"), palette::faint);
     context.flushText(0, std::nullopt);
 }
 void enterWorldMap(bool fromSettings, bool resume) {

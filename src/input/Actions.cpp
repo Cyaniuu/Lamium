@@ -148,8 +148,6 @@ void executeAction(IClientInstance& client, input::Action action) {
     if (action == input::Action::OpenSchematicMaterials) { ui::openSchematics(client, 3); return; }
     if (schematic::actions::handles(action)) {
         schematic::actions::press(client, action);
-        // The second corner leads straight to saving once both are set.
-        if (action == input::Action::SchematicCorner2 && schematic::selection::current().area()) ui::openSchematicSave(client);
         return;
     }
     if (action == input::Action::SaveSchematicArea) {

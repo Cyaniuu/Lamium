@@ -4,6 +4,7 @@
 #include "features/schematic/Selection.h"
 #include "app/AtomicFile.h"
 #include "ui/Localization.h"
+#include "ui/Widgets.h"
 #include "app/Runtime.h"
 #include "ll/api/event/EventBus.h"
 #include "ll/api/event/client/ClientExitLevelEvent.h"
@@ -699,8 +700,8 @@ void stepSave(BlockSource& region, LocalPlayer& player) {
         finishSave(ui::translated("schematic.save.failed", job.request.file));
     }
 }
-// The area chosen for saving: a white frame, and the first corner alone
-// until the second is set.
+// The area chosen for saving: a white frame, corner 1 green and corner 2
+// yellow (the save prompt labels them in the same colors).
 void drawSelection(ScreenContext& screen, Vec3 const& camera, int dimension) {
     auto state = selection::current();
     if (state.dimension != dimension || (!state.first && !state.second)) return;
@@ -720,11 +721,15 @@ void drawSelection(ScreenContext& screen, Vec3 const& camera, int dimension) {
     glm::vec3 base{static_cast<float>(low.x - camera.x), static_cast<float>(low.y - camera.y), static_cast<float>(low.z - camera.z)};
     lines.color(1.f, 1.f, 1.f, 1.f);
     box(base - glm::vec3{.01f}, base + glm::vec3{static_cast<float>(size.x), static_cast<float>(size.y), static_cast<float>(size.z)} + glm::vec3{.01f});
-    lines.color(1.f, .8f, .25f, 1.f);
-    for (auto const& corner : {state.first, state.second}) {
+    for (int i = 0; i < 2; ++i) {
+        auto const& corner = i == 0 ? state.first : state.second;
         if (!corner) continue;
+        auto color = i == 0 ? ui::palette::accent : ui::palette::warning;
+        lines.color(color.r, color.g, color.b, 1.f);
         glm::vec3 at{static_cast<float>(corner->x - camera.x), static_cast<float>(corner->y - camera.y), static_cast<float>(corner->z - camera.z)};
+        // Two nested boxes make the corner block stand out from the frame.
         box(at + glm::vec3{.04f}, at + glm::vec3{.96f});
+        box(at + glm::vec3{.1f}, at + glm::vec3{.9f});
     }
     translated(screen, glm::vec3{0}, [&] { MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{}); });
 }

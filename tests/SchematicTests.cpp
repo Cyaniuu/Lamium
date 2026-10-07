@@ -234,7 +234,8 @@ void savePromptHits() {
     check(minus.part == Part::Minus && minus.corner == 1 && minus.axis == 2 && plus.part == Part::Plus && plus.corner == 0
           && plus.axis == 0, "the save prompt's steppers name their corner and axis");
     check(l.hit(l.saveX() + 1, l.buttonY() + 1).part == Part::Save && l.hit(l.cancelX() + 1, l.buttonY() + 1).part == Part::Cancel
-          && l.hit(l.left + 20, l.fieldY() + 2).part == Part::Field && l.keysY() + 10 <= l.top + l.height(),
+          && l.hit(l.left + 20, l.fieldY() + 2).part == Part::Field && l.hit(l.clearX() + 1, l.keysY()).part == Part::Clear
+          && l.keysY() - 2 + lamium::ui::SavePromptLayout::buttonHeight <= l.top + l.height(),
           "the save prompt's buttons and name field are where they are drawn, inside the panel");
 }
 
