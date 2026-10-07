@@ -122,17 +122,18 @@ do not duplicate task details into this summary.
 Behavior confirmed only on trace builds or only locally. Check these on the
 trace-disabled release build before tagging (VALIDATION.md has the gaps per
 feature):
-- 0.1.7, schematics (L-93), built 2026-10-07 and not yet seen in game:
-  the menu (open, categories, wheel on steppers, right click back, Esc and
-  the menu key close it, "Move ... >" targets and their colors, save area
-  and tabs from it, the three menu settings, the adjust-key tip); the
-  adjust key (hold + wheel repeats the last stepper, hint under the
-  crosshair, the wheel left alone otherwise); the settings order and
-  "Shortcuts" groups; the footer tip while the menu key is unbound;
-  drawing (no blink of other placements on a move, large schematics
-  lighter, far sections appear, nothing missing when turning around,
-  enclosed cells skipped without holes); name tags not through walls; the
-  prompt spacing and caret; honey block and door outlines.
+- 0.1.7, schematics (L-93). Seen in game on 2026-10-07: the menu, its
+  look, ring spacing and animation (with the Animations setting), the
+  adjust key, drawing (lighter, no blink, no z-fighting or hollows inside),
+  the sidebar at UI Profile 100%. Not yet seen: the Move target item, the
+  adjust key reporting through toasts, the three menu settings (background,
+  small, reopen where closed), the adjust-key tip in the menu, the footer
+  tip while the menu key is unbound, the key group names; layer direction
+  turned to the opposite side keeping its layer; a waiting save's compass
+  toast and yellow column frames; name tags hidden behind blocks; the save
+  prompt's line spacing and caret; the large-file warning above its
+  button; honey block and door back to outlines. Then the release build
+  smoke test and the server checks of the 2026-10-06/07 work (below).
 - 0.1.6 was released on 2026-10-02 (`v0.1.6`, tag CI passed; asset SHA-256
   `3d864ca1...3946554f`): L-90 Simplified Chinese (first AI-assisted
   translation, corrections welcome), L-88 target hearts, L-75 offhand slot,

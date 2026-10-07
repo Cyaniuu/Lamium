@@ -12,6 +12,11 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 drawing inside schematics confirmed (2026-10-07)
+
+By the maintainer, local world, `e09334d` (DLL `9a5f4fb6...a52c36`):
+inside a schematic neither z-fighting nor hollows show any more.
+
 ## L-93 sixth look at drawing; sidebar fixed (2026-10-07)
 
 By the maintainer, local world, `60b5fab` (DLL `e989a476...46263f4`), with
