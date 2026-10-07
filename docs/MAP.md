@@ -31,8 +31,8 @@ point, names and distances (decided 2026-10-07, L-106). The marker draw checks
 configured Always / While held / Off behavior. This does not change waypoint
 storage or recording. The maintainer confirmed F1 hide/restore of all marker
 parts and hiding during FreeCamera on `775c8c0` (2026-10-07).
-The minimap still remains visible with F1, along with other custom HUD
-elements (L-107); that broader issue is recorded but not yet fixed.
+The minimap and other Lamium HUD elements also follow F1 (L-107); map
+recording and death tracking continue while hidden (checked on `18e2cc8`).
 
 ## Technical entry points
 

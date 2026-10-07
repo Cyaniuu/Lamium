@@ -150,8 +150,6 @@ Minecraft's "copy coordinates" while Lamium is installed unless you rebind it.
   local world and on BDS; Hold/Toggle operation, menus, focus loss and dimension
   travel are also checked. Other players' view of the body, controllers and
   broader graphics/resource configurations remain untested.
-- F1 still leaves the minimap, Target Info and Info HUD visible. In-world
-  waypoint markers now follow F1; hiding the remaining HUD elements is pending.
 - Edge Guard works in local worlds; on multiplayer servers the server may
   still move the player over the edge (untested).
 - Inventory transfer works only in ordinary storage (chests, barrels, Shulker

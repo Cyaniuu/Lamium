@@ -12,6 +12,19 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-107 Lamium HUD hides with F1 (2026-10-07)
+
+By the maintainer, deployed `18e2cc8`, DLL
+`934028ffaf42b4dfadff261fc288ebbca6f52d55abe5ad05ef89c16513f9fcbb`,
+Minecraft 1.26.51.01 / LeviLamina Client 26.51.6, all trace options off.
+Confirmed all eight checklist items: F1 hides the minimap, Info HUD and
+Target Info; Debug View, Status, durability HUD, Schematic HUD,
+magnification and toggle toasts; the offhand slot and saturation marks.
+Restoring F1 returns the configured display. The same holds during
+FreeCamera. Moving while hidden is still recorded on the world map, a death
+while hidden is still recorded as a death point, and the HUD layout editor
+preview is unchanged. World-space overlays were not part of this check.
+
 ## L-106 waypoint F1 hide/restore passes; other HUD remains (2026-10-07)
 
 By the maintainer, deployed `775c8c0`, DLL
