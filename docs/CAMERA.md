@@ -183,6 +183,62 @@ rotation center felt wrong, so FreeCamera locks first person instead.
 Continuing flight from the previous third-person eye (31323b8) did not pass
 verification and was removed: starting from third person begins at the head.
 
+## Underground terrain visibility (L-37; candidate 2026-10-07)
+
+Runtime status: **unverified**. Earlier game checks found normal/FreeCamera
+terrain culler type 3 and spectator type 5; caves were clipped at straight
+chunk boundaries from inside solid blocks, while a camera inside open cave
+space rendered normally. A separate forced update to 5 fought native requests
+for 3 and blanked the view. Querying spectator/game type did not change the
+selection. The old probes and failed hook are retained in BACKLOG-DONE.md and
+VALIDATION-LOG.md; they are not evidence that this candidate works.
+
+`FreeCameraCulling.cpp` intercepts the primary renderer's native
+`updateLevelCullerType` request. It changes only a requested type 3 to 5 during
+the owning FreeCamera session, then calls the original once. Other requested
+types and other cameras pass through. Ending FreeCamera lets the next native
+request choose the normal culler. This should avoid the prior independent
+3/5 updates, but actual call frequency, geometry and restoration need a game
+check. Pure tests cover all byte-sized requests and stable selection across
+repeated activation/exit frames; they do not exercise the game renderer.
+
+The candidate requires Minecraft executable file version 1.26.51.1
+(launcher version 1.26.51.01) and LeviLamina Client 26.51.5. A pre-render hook
+binds lazily from an actual primary renderer while FreeCamera is active. The
+SDK virtual-call thunk provides the slot; the implementation must be executable
+code in the game module. There is no hard-coded vtable slot or game address.
+Only requests on that render thread for that primary renderer and the current
+client/player session can change. No game object pointer is retained between
+callbacks. An unmodified native type-3 request must first leave the typed
+`mLastCullerType` field at 3. Every later overridden request must retain 5;
+a mismatch disables the adapter. These checks establish a narrow call/field
+contract, not correctness of cave rendering. A warning explains a disabled
+path; the rest of FreeCamera retains its previous rendering behavior.
+
+One-time ordinary-build messages identify the binding and first substitution:
+`FreeCamera terrain: culler hook bound at virtual slot ...` and
+`FreeCamera terrain: native request 3 -> 5 retained`. No trace option is needed.
+Absence of the latter after flight means the replacement was not observed;
+capture the log before pursuing a different path. Player game type, abilities,
+position, camera input policy and network packets are not modified here.
+Terrain beyond the client's loaded area remains outside this scope.
+
+First game check on a local test world:
+
+- Start FreeCamera above ground, enter solid ground near a known cave, rotate
+  and cross chunk boundaries. Compare the surrounding cave/terrain with a
+  separate spectator view; watch for blank frames, disappearing chunks or
+  repeated rebuilding after standing still.
+- Fly through open cave space and back to the surface; inspect terrain,
+  shadows and overlays. Toggle off/on repeatedly and confirm the normal view
+  and player controls return without flicker or missing terrain.
+- Open Settings/inventory and change window focus during Toggle FreeCamera:
+  the retained pose should keep its visibility while flight pauses. Test Hold
+  release, world exit/re-entry and dimension cleanup separately.
+- Check ordinary first/third person, Freelook and Zoom with FreeCamera off.
+  Check the player's mode and body remain unchanged; multiplayer remains
+  unverified until separately exercised.
+
 ## Boundaries
 
 ### Flight speed controls (L-26, implemented 2026-09-30)

@@ -344,6 +344,12 @@ Contents:
   exit. The player may switch perspectives with F5 while Freelook is active.
   FreeCamera offers Activation: Hold / Toggle, default Toggle. A wheel binding
   toggles in either mode because a wheel impulse cannot be held.
+- (Decided 2026-10-07, L-37) FreeCamera should show surrounding loaded terrain
+  and caves from inside solid ground, as spectator rendering does. This must
+  remain a camera/rendering change: retain the player's game mode, abilities,
+  body and server movement. Unsupported rendering paths retain vanilla
+  visibility. Implementation and runtime coverage are tracked in CAMERA.md
+  and VALIDATION.md.
 - (Decided 2026-09-26, BACKLOG L-47 and L-27) Zoom, Freelook, FreeCamera,
   Permanent Sneak and Permanent Sprint have no saved switch. Their switch
   shows whether they are wanted; the key or a click on the switch flips it,

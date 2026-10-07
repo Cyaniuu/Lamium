@@ -1,6 +1,7 @@
 #include "features/camera/CameraSessions.h"
 #include <numbers>
 #include "features/camera/CameraInteraction.h"
+#include "features/camera/FreeCameraCulling.h"
 #include "features/camera/CameraTrace.h"
 #include "features/camera/DetachedCameraRig.h"
 #include "features/camera/CameraMovementInput.h"
@@ -694,6 +695,7 @@ bool CameraSessions::start() {
     if (running) return true;
     try {
         camera::startInteractionGuard();
+        camera::startTerrainCulling();
         for (auto& hook : hooks) {
             if (hook.installed) continue;
             int result = hook.install(true);
@@ -743,6 +745,7 @@ bool CameraSessions::start() {
 void CameraSessions::stop() {
     running = false;
     reset();
+    camera::stopTerrainCulling();
     camera::stopInteractionGuard();
     auto& bus = ll::event::EventBus::getInstance();
     for (auto* listener : {&wheelListener, &screenListener, &exitListener}) {

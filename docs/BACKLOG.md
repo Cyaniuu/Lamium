@@ -156,6 +156,11 @@ unmet gates for versions already published:
 
 ### Pending feature checks
 
+- FreeCamera underground visibility (L-37): the 2026-10-07 native-request
+  candidate needs its first game check. Compare solid-ground and open-cave
+  rendering, repeated frames, release, menus and world/dimension cleanup;
+  also check surface terrain and shadows. CAMERA.md describes the gates and
+  diagnostic messages. Cave visibility remains a known limit until confirmed.
 - FreeCamera speed controls (L-26): five-step adjustment and speed keys passed
   on `7e72244`; revised labels and forward-only sprint follow-up passed on
   `41b1ff6`. Restart persistence and detailed input/menu/focus combinations
@@ -567,11 +572,21 @@ Stop and hand back after two runtime rounds without a new candidate.
 ### L-37 FreeCamera sees caves from underground (reopened)
 Kind: Research. Reopened 2026-09-30: the maintainer wants it. Four traces and
 the parked write-up are in BACKLOG-DONE.md (L-37).
-Status: open.
+Status: open; native-request candidate built 2026-10-07, runtime unverified.
 Known: underground FreeCamera uses culler type 3 like survival; spectator uses
 type 5. Answering spectator from `Actor::isSpectator` or
 `getPlayerGameType` did not change the culler.
-New hypothesis (source: GroupMountain FreeCamera README, a GPL-3.0 BDS plugin,
+Current candidate (2026-10-07): intercept the primary renderer's own
+`updateLevelCullerType` request and substitute 5 for 3 only during the owning
+FreeCamera session. This replaces the argument in the native update instead
+of separately forcing 5 every frame, which previously fought native 3 and
+blanked the view. Resolve the implementation from the SDK virtual method and
+an actual renderer; gate the game/loader version and observe one unmodified
+request first. No game-type, ability or packet changes. Details and first-game
+checklist: [CAMERA.md](CAMERA.md#underground-terrain-visibility-l-37-candidate-2026-10-07).
+Keep L-37 open until cave drawing and normal-view restoration are confirmed.
+
+Earlier hypothesis (2026-09-30; source: GroupMountain FreeCamera README, a GPL-3.0 BDS plugin,
 PROVENANCE.md group 3; its source is not opened): that plugin shows caves by
 making the client really switch to spectator through the server's game-type
 packet. So the culler may follow the client's actual game-type change (the
