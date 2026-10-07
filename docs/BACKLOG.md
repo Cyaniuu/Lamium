@@ -979,6 +979,27 @@ follow-ups below changed in `cd21ee4` (not yet checked):
   (until "Clear area" in the prompt or leaving the world). Entity names
   are sized like text a quarter block tall over the frame, shrinking with
   distance and hidden when too small to read.
+Changed after the second check, in `1c5a676` (not yet checked):
+- Corner 1 outlined red and corner 2 blue on the block's own edges, with
+  faintly tinted faces just outside, so a full block shows its corner.
+- Large areas: the save reads the area chunk column by chunk column; a
+  column whose chunk is not loaded waits until the player comes near (a
+  toast every 8 s names the nearest waiting spot). The prompt shows the
+  progress and its Save button becomes "Stop saving" while a save runs.
+- The save prompt is wider (340), with a status row; "Clear area" sits at
+  the left of the button row.
+- Text fields (save and waypoint prompts, shape and waypoint names) show a
+  blinking caret after the text, or the selection as a highlight, instead
+  of "_" or "[...]". Number fields keep their old look.
+- Entity names are drawn in the world pass as name tags: a dark plate with
+  the text, facing the camera, 0.025 blocks per font pixel, with the
+  game's name tag materials (the both-sides variants). Adding them to the
+  game's own name tag list is not possible from a mod: that list's
+  allocator is not exported.
+- Blocks with neither a world mesh nor a block entity (honey block, door)
+  fall back to the block's shape mesh set on the cell floor; it ignores
+  block states (a door shows its default shape). Skulls stay an outline:
+  their model needs their block entity data (research).
 As first built:
 - 1 (`1a82afe`): missing entities get a dashed frame (one size, 0.8 x 1.8;
   the client cannot know a type's size without the entity) and their name

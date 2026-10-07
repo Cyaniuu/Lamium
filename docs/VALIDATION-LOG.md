@@ -12,6 +12,21 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 corners, save prompt, entity names, blocks without a mesh (2026-10-07)
+
+By the maintainer, local world, `cd21ee4` (DLL `13fc81e5...c74fc8`), with
+screenshots. Corner 2 no longer opening the prompt and the kept area work.
+Problems: the corner marks sat inside the block, so on a full block neither
+corner could be seen; the save prompt cut off "Corner 1/2", the file path,
+the hint and the key line; entity names drawn on the HUD jumped as their
+size was recomputed each frame and should look like name tags in the world;
+a larger area could not be saved ("chunk not loaded" beyond the render
+distance); the trailing "_" in text fields could not be told from a typed
+"_". Blocks without a mesh: torch and bed draw like other ghosts, skull and
+door show only the light-blue outline, and so does a honey block. The
+large-file warning was not tried. All addressed in `1c5a676` (not yet
+checked); skull stays an outline (it needs its block entity data).
+
 ## L-93 schematic entities, area save, open folder (2026-10-07)
 
 By the maintainer, local world, `14c2265` (DLL `a997b66c...4357e5`). Entity
