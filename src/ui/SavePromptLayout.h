@@ -13,7 +13,7 @@ struct SavePromptLayout {
     static SavePromptLayout at(float screenW, float screenH) {
         return {std::max(0.f, (screenW - width) / 2), std::max(0.f, (screenH - height()) / 2)};
     }
-    static constexpr float height() { return pad + 14 + 2 * 16 + 12 + 17 + 12 + 13 + 12 + 17 + 32 + 10 + pad; }
+    static constexpr float height() { return pad + 14 + 2 * 16 + 12 + 17 + 12 + 13 + 12 + 17 + 36 + 10 + pad; }
     float inner() const { return width - 2 * pad; }
     float titleY() const { return top + pad; }
     float cornerY(int corner) const { return top + pad + 14 + 16 * corner; }
@@ -24,7 +24,7 @@ struct SavePromptLayout {
     float statusY() const { return entitiesY() + 15; }
     float buttonY() const { return statusY() + 12; }
     float hintY() const { return buttonY() + 17; }
-    float keysY() const { return hintY() + 32; }
+    float keysY() const { return hintY() + 36; } // three hint lines, 12 apart
     float cellWidth() const { return (inner() - labelWidth - 2 * gap) / 3; }
     float cellX(int axis) const { return left + pad + labelWidth + axis * (cellWidth() + gap); }
     float switchX() const { return left + width - pad - switchWidth; }

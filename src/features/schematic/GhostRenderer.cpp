@@ -46,6 +46,7 @@
 #include "mc/util/Rotation.h"
 #include "mc/world/level/BlockPos.h"
 #include "mc/world/phys/HitResult.h"
+#include "mc/world/level/ShapeType.h"
 #include "mc/world/item/ItemInstance.h"
 #include "mc/common/client/renderer/helpers/MeshHelpers.h"
 #include "features/schematic/Verification.h"
@@ -57,7 +58,6 @@
 #include "mc/world/level/block/BrightnessPair.h"
 #include "mc/world/level/block/actor/BlockActor.h"
 #include "mc/world/level/block/actor/BlockActorRendererId.h"
-#include "mc/world/level/block/actor/BlockActorType.h"
 #include "mc/world/level/block/actor/VanillaBlockActorFactory.h"
 #include "mc/world/level/block/states/VanillaBlockStateTransformUtils.h"
 #include "mc/world/level/chunk/ChunkState.h"
@@ -384,25 +384,12 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
                 size_t before = batch.mMeshData->mPositions->size();
                 own.tessellateInWorld(batch, *expected, pos, false);
                 auto& positions = batch.mMeshData->mPositions.get();
-                if (positions.size() == before && expected->getBlockType().getBlockEntityType() != BlockActorType::Undefined) {
-                    // No block mesh: block entities draw through their renderer.
+                if (positions.size() == before) {
+                    // No block mesh: block entities draw through their renderer;
+                    // others (honey block, door) keep the outline alone for now.
                     out.entities.push_back({pos, expected});
                     outlines.push_back({boxLow, boxHigh, .35f, .85f, 1.f});
                     continue;
-                }
-                if (positions.size() == before) {
-                    // Neither (honey block, door): the block's own shape mesh,
-                    // set on the cell's floor and centered. It ignores states.
-                    own.appendTessellatedBlock(batch, *expected);
-                    auto& appended = batch.mMeshData->mPositions.get();
-                    if (appended.size() == before) { outlines.push_back({boxLow, boxHigh, .35f, .85f, 1.f}); continue; }
-                    glm::vec3 low{1e9f}, high{-1e9f};
-                    for (size_t v = before; v < appended.size(); ++v) { low = glm::min(low, appended[v]); high = glm::max(high, appended[v]); }
-                    glm::vec3 shift{pos.x + .5f - (low.x + high.x) / 2, pos.y - low.y, pos.z + .5f - (low.z + high.z) / 2};
-                    for (size_t v = before; v < appended.size(); ++v) appended[v] += shift;
-                    auto& data = batch.mMeshData.get();
-                    data.mColors->resize(appended.size(), 0xffffffffu);
-                    data.mTextureUVs[1]->resize(appended.size(), glm::vec2{1.f, 1.f});
                 }
                 glm::vec3 shapeLow{1e9f}, shapeHigh{-1e9f};
                 for (size_t v = before; v < positions.size(); ++v) {
@@ -864,7 +851,7 @@ void drawEntities(ScreenContext& screen, session::Snapshot const& snapshot, int 
 // The names of missing entities like a named entity's tag: a dark plate with
 // the text, facing the camera, a fixed size in the world. Drawn with the
 // game's name tag materials (the both-sides variants).
-void drawNameTags(ScreenContext& screen, IClientInstance& client, BaseActorRenderer& renderer, Vec3 const& camera) {
+void drawNameTags(ScreenContext& screen, IClientInstance& client, BlockSource& region, BaseActorRenderer& renderer, Vec3 const& camera) {
     if (labels.empty()) return;
     auto const& backgroundMaterial = renderer.mNameTagBackgroundWithBackfaceMat.get();
     auto const& textMaterial = renderer.mNameTagTextWithBackfaceMat.get();
@@ -877,6 +864,11 @@ void drawNameTags(ScreenContext& screen, IClientInstance& client, BaseActorRende
     auto& font = client.getMinecraftGame_DEPRECATED().getFontRepository()->getFontFromFontType("default").getFont();
     auto background = BaseActorRenderer::NAME_TAG_BACKGROUND_COLOR();
     for (auto const& [at, name] : labels) {
+        // Not through walls: a block between the camera and the tag hides it.
+        Vec3 to{static_cast<float>(at.x), static_cast<float>(at.y), static_cast<float>(at.z)};
+        auto hit = region.clip(camera, to, false, ShapeType::Outline, 64, false, false, nullptr,
+            [](BlockSource const&, Block const&, bool) { return true; }, false);
+        if (hit.mType == HitResultType::Tile) continue;
         float width = static_cast<float>(font.getLineLength(name, 1.f, false));
         glm::vec3 offset{static_cast<float>(at.x - camera.x), static_cast<float>(at.y - camera.y), static_cast<float>(at.z - camera.z)};
         // Font pixels: x to the camera's right, y downward.
@@ -1047,7 +1039,7 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
         }
     }
     drawEntities(screen, snapshot, dimension, camera);
-    drawNameTags(screen, client, *moving, camera);
+    drawNameTags(screen, client, region, *moving, camera);
 }
 
 // The cell chosen with "Show in world": a pulsing tinted box with outlines

@@ -148,7 +148,7 @@ int editingWaypointField = -1;
 bool editingWaypointName = false, waypointNameDirty = false;
 SearchQuery waypointNameInput;
 void applyWaypointName();
-void drawEditText(MinecraftUIRenderContext&, float x, float y, float width, SearchQuery const&);
+void drawEditText(MinecraftUIRenderContext&, float x, float top, float height, float width, SearchQuery const&);
 map::Waypoint const* selectedWaypoint();
 void changeSelected(std::function<void(map::Waypoint&)> const& apply);
 void copyVersion();
@@ -1375,7 +1375,7 @@ void drawShapesBody(MinecraftUIRenderContext& context, ShapesLayout const& l, gl
         fill(context,dx,l.nameY,dw,ShapesLayout::rowHeight-1,Rgb{0,0,0},.4f);
         frame(context,dx,l.nameY,dw,ShapesLayout::rowHeight-1,editingShapeName ? palette::accent : palette::keyEdge);
         drawTypeIcon(context,dx+3,l.nameY+1.5f,shape::typeIndex(*definition),shapeDraft ? draftRgb : shapeRgb(definition->color));
-        if (editingShapeName) drawEditText(context,dx+17,l.nameY+1+boxTextInset(),dw-20,shapeNameInput);
+        if (editingShapeName) drawEditText(context,dx+17,l.nameY,ShapesLayout::rowHeight-1,dw-20,shapeNameInput);
         else label(context,dx+17,l.nameY+1+boxTextInset(),dw-20,definition->name);
         // Preview: one layer seen from above; plane seen along its normal.
         float px = dx, py = l.previewY, size = ShapesLayout::previewSize;
@@ -2256,7 +2256,7 @@ void drawWaypointsBody(MinecraftUIRenderContext& context, ShapesLayout const& l,
         fill(context,dx,l.nameY,dw,ShapesLayout::rowHeight-1,Rgb{0,0,0},.4f);
         frame(context,dx,l.nameY,dw,ShapesLayout::rowHeight-1,editingWaypointName ? palette::accent : palette::keyEdge);
         drawDiamondGlyph(context, dx + 7, l.nameY + 6.5f, 7, waypointRgb(w->color));
-        if (editingWaypointName) drawEditText(context,dx+17,l.nameY+1+boxTextInset(),dw-20,waypointNameInput);
+        if (editingWaypointName) drawEditText(context,dx+17,l.nameY,ShapesLayout::rowHeight-1,dw-20,waypointNameInput);
         else label(context,dx+17,l.nameY+1+boxTextInset(),dw-20,w->name);
         // The preview area: a large diamond and where the waypoint is.
         float size = ShapesLayout::previewSize;
@@ -2997,9 +2997,12 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
             auto const& f = schematicFiles[static_cast<size_t>(schematicIndex)];
             label(context,dx,l.nameY+1+boxTextInset(),dw,fileTitle(f.relative));
             bool waits = waitsForLoad(f);
-            if (waits) paragraph(context,dx,l.previewY,dw,translated("schematic.largeWarning",
-                std::format("{:.1f}", static_cast<double>(f.bytes) / (1024 * 1024))),4,palette::warning);
-            else info(f.relative, l.previewY);
+            if (waits) {
+                // Just above its "Load" button, so the warning and the choice read together.
+                auto text = translated("schematic.largeWarning", std::format("{:.1f}", static_cast<double>(f.bytes) / (1024 * 1024)));
+                int lines = std::clamp(static_cast<int>(std::ceil(textWidth(context, text) / std::max(1.f, dw - 12))), 1, 4);
+                paragraph(context,dx,std::max(l.previewY,l.actionsY-4-12.f*lines),dw,text,4,palette::warning);
+            } else info(f.relative, l.previewY);
             drawSmallButton(context,l.actionX(0),l.actionsY+2,l.firstActionWidth,12,translated(waits ? "schematic.loadAnyway" : "schematic.place"),
                 over(ShapeZone::Action,0),palette::accentDeep,palette::accent);
         } else paragraph(context,dx,l.detailTop+6,dw,translated(schematicFiles.empty() ? "schematic.empty" : "schematic.fileSelectHint"),
@@ -3167,7 +3170,7 @@ void renderPrompt(MinecraftUIRenderContext& context, glm::vec2 size, glm::vec2 p
     label(context, x, l.whereY(), l.inner(), std::format("{}, {}, {}  {}", d.x, d.y, d.z, translated(dimension)), palette::dim);
     fill(context, x, l.fieldY(), l.inner(), L::fieldHeight, Rgb{0, 0, 0}, .4f);
     frame(context, x, l.fieldY(), l.inner(), L::fieldHeight, palette::accent);
-    drawEditText(context, x + 3, l.fieldY() + 1 + boxTextInset(), l.inner() - 6, prompt->name);
+    drawEditText(context, x + 3, l.fieldY(), L::fieldHeight, l.inner() - 6, prompt->name);
     for (int i = 0; i < L::swatches; ++i) {
         auto c = map::waypointColors[static_cast<size_t>(i)];
         float sx = l.swatchX(i), sy = l.swatchY();
@@ -3187,15 +3190,17 @@ void renderPrompt(MinecraftUIRenderContext& context, glm::vec2 size, glm::vec2 p
     label(context, x, l.hintY(), l.inner(), translated("waypoint.hint"), palette::faint);
     context.flushText(0, std::nullopt);
 }
-// Text being typed: the selection as a highlight, otherwise a blinking bar
-// after the text, so a typed "_" never looks like the caret.
-void drawEditText(MinecraftUIRenderContext& context, float x, float y, float width, SearchQuery const& input) {
+// Text being typed in a field of `height` from `top`: the selection as a
+// highlight, otherwise a blinking bar after the text, so a typed "_" never
+// looks like the caret. Both keep the same margin above and below.
+void drawEditText(MinecraftUIRenderContext& context, float x, float top, float height, float width, SearchQuery const& input) {
     auto const& value = input.value();
     float w = std::min(textWidth(context, value), width - 2);
-    if (input.selectedAll() && !value.empty()) fill(context, x - 1, y - 1, w + 2, 10, palette::accentDeep);
-    label(context, x, y, width, value);
+    float markTop = top + 2, markHeight = height - 4;
+    if (input.selectedAll() && !value.empty()) fill(context, x - 1, markTop, w + 2, markHeight, palette::accentDeep);
+    label(context, x, top + 1 + boxTextInset(), width, value);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    if (!input.selectedAll() && ms / 530 % 2 == 0) fill(context, x + w + 1, y - 1, 1, 10, palette::text);
+    if (!input.selectedAll() && ms / 530 % 2 == 0) fill(context, x + w + 1, markTop, 1, markHeight, palette::text);
 }
 // ---- Schematic save prompt ----
 void commitSave() {
@@ -3280,7 +3285,7 @@ void renderSavePrompt(MinecraftUIRenderContext& context, glm::vec2 size, glm::ve
     label(context, x, l.sizeY(), l.inner(), translated("schematic.save.size", s.x, s.y, s.z, p.area.cells()), palette::dim);
     fill(context, x, l.fieldY(), l.inner(), L::fieldHeight, Rgb{0, 0, 0}, .4f);
     frame(context, x, l.fieldY(), l.inner(), L::fieldHeight, palette::accent);
-    drawEditText(context, x + 3, l.fieldY() + 1 + boxTextInset(), l.inner() - 6, p.name);
+    drawEditText(context, x + 3, l.fieldY(), L::fieldHeight, l.inner() - 6, p.name);
     auto file = schematic::schematicFileName(p.name.value());
     label(context, x, l.whereY(), l.inner(), translated("schematic.save.where", file.empty() ? std::string("-") : file), palette::faint);
     label(context, x, l.entitiesY() + boxTextInset(), l.inner() - L::switchWidth - 4, translated("schematic.save.entities"),
