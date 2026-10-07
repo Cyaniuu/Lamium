@@ -58,6 +58,7 @@ void translationTests() {
             else if (entry.key == "schematic.save.progress" || entry.key == "schematic.save.progressWaiting")
                 rendered = std::vformat(pattern, std::make_format_args(key, remaining));
             else if (entry.key == "schematic.save.tooLarge") rendered = std::vformat(pattern, std::make_format_args(remaining, remaining));
+            else if (entry.key == "schematic.withDetail") rendered = std::vformat(pattern, std::make_format_args(key, key));
             else if (entry.key == "durabilityValue") {
                 rendered = std::vformat(pattern, std::make_format_args(remaining, maximum));
                 check(rendered.find("123 / 1561") != std::string::npos);

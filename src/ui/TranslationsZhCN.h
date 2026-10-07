@@ -467,6 +467,7 @@ inline constexpr auto simplifiedChinese = std::to_array<Text>({
     {"schematic.menu.placedTab", "放置"},
     {"schematic.menu.keySettings", "按键设置"},
     {"schematic.adjust.hint", "滚轮: {}"},
+    {"schematic.withDetail", "{}（{}）"},
     {"schematic.adjust.none", "请先在蓝图菜单中使用一次调整"},
     {"schematic.toast.areaCleared", "已清除范围"},
     {"schematic.menuKeyHint", "提示: 绑定蓝图菜单键（上方的「按键」）后可在游戏中操作。"},

@@ -1039,19 +1039,29 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
         if (!toast && preview) toast = ui::Toast::Visible{ui::translated("feature.toolSwitch"), true, 1.f};
         if (toast) {
             float zoom = elementZoom(hud.toast);
-            float textWidth = ui::textWidthScaled(context, toast->text, zoom);
+            // A message may hold several lines ("\n"), each centered in the box.
+            std::vector<std::string> parts;
+            for (size_t start = 0;;) {
+                auto end = toast->text.find('\n', start);
+                parts.push_back(toast->text.substr(start, end == std::string::npos ? std::string::npos : end - start));
+                if (end == std::string::npos) break;
+                start = end + 1;
+            }
+            float textWidth = 0;
+            for (auto const& part : parts) textWidth = std::max(textWidth, ui::textWidthScaled(context, part, zoom));
             bool card = hud.toast.background == ui::ElementBackground::Card;
             float padX = card ? 6 : 0, padY = card ? 3 : 0;
             float lead = toast->plain ? 0 : ui::switchWidth + 6;
-            float total = lead + textWidth + 2 * padX;
-            auto frame = ui::placeElement(width, height, total, 14 * zoom + 2 * padY, hud.toast);
-            if (card) ui::card(context, frame.x, frame.y, total, 14 * zoom + 2 * padY, cardOpacity * toast->opacity);
-            box(ui::HudElementId::Toast) = ui::hud_editor::Box{frame.x, frame.y, total, 14 * zoom + 2 * padY};
+            float total = lead + textWidth + 2 * padX, rows = 14 * zoom * static_cast<float>(parts.size());
+            auto frame = ui::placeElement(width, height, total, rows + 2 * padY, hud.toast);
+            if (card) ui::card(context, frame.x, frame.y, total, rows + 2 * padY, cardOpacity * toast->opacity);
+            box(ui::HudElementId::Toast) = ui::hud_editor::Box{frame.x, frame.y, total, rows + 2 * padY};
             ui::ElementPlacement placement{frame.x + padX, frame.y + padY};
             if (!toast->plain) ui::toggleSwitch(context, placement.x, placement.y + (14 * zoom - ui::switchHeight) / 2, toast->on);
-            ui::labelScaled(context, placement.x + lead, placement.y, textWidth + 2,
-                std::string(toast->text), zoom, toast->opacity < 1 ? ui::palette::dim : ui::palette::text,
-                ui::Align::Left, hud.toast.shadow);
+            for (size_t i = 0; i < parts.size(); ++i)
+                ui::labelScaled(context, placement.x + lead, placement.y + 14 * zoom * static_cast<float>(i), textWidth + 2,
+                    parts[i], zoom, toast->opacity < 1 ? ui::palette::dim : ui::palette::text,
+                    parts.size() > 1 ? ui::Align::Center : ui::Align::Left, hud.toast.shadow);
             context.flushText(0, std::nullopt);
         }
     }

@@ -469,6 +469,7 @@ inline constexpr auto entries = std::to_array<Entry>({
     {"schematic.menu.placedTab", "Placed", "配置"},
     {"schematic.menu.keySettings", "Key settings", "キーの設定"},
     {"schematic.adjust.hint", "Wheel: {}", "ホイール: {}"},
+    {"schematic.withDetail", "{} ({})", "{}（{}）"},
     {"schematic.adjust.none", "Use an adjustment in the schematic menu first", "先に設計図メニューで調整を使ってください"},
     {"schematic.toast.areaCleared", "Area cleared", "範囲を消しました"},
     {"schematic.menuKeyHint", "Tip: bind the schematic menu key (\"Keys\" at the top) to work with schematics while you play.", "ヒント: 設計図メニューのキーを割り当てると（上の「キー」）、プレイ中に操作できます。"},

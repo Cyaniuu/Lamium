@@ -474,7 +474,6 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
                 if (expectsAir) {
                     // An extra block: red outline (the real block hides any ghost).
                     if (placement.countExtras && !actual.isAir()) {
-                        outlines.push_back({boxLow, boxHigh, 1.f, .25f, .2f});
                         marks.push_back({boxLow, boxHigh, 1.f, .25f, .2f});
                     }
                     continue;
@@ -485,7 +484,6 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
                     bool sameType = &actual.getBlockType() == &expected->getBlockType();
                     // Something else is there: red, or yellow when only the state differs.
                     Outline mark = sameType ? Outline{boxLow, boxHigh, 1.f, .8f, .2f} : Outline{boxLow, boxHigh, 1.f, .25f, .2f};
-                    outlines.push_back(mark);
                     marks.push_back(mark);
                     continue;
                 }
@@ -519,21 +517,46 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
         out.faces.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium schematic ghosts", SupplementaryFieldAutoGenerationMode{}));
     }
     if (!marks.empty()) {
+        // Mistakes mark whole cells. Where marks of one color touch, the
+        // faces between them and the outlines of cells inside a run are
+        // left out: dense wrong or extra areas drew every one of them.
+        auto cellOf = [](Outline const& m) {
+            return std::tuple<int, int, int>{static_cast<int>(std::floor(m.min.x)), static_cast<int>(std::floor(m.min.y)),
+                                             static_cast<int>(std::floor(m.min.z))};
+        };
+        std::map<std::tuple<int, int, int>, float> colorAt; // keyed cell -> green channel, which tells red from yellow
+        for (auto const& m : marks) colorAt[cellOf(m)] = m.g;
+        auto sameAt = [&](std::tuple<int, int, int> cell, int side, float g) {
+            auto const& d = faces::offsets[side];
+            auto found = colorAt.find({std::get<0>(cell) + d[0], std::get<1>(cell) + d[1], std::get<2>(cell) + d[2]});
+            return found != colorAt.end() && found->second == g;
+        };
         Tessellator quads(screen.tessellator.mBufferResourceService);
         quads.begin({}, mce::PrimitiveMode::QuadList, static_cast<int>(marks.size() * 48), false);
+        std::uint32_t vertices = 0;
+        // Same order as faces::offsets: -x, +x, -y, +y, -z, +z.
+        constexpr int sides[6][4] = {{0,2,6,4},{1,5,7,3},{0,4,5,1},{2,3,7,6},{0,1,3,2},{4,6,7,5}};
         for (auto const& m : marks) {
+            auto cell = cellOf(m);
             quads.color(m.r, m.g, m.b, .3f);
             glm::vec3 a = m.min - glm::vec3{.01f} - out.origin, b = m.max + glm::vec3{.01f} - out.origin;
             glm::vec3 c[8];
             for (int i = 0; i < 8; ++i) c[i] = {i & 1 ? b.x : a.x, i & 2 ? b.y : a.y, i & 4 ? b.z : a.z};
-            constexpr int sides[6][4] = {{0,2,6,4},{1,5,7,3},{0,4,5,1},{2,3,7,6},{0,1,3,2},{4,6,7,5}};
-            for (auto const& side : sides) {
-                for (int k = 0; k < 4; ++k) quads.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
-                for (int k = 3; k >= 0; --k) quads.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
+            int open = 0;
+            for (int side = 0; side < 6; ++side) {
+                if (sameAt(cell, side, m.g)) continue;
+                ++open;
+                auto const& f = sides[side];
+                for (int k = 0; k < 4; ++k) quads.vertex(c[f[k]].x, c[f[k]].y, c[f[k]].z);
+                for (int k = 3; k >= 0; --k) quads.vertex(c[f[k]].x, c[f[k]].y, c[f[k]].z);
+                vertices += 8;
             }
+            if (open) outlines.push_back(m);
         }
-        out.markVertices = static_cast<std::uint32_t>(marks.size() * 48);
-        out.marks.emplace(quads.end(Tessellator::UploadMode::Buffered, "Lamium schematic mistakes", SupplementaryFieldAutoGenerationMode{}));
+        out.markVertices = vertices;
+        // Ended either way, so the tessellator never stays open.
+        auto mesh = quads.end(Tessellator::UploadMode::Buffered, "Lamium schematic mistakes", SupplementaryFieldAutoGenerationMode{});
+        if (vertices) out.marks.emplace(std::move(mesh));
     }
     if (!outlines.empty()) {
         Tessellator lines(screen.tessellator.mBufferResourceService);

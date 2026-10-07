@@ -411,7 +411,7 @@ std::string adjustText() {
             if (item.stepper() && std::get<menu::Stepper>(item.what) == *remembered && name.empty()) name = ui::translated(item.label);
     bool moving = *remembered == menu::Stepper::ForwardBack || *remembered == menu::Stepper::LeftRight || *remembered == menu::Stepper::UpDown;
     auto shown = moving ? value(menu::Stepper::Target) : value(*remembered);
-    return ui::translated("schematic.adjust.hint", shown.empty() ? name : name + " (" + shown + ")");
+    return ui::translated("schematic.adjust.hint", shown.empty() ? name : ui::translated("schematic.withDetail", name, shown));
 }
 void setAdjustHeld(bool held) {
     // Pressing it says what the wheel will repeat, like other toggles' toasts.
@@ -450,7 +450,7 @@ void adjustFrame(MinecraftUIRenderContext& context, float, float) {
         step(client, *remembered, turns);
         auto shown = ui::currentToggleToast(ui::toastNow());
         auto prefix = adjustText();
-        ui::showMessageToast(shown && shown->text != prefix ? prefix + "  " + shown->text : prefix);
+        ui::showMessageToast(shown && shown->text != prefix ? prefix + "\n" + shown->text : prefix);
     }
 }
 }

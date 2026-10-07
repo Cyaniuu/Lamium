@@ -2904,7 +2904,7 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
                 if (!icon.empty()) drawItemIcon(context, icon, x, y + 1, 12);
                 label(context,x+14,y+3,w-14,name,color);
             };
-            if (m.entity) block(bx, bw, m.expected, m.expectedName + " (" + translated("schematic.entityTag") + ")", palette::text);
+            if (m.entity) block(bx, bw, m.expected, translated("schematic.withDetail", m.expectedName, translated("schematic.entityTag")), palette::text);
             else if (m.state == schematic::CellState::Missing) block(bx, bw, m.expected, m.expectedName, palette::text);
             else if (m.state == schematic::CellState::Extra) {
                 // Same columns as a wrong block: air where the schematic's block would be.
@@ -2928,7 +2928,7 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
             // Entities: an icon and a carried count only when an item places them.
             bool noItem = line.item.empty() || (line.entity && !schematic::items::iconStack(line.icon));
             drawItemIcon(context, line.icon, left, y + 1, 12);
-            std::string name = line.entity ? line.name + " (" + translated("schematic.entityTag") + ")" : line.name;
+            std::string name = line.entity ? translated("schematic.withDetail", line.name, translated("schematic.entityTag")) : line.name;
             label(context,left+14,y+3,neededX-left-16,name,line.remaining() ? palette::text : palette::faint);
             auto have = noItem ? std::uint64_t{0} : carried[line.item];
             label(context,neededX,y+3,numW,std::to_string(line.needed),palette::dim,Align::Right);
@@ -3415,12 +3415,23 @@ void renderSchematicMenu(MinecraftUIRenderContext& context, glm::vec2 size, glm:
     }
     float below = std::round(l.cy + l.ry + menuSizes.itemHeight / 2 + 4), above = std::round(l.cy - l.ry - menuSizes.itemHeight / 2 - 4);
     auto note = [&](std::string const& text, Rgb color, bool card, bool top) {
-        float tw = std::min(width(text) + 10, size.x - 8), th = 11 * s + 2;
+        std::vector<std::string> parts;
+        for (size_t start = 0;;) {
+            auto end = text.find('\n', start);
+            parts.push_back(text.substr(start, end == std::string::npos ? std::string::npos : end - start));
+            if (end == std::string::npos) break;
+            start = end + 1;
+        }
+        float tw = 0;
+        for (auto const& part : parts) tw = std::max(tw, width(part) + 10);
+        tw = std::min(tw, size.x - 8);
+        float th = line * static_cast<float>(parts.size()) + 2;
         float tx = std::round(std::clamp(l.cx - tw / 2, 4.f, size.x - tw - 4));
         float ty = top ? above - th : below;
         if (!top && ty + th > size.y) ty = above - th;
         if (card) panel(context, tx, ty, tw, th, .86f);
-        labelScaled(context, tx + 5, ty + 1 + textInset, tw - 10, text, s, color, Align::Center);
+        for (size_t i = 0; i < parts.size(); ++i)
+            labelScaled(context, tx + 5, ty + 1 + textInset + line * static_cast<float>(i), tw - 10, parts[i], s, color, Align::Center);
     };
     // The game's toasts are not drawn over this screen: what an item just
     // did (or why it did nothing, such as no area yet) shows under the ring.
