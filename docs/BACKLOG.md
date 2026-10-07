@@ -1027,6 +1027,14 @@ As first built:
 - 4: already in place: a block that gives no mesh and no block-entity
   model still gets the light-blue outline of its cell (to be checked with
   torch, bed, skull and door).
+Paused 2026-10-07 for a design conversation (maintainer). Open points from
+the third check (VALIDATION-LOG): how schematic keys work overall (too many
+single-purpose keys; the selection and corners should share the placement
+keys; a key to clear the selection), drawing cost of large schematics
+(culling, not rebuilding every placement on any change), name tag
+visibility (walls, distance, many entities), showing unloaded parts of a
+running save, and the small fixes (prompt line spacing, caret height,
+honey block and door fallback, the large-file warning not seen).
 If there is room before 0.1.7 (maintainer's call, not required): the
 rotatable 3D preview in Files, neighbor-dependent shapes (fences, panes,
 stair corners, redstone) following the schematic's neighbors instead of the

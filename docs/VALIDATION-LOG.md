@@ -12,6 +12,26 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 third save and entity check (2026-10-07)
+
+By the maintainer, local world, `1c5a676` (DLL `d4e9c333...846e9f`), with
+screenshots. Fine: red/blue corner outlines; the save prompt no longer cuts
+anything off; entity name tags in the world (steady, shrink with distance,
+seen through walls); saving an area beyond the render distance by walking
+along it, with the reminder, progress and Stop. Problems: the last two
+lines of the prompt's hint and key text sit closer than the others; the
+caret bar and the selection highlight start at the top of the field with
+space only below the text (worse with Japanese); the honey block fallback
+looks like its inner part stretched; the door still draws nothing. Not
+seen: the large-file warning for `terrain big.mcstructure` (7.7 MB,
+122 x 39 x 203; how it was opened is to be asked). Other findings: a large
+schematic made the game slow; moving one placement makes the others blink
+(every placement change drops all built sections); name tags through walls
+and from far away may be too many with many entities; wanted: unloaded
+parts of a save shown in the world, selection and corners driven by the
+placement keys, a key to clear the selection, and a rethink of the many
+schematic keys. Implementation paused for a design conversation.
+
 ## L-93 corners, save prompt, entity names, blocks without a mesh (2026-10-07)
 
 By the maintainer, local world, `cd21ee4` (DLL `13fc81e5...c74fc8`), with
