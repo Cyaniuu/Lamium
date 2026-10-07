@@ -665,6 +665,10 @@ fail-open per feature, smaller blast radius). Decide with the maintainer
 what to integrate, the risks of each step and the order, before any
 implementation. Output: a short plan (possibly a demo) that turns into Ready
 items.
+Status: agent's proposal written 2026-10-08 in [INTEGRATION.md](INTEGRATION.md)
+(shared parts features register into: face drawing, map layers, a Lamium
+radial menu, looked-at selection, settings cross-links; suggested order and
+open questions). Waiting for the maintainer.
 
 ### L-109 Restore the death-time hotbar and inventory layout on pickup
 Kind: Design decided 2026-10-08, then Ready **(strong model)**. Idea from the
