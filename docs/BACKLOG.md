@@ -69,10 +69,10 @@ Keep this section short. It is only the ordering layer; task details and status
 live in the L-items below. If this summary ever disagrees with an L-item, the
 L-item wins. Every entry names what the task is, not only its number.
 
-1. **Current batch (chosen 2026-10-08, one in-game check at the end):**
-   L-110 overlay z-fighting; L-93 richer schematic target-card line; L-57
-   client info counters; L-109 death layout restore; L-111 integration
-   design proposal (no in-game check). No release before the batch.
+1. **Current batch (chosen 2026-10-08):** checked in game except two L-109
+   fixes and its new restore scope setting, which wait for a recheck. The
+   L-111 integration proposal waits for the maintainer. No release before
+   the batch.
 2. **Before the next release or 0.2.0 — L-111 integration between
    features:** the agent drafts a proposal in the current batch; the
    maintainer decides scope, risks and order.
@@ -218,27 +218,7 @@ unmet gates for versions already published:
 
 ## Bugs
 
-### L-110 Overlay faces z-fight with the blocks they cover
-Kind: Bug **(strong model)**. Reported by the maintainer 2026-10-08 while
-checking L-15 step 1.
-Status: fixed 2026-10-08, not yet checked in game. Cause: Shapes and the
-restriction faces were inset 0.005 into their cell; along a grazing view ray
-that inset outgrew the pull toward the eye. Faces now stay on their plane and
-every overlay takes its pull from `overlay/Depth.h` (rules and tests; see
-OVERLAYS.md "Depth").
-The breaking restriction's allowed-region faces flicker against the faces of
-the blocks they lie on, and Shapes faces show the same problem (seen earlier,
-not recorded until now). Schematic ghosts went through several rounds of the
-same problem (SCHEMATIC.md, the "looks" before `e09334d`).
-Expected: overlay faces never flicker against terrain at any distance or view.
-Starting point: `WorldOverlay.cpp` draws Shapes and the restriction faces
-through `drawShape` (faces inset 0.005 into their cell, mesh scaled toward the
-eye by `withTowardEye`); the schematic ghosts use their own rules
-(`faces::beyond`, near-camera handling). Compare the two, then give every
-world-space face overlay one shared, tested rule (pure geometry in a header)
-instead of per-feature fixes, so a new overlay does not repeat the problem.
-Validate Shapes, the restriction faces and the ghosts near and far, in
-Fancy/Simple/Vibrant Visuals, and with FreeCamera.
+None open.
 
 ---
 
@@ -311,7 +291,7 @@ Reopened for Design (maintainer, 2026-10-08): the plan dates from 2026-09-28
 and should be rethought before placement is built. Problems seen: too many
 modes to cycle through, and the placement mode has no key (and does nothing
 yet). Steps 2-3 below wait for that rethink; the breaking behavior that
-passed stays until it is replaced. Faces z-fighting: L-110.
+passed stays until it is replaced. Faces z-fighting: L-110 (fixed).
 Decided 2026-10-07: breaking keeps the existing Breaking Restriction toggle
 and Cycle Breaking Mode bindings (no new default keys); the saved breaking
 mode carries over unchanged and Height band is added to the list.
@@ -565,7 +545,7 @@ Requirements, technical notes and the retained decision/build/research record:
 Accepted follow-ups (2026-10-07; known gaps, not 0.1.7 blockers):
 - Placement markers on the minimap/world map.
 - A richer target-card line: expected block icon and differing state values
-  (built 2026-10-08, not yet checked in game).
+  (built 2026-10-08, checked in game the same day).
 - Beds sometimes drawing only one half or an outline; heads, doors and
   honey blocks still drawing as outlines.
 - The Check tab's verifier-colored preview and the Files tab's rotatable
@@ -583,7 +563,8 @@ gaps stay under Pre-release checks and VALIDATION.
 
 ### L-57 Client info counters
 Kind: Research. Split from L-53 on 2026-09-27 (wave 2).
-Status: first version built 2026-10-08, not yet checked in game. Debug View
+Status: first version built 2026-10-08 and checked in game the same day
+(local; servers unchecked). Debug View
 shows one line after the fps line, read once a second (`ClientCounters.cpp`;
 line model in `DebugLines.h`, tested): entities = `Level::getRuntimeActorList`
 filtered to the player's dimension; chunks = the size of the dimension chunk
@@ -673,8 +654,13 @@ open questions). Waiting for the maintainer.
 ### L-109 Restore the death-time hotbar and inventory layout on pickup
 Kind: Design decided 2026-10-08, then Ready **(strong model)**. Idea from the
 maintainer 2026-10-07; chosen for building 2026-10-08.
-Status: built 2026-10-08 (default off, Experimental), not yet checked in
-game. Planner `DeathLayout.h` (one move at a time: swap, or move part of a
+Status: built 2026-10-08 (default off, Experimental); checked in game the
+same day except two failures, fixed after (VALIDATION-LOG): rejoining read
+the player as not alive and dropped the layout (now `LifeWatch`: only a
+player seen alive in the world can die), and removing the death point
+before the first pickup went unnoticed (now watched every tick). Restore
+scope (maintainer, 2026-10-08): Hotbar (default), Hotbar and equipment,
+Everything; restoring everything takes a while. Both wait for a recheck. Planner `DeathLayout.h` (one move at a time: swap, or move part of a
 stack; equipment never emptied; tested, including 2000 random inventories
 for termination and conservation), document `DeathLayoutStore.cpp`
 (`death-layout.json` beside the waypoints), glue `DeathRestore.cpp`: the

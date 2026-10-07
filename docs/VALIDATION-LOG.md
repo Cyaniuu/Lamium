@@ -12,6 +12,33 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-110, L-93 target-card line, L-57 counts, L-109 death layout (2026-10-08)
+
+By the maintainer, deployed `8180fe2`, DLL
+`7ec1281c26be16297094cf26f89a3cb2b4050e3815bc1c4493557ac9a84fbf26`,
+Minecraft 1.26.51.01, local world, all trace options off.
+- L-110: restriction faces near and far, from above to grazing, no flicker;
+  Shapes faces on ground and walls steady in Fancy and Simple; ghosts and
+  light overlay unchanged.
+- L-93 target card: the expected block's icon on the schematic row; wrong
+  stairs/doors list the differing states; the row shows with details off.
+- L-57: the counts line under fps looks plausible (particles rise with
+  rain/explosions, chunks with render distance); no frame-rate drop.
+- L-109 passed: armor, offhand, hotbar and inventory back about a second
+  after pickup with the armor worn again; split stacks (30 + 20) split back;
+  unrelated items gained since death kept; keepInventory does nothing;
+  rearranging by hand after a restore is not undone by a later pickup.
+- L-109 failed: picking up part, rejoining, then picking up the rest
+  restored only the part picked up before rejoining; hotbar, offhand and
+  armor stayed where vanilla put them (screenshots in the conversation). The
+  log shows "inventory kept at respawn": joining read the player as not
+  alive for a moment, which was taken for a death and dropped the saved
+  layout. Removing the death point on the map did not stop restoring: the
+  point was only looked for during a run, so a removal before the first
+  pickup was never noticed.
+Fixed after this check (`LifeWatch`, death point watched every tick); the
+maintainer also asked for a hotbar-only restore as the default.
+
 ## L-108, L-15 step 1 with L-73 step 13, L-93 map placements (2026-10-08)
 
 By the maintainer, deployed `178dc00`, DLL
