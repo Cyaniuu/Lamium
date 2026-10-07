@@ -12,6 +12,21 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 remaining 0.1.7 items checked; external review (2026-10-07)
+
+By the maintainer, local world, `e09334d`: the items listed as unseen in
+Pre-release checks were looked at and are broadly fine, except two: a Move
+from the menu with no area set did nothing visible (toasts are not drawn
+over Lamium's screens), and the adjust key's "Wheel: left/right (corner 2)"
+toast was replaced at once by the step's own toast. An external code
+review of `c004858` also found: a placed file replaced on disk left the
+renderer on the old palette (possible out-of-range lookup); border ghosts
+not following changes in the neighboring section; the block-entity cache
+keyed by position only; per-frame section listing and stale-section search
+growing with schematic size; entities of a large save collected only at
+the end; moving an area from another dimension changed it while saying
+there was none. All fixed in `5faf83b` and `7535a0d` (not yet checked).
+
 ## L-93 drawing inside schematics confirmed (2026-10-07)
 
 By the maintainer, local world, `e09334d` (DLL `9a5f4fb6...a52c36`):

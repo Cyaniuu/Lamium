@@ -132,8 +132,12 @@ feature):
   turned to the opposite side keeping its layer; a waiting save's compass
   toast and yellow column frames; name tags hidden behind blocks; the save
   prompt's line spacing and caret; the large-file warning above its
-  button; honey block and door back to outlines. Then the release build
-  smoke test and the server checks of the 2026-10-06/07 work (below).
+  button; honey block and door back to outlines (all looked at 2026-10-07,
+  fine but for two fixed in `7535a0d`: results under the menu, one adjust
+  toast). Review fixes in `5faf83b` (replaced files, border invalidation,
+  block-entity cache, section listing, per-column entities) and the two
+  above are not yet seen in game. Then the release build smoke test and
+  the server checks of the 2026-10-06/07 work (below).
 - 0.1.6 was released on 2026-10-02 (`v0.1.6`, tag CI passed; asset SHA-256
   `3d864ca1...3946554f`): L-90 Simplified Chinese (first AI-assisted
   translation, corrections welcome), L-88 target hearts, L-75 offhand slot,
