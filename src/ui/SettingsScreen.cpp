@@ -8,6 +8,7 @@
 #include "ui/WaypointPromptLayout.h"
 #include "ui/SavePromptLayout.h"
 #include "ui/RadialLayout.h"
+#include "ui/Animations.h"
 #include "ui/Toast.h"
 #include "features/map/WaypointSession.h"
 #include "features/schematic/SchematicSession.h"
@@ -3360,7 +3361,9 @@ void renderSchematicMenu(MinecraftUIRenderContext& context, glm::vec2 size, glm:
     auto l = menuLayout(size);
     int hover = l.hit(pointer.x, pointer.y);
     bool list = schematicMenu->category < 0;
-    float opened = RadialLayout::spread(std::chrono::duration<float>(std::chrono::steady_clock::now() - schematicMenu->shown).count());
+    // Lamium's Animations setting decides whether the ring spreads out.
+    float opened = client && !animationsOn(*client) ? 1.f
+        : RadialLayout::spread(std::chrono::duration<float>(std::chrono::steady_clock::now() - schematicMenu->shown).count());
     auto const& category = list ? menu::categories[0] : menu::categories[static_cast<size_t>(schematicMenu->category)];
     menu::Item const* hovered = nullptr;
     float textInset = boxTextInset() * s;
