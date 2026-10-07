@@ -12,6 +12,19 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 toasts, parentheses, dense mistakes fine; list scrolling (2026-10-07)
+
+By the maintainer, local world, `5103ee5` (DLL `d28d352b...0c0818`), with
+screenshots in Japanese and Chinese: the two-line adjust toast, the
+full-width parentheses and the lighter dense mistakes are fine. New: the
+Schematic HUD's title rule sat too close to the counts; the large-file
+warning ran over its button and the two buttons overlapped with the green
+one underneath; at a larger UI Profile the Materials and Check lists could
+not be scrolled with the wheel or the scrollbar, and Materials lost its
+name column. Cause of the scrolling: wheel events carry no position, so
+the Shapes, Waypoints and Schematics screens always scrolled the detail
+pane. Changed in the next build (not yet checked).
+
 ## L-93 menu notes, adjust toast, dense mistakes (2026-10-07)
 
 By the maintainer, local world, `7535a0d` (DLL `f234a873...e2b67`), with

@@ -137,7 +137,10 @@ feature):
   toast). Review fixes in `5faf83b` (replaced files, border invalidation,
   block-entity cache, section listing, per-column entities) and the two
   above were seen working; then two-line adjust toasts, full-width
-  parentheses and lighter dense mistake marks (not yet seen). Then the release build smoke test and
+  parentheses and lighter dense mistake marks (seen fine); then list
+  scrolling under the pointer with draggable scrollbars (Shapes,
+  Waypoints, Schematics), narrow-list columns, the warning and button fit,
+  HUD rule spacing (not yet seen). Then the release build smoke test and
   the server checks of the 2026-10-06/07 work (below).
 - 0.1.6 was released on 2026-10-02 (`v0.1.6`, tag CI passed; asset SHA-256
   `3d864ca1...3946554f`): L-90 Simplified Chinese (first AI-assisted
