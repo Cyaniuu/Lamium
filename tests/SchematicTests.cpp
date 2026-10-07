@@ -346,6 +346,10 @@ void ghostFaces() {
     std::array<Vertex, 4> slab{{{5, 2, 3}, {5, 2.5f, 3}, {5, 2.5f, 4}, {5, 2, 4}}};
     check(sideOf(west, 5, 2, 3) == 0 && sideOf(top, 5, 2, 3) == 3, "quads on a cell side name that side");
     check(sideOf(stairStep, 5, 2, 3) == -1 && sideOf(slab, 5, 2, 3) == 0, "inner quads have no side; part of a side still is that side");
+    using lamium::schematic::faces::beyond;
+    // Cells 4 and 5 touch at x = 5; the camera at x 3.5 sees cell 5's west face, not cell 4's east face.
+    check(beyond(0, 5, 2, 3, 3.5, 2.5, 3.5) && !beyond(1, 4, 2, 3, 3.5, 2.5, 3.5) && beyond(1, 4, 2, 3, 6.2, 2.5, 3.5),
+          "of two touching faces only the one facing the camera has it beyond");
 }
 
 void menuRules() {

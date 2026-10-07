@@ -9,6 +9,15 @@ namespace lamium::schematic::faces {
 struct Vertex { float x, y, z; };
 // Sides: 0 west (-x), 1 east (+x), 2 down (-y), 3 up (+y), 4 north (-z), 5 south (+z).
 inline constexpr int offsets[6][3] = {{-1,0,0},{1,0,0},{0,-1,0},{0,1,0},{0,0,-1},{0,0,1}};
+// Whether a point (the camera) lies beyond a cell's side, on its neighbor's
+// side of the plane. Of two touching faces near the camera, the one whose
+// cell has the camera beyond that side is the one facing it.
+inline bool beyond(int side, int x, int y, int z, double px, double py, double pz) {
+    int axis = side / 2;
+    double c = axis == 0 ? px : axis == 1 ? py : pz;
+    int low = axis == 0 ? x : axis == 1 ? y : z;
+    return side % 2 ? c > low + 1 : c < low;
+}
 // The side every vertex of the quad lies on, or -1 (inside the cell, slanted).
 inline int sideOf(std::span<Vertex const> quad, int x, int y, int z, float epsilon = 1e-3f) {
     if (quad.empty()) return -1;

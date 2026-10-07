@@ -214,11 +214,12 @@ std::uint64_t builtRevision = 0;
 // inside a schematic, or with the camera at a cell border, what is around
 // the player then shows as blocks instead of hollow space.
 std::array<std::optional<Point>, 2> cameraCells;
-bool nearCamera(Point p) {
+bool nearCamera(Point p, int reach = 1) {
     return std::any_of(cameraCells.begin(), cameraCells.end(), [&](auto const& c) {
-        return c && std::abs(c->x - p.x) <= 1 && std::abs(c->y - p.y) <= 1 && std::abs(c->z - p.z) <= 1;
+        return c && std::abs(c->x - p.x) <= reach && std::abs(c->y - p.y) <= reach && std::abs(c->z - p.z) <= reach;
     });
 }
+Vec3 buildCamera{}; // the camera position the sections near it are built for
 int builtDimension = -1;
 std::atomic<bool> releaseRequested{false};
 ll::event::ListenerPtr exitListener;
@@ -364,6 +365,11 @@ bool enclosed(BlockSource& region, session::Shown const& shown, Resolved const& 
 // opaque ghost: unseen from outside, and they fought with the neighbor's own
 // face. Real neighbors are already culled by the tessellator. A dropped
 // quad collapses to one point, so no other vertex data has to move.
+// Near the camera (this cell or the neighbor within one cell of it) the pair
+// keeps one face instead: the one facing the camera. Every such plane then
+// has exactly one face, so the cells around the camera look solid even when
+// the near clip plane cuts the closest face, with nothing fighting in one
+// plane (the material draws both sides).
 void cullAgainstGhosts(Tessellator& batch, size_t from, BlockSource& region, session::Shown const& shown, Resolved const& blocks, Point at) {
     auto& positions = batch.mMeshData->mPositions.get();
     std::array<std::optional<bool>, 6> hidden;
@@ -375,7 +381,10 @@ void cullAgainstGhosts(Tessellator& batch, size_t from, BlockSource& region, ses
         auto& known = hidden[static_cast<size_t>(side)];
         if (!known) {
             auto const& d = faces::offsets[side];
-            known = ghostOpaqueAt(region, shown, blocks, {at.x + d[0], at.y + d[1], at.z + d[2]});
+            Point n{at.x + d[0], at.y + d[1], at.z + d[2]};
+            known = ghostOpaqueAt(region, shown, blocks, n);
+            if (*known && (nearCamera(at) || nearCamera(n)))
+                known = !faces::beyond(side, at.x, at.y, at.z, buildCamera.x, buildCamera.y, buildCamera.z);
         }
         if (*known) for (size_t k = 1; k < 4; ++k) positions[q + k] = positions[q];
     }
@@ -470,20 +479,12 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
                     marks.push_back(mark);
                     continue;
                 }
-                bool whole = nearCamera({x, y, z});
-                if (!whole && enclosed(region, shown, blocks, {x, y, z})) continue;
+                // Within two cells of the camera a ghost may own the face the
+                // camera sees, so it is never skipped as enclosed.
+                if (!nearCamera({x, y, z}, 2) && enclosed(region, shown, blocks, {x, y, z})) continue;
                 size_t before = batch.mMeshData->mPositions->size();
                 own.tessellateInWorld(batch, *expected, pos, false);
-                if (!whole) cullAgainstGhosts(batch, before, region, shown, blocks, {x, y, z});
-                else {
-                    // Near the camera every face stays, even where the near
-                    // clip plane cuts the closest one; each ghost shrinks a
-                    // hair toward its center so touching faces never share a
-                    // plane (the material draws both sides).
-                    glm::vec3 center{x + .5f, y + .5f, z + .5f};
-                    auto& near = batch.mMeshData->mPositions.get();
-                    for (size_t v = before; v < near.size(); ++v) near[v] = center + (near[v] - center) * .996f;
-                }
+                cullAgainstGhosts(batch, before, region, shown, blocks, {x, y, z});
                 auto& positions = batch.mMeshData->mPositions.get();
                 if (positions.size() == before) {
                     // No block mesh: block entities draw through their renderer;
@@ -1103,6 +1104,7 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
             return Point{static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)), static_cast<int>(std::floor(z))};
         };
         std::array<std::optional<Point>, 2> now{cellAt(camera.x, camera.y, camera.z), cellAt(camera.x, camera.y - 1.62, camera.z)};
+        buildCamera = camera;
         if (now != cameraCells) {
             auto section = [](int v) { return static_cast<int>(std::floor(v / static_cast<double>(sectionSize))); };
             auto mark = [&](std::optional<Point> const& c) {
