@@ -13,6 +13,8 @@ void openWaypointPrompt(IClientInstance& client, map::Waypoint draft);
 void openWaypoints(IClientInstance& client);
 // tab: -1 keeps the last one, else 0 Files, 1 Placed, 2 Check, 3 Materials.
 void openSchematics(IClientInstance& client, int tab);
+// The save prompt for the area chosen with the corner keys (L-93).
+void openSchematicSave(IClientInstance& client);
 void openWorldMap(IClientInstance& client);
 bool ownsInput();
 void cancelInputCapture();

@@ -6,11 +6,13 @@
 #include "ui/ShapeEditor.h"
 #include "ui/ShapesLayout.h"
 #include "ui/WaypointPromptLayout.h"
+#include "ui/SavePromptLayout.h"
 #include "ui/Toast.h"
 #include "features/map/WaypointSession.h"
 #include "features/schematic/SchematicSession.h"
 #include "features/schematic/GhostRenderer.h"
 #include "features/schematic/SchematicItems.h"
+#include "features/schematic/Selection.h"
 #include "mc/deps/nbt/CompoundTag.h"
 #include "mc/deps/nbt/ListTag.h"
 #include "mc/deps/nbt/Tag.h"
@@ -162,6 +164,8 @@ SchematicPick schematicPick = SchematicPick::None;
 int schematicIndex = -1; // into the placements or the files
 schematic::PlacementSet schematicSet;
 std::vector<schematic::session::FileEntry> schematicFiles;
+std::chrono::steady_clock::time_point schematicFilesScanned{};
+std::string largeSchematicConfirmed; // a large file the player chose to load
 ShapesLayout schematicsDisplayed;
 int schematicListFirst = 0, schematicFieldFirst = 0, schematicFieldSelected = -1;
 bool schematicDeleteArmed = false;
@@ -171,6 +175,17 @@ void changeSchematic(std::function<void(schematic::SavedPlacement&)> const& appl
 // Waypoint add prompt (L-60 step 5): replaces the whole panel while open.
 struct WaypointPrompt { map::Waypoint draft; SearchQuery name; };
 std::optional<WaypointPrompt> prompt;
+// Schematic save prompt (L-93): replaces the whole panel while open, like the
+// waypoint prompt. The steppers move the selected area's corners.
+struct SavePrompt {
+    schematic::Area area;
+    int dimension = 0;
+    SearchQuery name;
+    bool entities = false;
+    bool overwrite = false; // armed after "exists"; the next Save replaces the file
+    std::string problem;
+};
+std::optional<SavePrompt> savePrompt;
 // World map (L-60): replaces the whole panel; the add prompt opened from it
 // returns to it.
 bool worldMapOpen = false, promptOnMap = false;
@@ -282,6 +297,7 @@ void releaseTextKeyboard() {
 }
 void syncTextKeyboard(float x, float y) {
     bool wanted = !closing && !capturing && (searchFocused || numericEditing() || editingShapeName || editingWaypointName || prompt
+        || savePrompt
         || (worldMapOpen && map::world::editingName()));
     bool number = numericEditing();
     if (textKeyboardOwned && (!wanted || number != textKeyboardNumber)) releaseTextKeyboard();
@@ -399,6 +415,7 @@ LL_TYPE_INSTANCE_HOOK(SettingsSearchText, ll::memory::HookPriority::Normal, UISc
         // Never flush the world sidecar from inside a text callback.
         logControlText(text);
         if (prompt) { prompt->name.type(text); return; }
+        if (savePrompt) { if (savePrompt->name.type(text)) savePrompt->overwrite = false; return; }
         if (worldMapOpen && map::world::editingName()) { map::world::typeText(text); return; }
         if (editingWaypointName) { if (waypointNameInput.type(text)) waypointNameDirty = true; return; }
         if (editingShapeName) { if (shapeNameInput.type(text)) shapeNameDirty = true; return; }
@@ -417,6 +434,7 @@ void clear() {
     if (shapeDraft) { shapeDraft.reset(); overlay::shapes::setDraft({}); }
     shapePicking = false; shapeDeleteArmed = false;
     prompt.reset();
+    savePrompt.reset();
     if (worldMapOpen) map::world::close();
     worldMapOpen = false; promptOnMap = false; pendingWheels.clear(); mapCacheArmed = false;
     mapFromSettings = false; waypointsFromMap = false;
@@ -2359,7 +2377,13 @@ bool verifyMatches(schematic::Mismatch const& m) {
 }
 void refreshSchematics(bool files) {
     schematicSet = schematic::session::current();
-    if (files) schematicFiles = schematic::session::files();
+    // Files copied in while the Files tab is open show up without a reload.
+    auto now = std::chrono::steady_clock::now();
+    if (schematicTab == SchematicTab::Files && now - schematicFilesScanned > std::chrono::seconds(2)) files = true;
+    if (files) {
+        schematicFiles = schematic::session::files();
+        schematicFilesScanned = now;
+    }
     int placements = static_cast<int>(schematicSet.placements.size()), fileCount = static_cast<int>(schematicFiles.size());
     if ((schematicPick == SchematicPick::Placement && schematicIndex >= placements)
         || (schematicPick == SchematicPick::File && schematicIndex >= fileCount)) schematicPick = SchematicPick::None;
@@ -2432,8 +2456,16 @@ int placedLayers(schematic::SavedPlacement const& p) {
     if (!structure) return 1;
     return std::max(1, schematic::layerCount(schematic::placedSize(structure->size, p.placement.rotation), p.layers.axis));
 }
+// A large file is loaded only after the player confirms it.
+bool waitsForLoad(schematic::session::FileEntry const& f) {
+    return f.bytes > schematic::session::largeFileBytes && largeSchematicConfirmed != f.relative;
+}
 void placeSelectedFile() {
     if (schematicPick != SchematicPick::File || schematicIndex < 0 || schematicIndex >= static_cast<int>(schematicFiles.size())) return;
+    if (auto const& f = schematicFiles[static_cast<size_t>(schematicIndex)]; waitsForLoad(f)) {
+        largeSchematicConfirmed = f.relative;
+        return;
+    }
     auto place = standingPlace();
     if (!place) return;
     std::string problem;
@@ -2626,7 +2658,7 @@ void handleSchematicClick(float x, float y, bool right) {
     case ShapeZone::Action:
         if (schematicTab == SchematicTab::Files) {
             if (hit.index == 0) placeSelectedFile();
-            else refreshSchematics(true);
+            else if (!schematic::session::openFolder()) error = translated("schematic.openFolderError");
             return;
         }
         if (schematicTab == SchematicTab::Verify) { if (hit.index == 0) showSelectedMismatch(); return; }
@@ -2965,13 +2997,16 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         if (schematicPick == SchematicPick::File && schematicIndex >= 0 && schematicIndex < static_cast<int>(schematicFiles.size())) {
             auto const& f = schematicFiles[static_cast<size_t>(schematicIndex)];
             label(context,dx,l.nameY+1+boxTextInset(),dw,fileTitle(f.relative));
-            info(f.relative, l.previewY);
-            drawSmallButton(context,l.actionX(0),l.actionsY+2,l.firstActionWidth,12,translated("schematic.place"),
+            bool waits = waitsForLoad(f);
+            if (waits) paragraph(context,dx,l.previewY,dw,translated("schematic.largeWarning",
+                std::format("{:.1f}", static_cast<double>(f.bytes) / (1024 * 1024))),4,palette::warning);
+            else info(f.relative, l.previewY);
+            drawSmallButton(context,l.actionX(0),l.actionsY+2,l.firstActionWidth,12,translated(waits ? "schematic.loadAnyway" : "schematic.place"),
                 over(ShapeZone::Action,0),palette::accentDeep,palette::accent);
         } else paragraph(context,dx,l.detailTop+6,dw,translated(schematicFiles.empty() ? "schematic.empty" : "schematic.fileSelectHint"),
             4,palette::faint);
         fill(context,l.detailLeft,l.actionsY-2,l.detailWidth,1,palette::white,.14f);
-        drawSmallButton(context,l.deleteX(),l.actionsY+2,ShapesLayout::deleteWidth,12,translated("schematic.reload"),over(ShapeZone::Action,1));
+        drawSmallButton(context,l.deleteX(),l.actionsY+2,ShapesLayout::deleteWidth,12,translated("schematic.openFolder"),over(ShapeZone::Action,1));
         break;
     case SchematicTab::Verify: {
         if (!checked) { paragraph(context,dx,l.detailTop+6,dw,translated("schematic.noSelection"),4,palette::faint); break; }
@@ -3154,6 +3189,99 @@ void renderPrompt(MinecraftUIRenderContext& context, glm::vec2 size, glm::vec2 p
     label(context, x, l.hintY(), l.inner(), translated("waypoint.hint"), palette::faint);
     context.flushText(0, std::nullopt);
 }
+// ---- Schematic save prompt ----
+void commitSave() {
+    if (!savePrompt) return;
+    auto& p = *savePrompt;
+    auto file = schematic::schematicFileName(p.name.value());
+    if (file.empty()) { p.problem = translated("schematic.save.noName"); return; }
+    if (p.area.cells() > schematic::maxCells) { p.problem = translated("schematic.save.tooLarge", p.area.cells(), schematic::maxCells); return; }
+    auto path = schematic::session::folder() / std::filesystem::u8path(file);
+    std::error_code code;
+    if (std::filesystem::exists(path, code) && !p.overwrite) {
+        p.overwrite = true;
+        p.problem = translated("schematic.save.exists", file);
+        return;
+    }
+    if (!schematic::ghosts::save({p.area, p.dimension, p.entities, path, file})) { p.problem = translated("schematic.save.busy"); return; }
+    schematic::selection::clear();
+    showMessageToast(translated("schematic.save.started", file));
+    close();
+}
+void handleSavePromptKey(int key) {
+    if (!savePrompt) return;
+    if (key == 0x0d) commitSave();
+    else if (key == 0x1b) close();
+}
+void handleSavePromptClick(float x, float y, glm::vec2 size) {
+    if (!savePrompt) return;
+    auto& p = *savePrompt;
+    auto hit = SavePromptLayout::at(size.x, size.y).hit(x, y);
+    using Part = SavePromptLayout::Part;
+    switch (hit.part) {
+    case Part::Minus: case Part::Plus: {
+        int step = (hit.part == Part::Plus ? 1 : -1) * (heldShift() ? 10 : 1);
+        auto& corner = hit.corner == 0 ? p.area.a : p.area.b;
+        (hit.axis == 0 ? corner.x : hit.axis == 1 ? corner.y : corner.z) += step;
+        // The frame in the world follows at once.
+        schematic::selection::setArea(p.area, p.dimension);
+        p.problem.clear();
+        break;
+    }
+    case Part::Entities: p.entities = !p.entities; break;
+    case Part::Save: commitSave(); break;
+    case Part::Cancel: close(); break;
+    default: break;
+    }
+}
+void renderSavePrompt(MinecraftUIRenderContext& context, glm::vec2 size, glm::vec2 pointer) {
+    auto& p = *savePrompt;
+    auto l = SavePromptLayout::at(size.x, size.y);
+    using L = SavePromptLayout;
+    panel(context, l.left, l.top, L::width, L::height(), .86f);
+    frame(context, l.left, l.top, L::width, L::height(), palette::white, .14f);
+    float x = l.left + L::pad;
+    auto hover = l.hit(pointer.x, pointer.y);
+    label(context, x, l.titleY(), l.inner(), translated("schematic.save.title"));
+    for (int corner = 0; corner < 2; ++corner) {
+        float y = l.cornerY(corner);
+        auto const& c = corner == 0 ? p.area.a : p.area.b;
+        label(context, x, y + boxTextInset(), L::labelWidth - 4, translated(corner == 0 ? "schematic.save.corner1" : "schematic.save.corner2"),
+            palette::dim);
+        for (int axis = 0; axis < 3; ++axis) {
+            float cx = l.cellX(axis), w = l.cellWidth();
+            int value = axis == 0 ? c.x : axis == 1 ? c.y : c.z;
+            bool overMinus = hover.part == L::Part::Minus && hover.corner == corner && hover.axis == axis;
+            bool overPlus = hover.part == L::Part::Plus && hover.corner == corner && hover.axis == axis;
+            fill(context, cx, y, w, L::rowHeight, Rgb{0, 0, 0}, .3f);
+            drawSmallButton(context, cx, y, L::step, L::rowHeight, "-", overMinus);
+            drawSmallButton(context, cx + w - L::step, y, L::step, L::rowHeight, "+", overPlus);
+            static constexpr std::array<char const*, 3> axes{"X", "Y", "Z"};
+            label(context, cx + L::step, y + boxTextInset(), w - 2 * L::step, std::format("{} {}", axes[static_cast<size_t>(axis)], value),
+                palette::text, Align::Center);
+        }
+    }
+    auto s = p.area.size();
+    label(context, x, l.sizeY(), l.inner(), translated("schematic.save.size", s.x, s.y, s.z, p.area.cells()), palette::dim);
+    fill(context, x, l.fieldY(), l.inner(), L::fieldHeight, Rgb{0, 0, 0}, .4f);
+    frame(context, x, l.fieldY(), l.inner(), L::fieldHeight, palette::accent);
+    std::string name = p.name.selectedAll() ? "[" + p.name.value() + "]" : p.name.value() + "_";
+    label(context, x + 3, l.fieldY() + 1 + boxTextInset(), l.inner() - 6, std::move(name));
+    auto file = schematic::schematicFileName(p.name.value());
+    label(context, x, l.whereY(), l.inner(), translated("schematic.save.where", file.empty() ? std::string("-") : file), palette::faint);
+    label(context, x, l.entitiesY() + boxTextInset(), l.inner() - L::switchWidth - 4, translated("schematic.save.entities"),
+        hover.part == L::Part::Entities ? palette::text : palette::dim);
+    toggleSwitch(context, l.switchX(), l.entitiesY() + (L::rowHeight - switchHeight) / 2, p.entities);
+    if (!p.problem.empty()) label(context, x, l.buttonY() + boxTextInset(), l.saveX() - x - 4, p.problem, palette::warning);
+    drawSmallButton(context, l.saveX(), l.buttonY(), L::buttonWidth, L::buttonHeight,
+        translated(p.overwrite ? "schematic.save.overwrite" : "schematic.save.button"), hover.part == L::Part::Save,
+        p.overwrite ? Rgb{.54f, .18f, .16f} : palette::accentDeep, p.overwrite ? Rgb{.54f, .23f, .2f} : palette::accent);
+    drawSmallButton(context, l.cancelX(), l.buttonY(), L::buttonWidth, L::buttonHeight, translated("schematic.save.cancel"),
+        hover.part == L::Part::Cancel);
+    paragraph(context, x, l.hintY(), l.inner(), translated("schematic.save.hint"), 2, palette::faint);
+    label(context, x, l.keysY(), l.inner(), translated("schematic.save.keys"), palette::faint);
+    context.flushText(0, std::nullopt);
+}
 void enterWorldMap(bool fromSettings, bool resume) {
     if (!client) return;
     finishNumber();
@@ -3267,6 +3395,20 @@ void render(ll::event::UIRenderEvent& event) {
         renderPrompt(context, size, view.mPointerLocationPrevious);
         return;
     }
+    if (savePrompt) {
+        pendingRelease = false;
+        if (!closing) {
+            if (auto click = std::exchange(pendingClick, std::nullopt); click && !click->right)
+                handleSavePromptClick(click->x, click->y, size);
+            for (int key : std::exchange(pendingKeys, {})) if (savePrompt && !closing) handleSavePromptKey(key);
+        }
+        if (!scene || !savePrompt) return;
+        displayedInverseScale = current.getGuiData()->mInvGuiScale;
+        auto l = SavePromptLayout::at(size.x, size.y);
+        syncTextKeyboard(l.left + SavePromptLayout::pad, l.fieldY());
+        renderSavePrompt(context, size, view.mPointerLocationPrevious);
+        return;
+    }
     if (!closing && hudEditorView()) {
         // Release first so a click that lands after a drag starts fresh.
         if (std::exchange(pendingRelease, false)) hud_editor::release();
@@ -3370,10 +3512,22 @@ void openWaypoints(IClientInstance& current) {
 void openSchematics(IClientInstance& current, int tab) {
     std::lock_guard lock(mutex);
     if (!scene) open(current);
-    if (!scene || prompt) return;
+    if (!scene || prompt || savePrompt) return;
     selectNav(schematicsNav, true);
     refreshSchematics(true);
     if (tab >= 0 && tab < 4) selectSchematicTab(static_cast<SchematicTab>(tab));
+}
+void openSchematicSave(IClientInstance& current) {
+    std::lock_guard lock(mutex);
+    if (scene) return; // Only from gameplay, like the waypoint prompt.
+    auto state = schematic::selection::current();
+    auto area = state.area();
+    if (!area) return;
+    open(current);
+    if (!scene) return;
+    savePrompt = SavePrompt{*area, state.dimension, {}, false, false, {}};
+    savePrompt->name.append("schematic");
+    savePrompt->name.selectAll();
 }
 void openWorldMap(IClientInstance& current) {
     std::lock_guard lock(mutex);
@@ -3534,6 +3688,17 @@ void start() {
             event.cancel();
             if (key == 0x08) prompt->name.backspace();
             else if (selectAll) prompt->name.selectAll();
+            else pendingKeys.push_back(key);
+            return;
+        }
+        if (savePrompt) {
+            auto key = event.keyCode();
+            bool selectAll = key == 0x41 && heldCtrl();
+            bool command = key == 0x08 || key == 0x1b || key == 0x0d || selectAll;
+            if (textKeyboardOwned && !command) return;
+            event.cancel();
+            if (key == 0x08) { if (savePrompt->name.backspace()) savePrompt->overwrite = false; }
+            else if (selectAll) savePrompt->name.selectAll();
             else pendingKeys.push_back(key);
             return;
         }

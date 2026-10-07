@@ -2,6 +2,8 @@
 #include "features/schematic/Verify.h"
 #include "features/schematic/PlacementStore.h"
 #include "features/schematic/Verification.h"
+#include "features/schematic/SaveArea.h"
+#include "ui/SavePromptLayout.h"
 #include <set>
 #include <cstdlib>
 #include <filesystem>
@@ -186,6 +188,56 @@ void placementTransforms() {
     check(centers, "an entity in a cell's center stays in that cell's center after any turn and mirror");
 }
 
+void saveRules() {
+    Area area{{5, 70, -2}, {3, 64, 1}};
+    check(area.low() == Point{3, 64, -2} && area.size() == Size{3, 7, 4} && area.cells() == 84,
+          "an area spans both corner blocks in any order");
+    check(schematicFileName("hut") == "hut.mcstructure" && schematicFileName("hut.mcstructure") == "hut.mcstructure"
+          && schematicFileName("  a/b:c?. ") == "abc.mcstructure" && schematicFileName(" .. ").empty() && schematicFileName("").empty(),
+          "file names drop characters Windows forbids and do not double the extension");
+    check(schematicFileName("小屋") == "小屋.mcstructure", "file names keep non-ASCII text");
+    auto longName = schematicFileName(std::string(70, 'a'));
+    auto longJapanese = schematicFileName(std::string(30, 'x') + "あいうえおかきくけこさしすせそ");
+    check(longName.size() == maxSaveName + 12 && longJapanese.size() <= maxSaveName + 12
+          && (static_cast<unsigned char>(longJapanese[longJapanese.size() - 13]) & 0xc0) != 0xc0,
+          "long names are cut without splitting a character");
+
+    StructureBuilder builder({2, 1, 2}, {10, 64, 20});
+    PaletteBlock stone{"minecraft:stone", {}, 1}, air{"minecraft:air", {}, 1}, water{"minecraft:water", {}, 1};
+    nbt::Compound west;
+    west.set("weirdo_direction", {std::int32_t{1}});
+    PaletteBlock stairs{"minecraft:oak_stairs", west, 1};
+    builder.setBlock(0, stone);
+    builder.setBlock(1, air);
+    builder.setBlock(2, stone);
+    builder.setBlock(3, stairs);
+    builder.setLiquid(3, water);
+    nbt::Compound standData;
+    standData.set("identifier", {std::string("minecraft:armor_stand")});
+    nbt::List pos{nbt::Type::Float, {}};
+    for (float v : {11.5f, 64.f, 21.5f}) pos.items.push_back({v});
+    standData.set("Pos", {pos});
+    builder.addEntity({"minecraft:armor_stand", 1.5, 0, 1.5, standData});
+    auto const& built = builder.structure();
+    check(built.palette.size() == 4 && built.blocks[0] == built.blocks[2] && built.liquids.size() == 4 && built.liquids[0] == voidCell,
+          "equal blocks share a palette entry and the liquid layer is filled only where set");
+    auto parsed = parseStructure(span(writeStructure(built)));
+    check(parsed.size == built.size && parsed.blocks == built.blocks && parsed.liquids == built.liquids
+          && parsed.palette[2].key() == stairs.key() && parsed.entities.size() == 1 && parsed.entities[0].x == 1.5
+          && parsed.entities[0].z == 1.5, "a saved area reads back with its blocks, states, water and entities");
+}
+
+void savePromptHits() {
+    auto l = lamium::ui::SavePromptLayout::at(480, 270);
+    using Part = lamium::ui::SavePromptLayout::Part;
+    auto minus = l.hit(l.cellX(2) + 2, l.cornerY(1) + 2), plus = l.hit(l.cellX(0) + l.cellWidth() - 2, l.cornerY(0) + 2);
+    check(minus.part == Part::Minus && minus.corner == 1 && minus.axis == 2 && plus.part == Part::Plus && plus.corner == 0
+          && plus.axis == 0, "the save prompt's steppers name their corner and axis");
+    check(l.hit(l.saveX() + 1, l.buttonY() + 1).part == Part::Save && l.hit(l.cancelX() + 1, l.buttonY() + 1).part == Part::Cancel
+          && l.hit(l.left + 20, l.fieldY() + 2).part == Part::Field && l.keysY() + 10 <= l.top + l.height(),
+          "the save prompt's buttons and name field are where they are drawn, inside the panel");
+}
+
 void entityRules() {
     std::vector<EntitySpot> expected{{"minecraft:armor_stand", 1.5, 64, 1.5}, {"minecraft:armor_stand", 3.5, 64, 1.5},
                                      {"minecraft:pig", 5.5, 64, 5.5}};
@@ -312,6 +364,8 @@ void schematicTests() {
     placementDocuments();
     placementTransforms();
     entityRules();
+    saveRules();
+    savePromptHits();
     layerRules();
     verifyRules();
     nbtBasics();

@@ -66,7 +66,8 @@ void releaseStates() {
 bool opensMenu(Action action) {
     return action == Action::Settings || action == Action::OpenShapes || action == Action::OpenHotkeys
         || action == Action::OpenHudLayout || action == Action::OpenSchematics || action == Action::OpenSchematicFiles
-        || action == Action::OpenSchematicCheck || action == Action::OpenSchematicMaterials || action == Action::OpenSchematicPlaced;
+        || action == Action::OpenSchematicCheck || action == Action::OpenSchematicMaterials || action == Action::OpenSchematicPlaced
+        || action == Action::SchematicCorner2 || action == Action::SaveSchematicArea;
 }
 void invalidate() {
     interaction::periodic::interrupt();

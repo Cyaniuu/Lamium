@@ -981,6 +981,7 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
         // Under every HUD element: they point into the world.
         map::markers::draw(context, width, height, runtime.map);
         if (runtime.schematic.enabled) drawSchematicEntityNames(context, width, height);
+        if (auto message = schematic::ghosts::takeSaveMessage()) ui::showMessageToast(std::move(*message));
     }
     // Drawn first so every other element sits on top of the map.
     if (preview || (runtime.map.minimap && !(settings.debug && runtime.map.debugHide)))

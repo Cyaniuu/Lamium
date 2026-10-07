@@ -1,6 +1,9 @@
 #include "features/schematic/GhostRenderer.h"
 #include "features/schematic/SchematicSession.h"
 #include "features/schematic/SchematicItems.h"
+#include "features/schematic/Selection.h"
+#include "app/AtomicFile.h"
+#include "ui/Localization.h"
 #include "app/Runtime.h"
 #include "ll/api/event/EventBus.h"
 #include "ll/api/event/client/ClientExitLevelEvent.h"
@@ -32,6 +35,7 @@
 #include "mc/deps/renderer/MatrixStack.h"
 #include "mc/locale/I18n.h"
 #include "mc/world/actor/Actor.h"
+#include "mc/world/actor/ActorType.h"
 #include "mc/world/phys/AABB.h"
 #include "mc/util/Mirror.h"
 #include "mc/util/Rotation.h"
@@ -145,6 +149,35 @@ std::shared_ptr<Verification const> published = std::make_shared<Verification co
 void publish(std::shared_ptr<Verification const> value) {
     std::lock_guard lock(resultMutex);
     published = std::move(value);
+}
+// Saving an area. The request is handed over under the mutex; the job itself
+// belongs to the render thread.
+constexpr std::uint64_t saveBudget = 32768; // cells read per frame
+struct SaveJob {
+    SaveRequest request;
+    StructureBuilder builder;
+    std::uint64_t next = 0;
+    std::map<Block const*, PaletteBlock> palette;
+};
+std::mutex saveMutex;
+std::optional<SaveRequest> pendingSave;
+std::optional<std::string> saveMessage;
+bool saveBusy = false;
+std::optional<SaveJob> saveJob;
+void finishSave(std::string message) {
+    saveJob.reset();
+    std::lock_guard lock(saveMutex);
+    saveBusy = false;
+    saveMessage = std::move(message);
+}
+// A save in progress or waiting ends when the world is left or the feature is off.
+void stopSave() {
+    {
+        std::lock_guard lock(saveMutex);
+        if (!saveBusy) return;
+        pendingSave.reset();
+    }
+    finishSave(ui::translated("schematic.save.stopped"));
 }
 // "Show in world": a marked cell until `pointUntil`.
 std::mutex pointMutex;
@@ -581,6 +614,121 @@ void translated(ScreenContext& screen, glm::vec3 offset, Draw&& draw) {
     ref.stack = nullptr;
 }
 
+// The palette entry of a game block: its serialized name, states and version.
+PaletteBlock paletteEntry(Block const& block) {
+    auto bytes = block.mSerializationId->toBinaryNbt();
+    auto root = nbt::read({reinterpret_cast<std::uint8_t const*>(bytes.data()), bytes.size()});
+    PaletteBlock out;
+    if (auto const* name = root.compound.find("name"); name && name->as<std::string>()) out.name = *name->as<std::string>();
+    if (auto const* states = root.compound.find("states"); states && states->as<nbt::Compound>()) out.states = *states->as<nbt::Compound>();
+    std::int64_t version = 0;
+    if (auto const* v = root.compound.find("version"); v && v->integer(version)) out.version = static_cast<std::int32_t>(version);
+    if (out.name.empty()) out.name = block.getTypeName();
+    return out;
+}
+void stepSave(BlockSource& region, LocalPlayer& player) {
+    if (!saveJob) {
+        std::optional<SaveRequest> request;
+        {
+            std::lock_guard lock(saveMutex);
+            request = std::exchange(pendingSave, std::nullopt);
+        }
+        if (!request) return;
+        auto low = request->area.low();
+        saveJob.emplace(SaveJob{*request, StructureBuilder(request->area.size(), low), 0, {}});
+    }
+    auto& job = *saveJob;
+    if (static_cast<int>(player.getDimensionId()) != job.request.dimension) {
+        finishSave(ui::translated("schematic.save.otherDimension"));
+        return;
+    }
+    Point low = job.request.area.low();
+    auto const& structure = job.builder.structure();
+    std::uint64_t total = structure.cells();
+    for (std::uint64_t budget = saveBudget; job.next < total && budget; ++job.next, --budget) {
+        auto cell = static_cast<std::int32_t>(job.next);
+        auto [x, y, z] = structure.position(cell);
+        BlockPos pos{low.x + x, low.y + y, low.z + z};
+        auto* chunk = region.getChunkAt(pos);
+        if (!chunk || chunk->mLoadState->load() < ChunkState::Loaded) {
+            finishSave(ui::translated("schematic.save.notLoaded", pos.x, pos.y, pos.z));
+            return;
+        }
+        Block const& block = region.getBlock(pos);
+        if (block.getMaterial().mType == SharedTypes::v1_26_20::MaterialType::ClientRequestPlaceholder) {
+            finishSave(ui::translated("schematic.save.notLoaded", pos.x, pos.y, pos.z));
+            return;
+        }
+        auto found = job.palette.find(&block);
+        if (found == job.palette.end()) found = job.palette.emplace(&block, paletteEntry(block)).first;
+        job.builder.setBlock(cell, found->second);
+        Block const& extra = region.getExtraBlock(pos);
+        if (!extra.isAir()) {
+            auto liquid = job.palette.find(&extra);
+            if (liquid == job.palette.end()) liquid = job.palette.emplace(&extra, paletteEntry(extra)).first;
+            job.builder.setLiquid(cell, liquid->second);
+        }
+    }
+    if (job.next < total) return;
+    if (job.request.entities) {
+        Size size = structure.size;
+        AABB area{Vec3{static_cast<float>(low.x), static_cast<float>(low.y), static_cast<float>(low.z)},
+                  Vec3{static_cast<float>(low.x + size.x), static_cast<float>(low.y + size.y), static_cast<float>(low.z + size.z)}};
+        for (Actor* actor : region.fetchEntities(&player, area, false, false)) {
+            if (!actor || actor->mRemoved || actor->hasType(ActorType::Player) || structure.entities.size() >= maxEntities) continue;
+            // What the client knows: type, position and facing.
+            auto feetAt = actor->getFeetPos();
+            auto rotation = actor->getRotation();
+            EntityRecord record{actor->getTypeName(), feetAt.x - low.x, feetAt.y - low.y, feetAt.z - low.z, {}};
+            record.data.set("identifier", {record.identifier});
+            nbt::List pos{nbt::Type::Float, {}}, turn{nbt::Type::Float, {}};
+            for (float v : {feetAt.x, feetAt.y, feetAt.z}) pos.items.push_back({v});
+            for (float v : {rotation.y, rotation.x}) turn.items.push_back({v});
+            record.data.set("Pos", {std::move(pos)});
+            record.data.set("Rotation", {std::move(turn)});
+            job.builder.addEntity(std::move(record));
+        }
+    }
+    try {
+        std::filesystem::create_directories(job.request.path.parent_path());
+        writeFileReplacing(job.request.path, writeStructure(structure), "schematic");
+        auto s = structure.size;
+        finishSave(ui::translated("schematic.save.done", job.request.file, s.x, s.y, s.z));
+    } catch (std::exception const& error) {
+        log(std::string("could not save an area: ") + error.what());
+        finishSave(ui::translated("schematic.save.failed", job.request.file));
+    }
+}
+// The area chosen for saving: a white frame, and the first corner alone
+// until the second is set.
+void drawSelection(ScreenContext& screen, Vec3 const& camera, int dimension) {
+    auto state = selection::current();
+    if (state.dimension != dimension || (!state.first && !state.second)) return;
+    Area area = state.area().value_or(Area{state.first ? *state.first : *state.second, state.first ? *state.first : *state.second});
+    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
+    if (!lineMaterial.mRenderMaterialInfoPtr) return;
+    Point low = area.low();
+    Size size = area.size();
+    Tessellator lines(screen.tessellator.mBufferResourceService);
+    lines.begin({}, mce::PrimitiveMode::LineList, 72, false);
+    constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
+    auto box = [&](glm::vec3 a, glm::vec3 b) {
+        glm::vec3 c[8];
+        for (int k = 0; k < 8; ++k) c[k] = {k & 1 ? b.x : a.x, k & 2 ? b.y : a.y, k & 4 ? b.z : a.z};
+        for (auto [p, q] : edges) { lines.vertex(c[p].x, c[p].y, c[p].z); lines.vertex(c[q].x, c[q].y, c[q].z); }
+    };
+    glm::vec3 base{static_cast<float>(low.x - camera.x), static_cast<float>(low.y - camera.y), static_cast<float>(low.z - camera.z)};
+    lines.color(1.f, 1.f, 1.f, 1.f);
+    box(base - glm::vec3{.01f}, base + glm::vec3{static_cast<float>(size.x), static_cast<float>(size.y), static_cast<float>(size.z)} + glm::vec3{.01f});
+    lines.color(1.f, .8f, .25f, 1.f);
+    for (auto const& corner : {state.first, state.second}) {
+        if (!corner) continue;
+        glm::vec3 at{static_cast<float>(corner->x - camera.x), static_cast<float>(corner->y - camera.y), static_cast<float>(corner->z - camera.z)};
+        box(at + glm::vec3{.04f}, at + glm::vec3{.96f});
+    }
+    translated(screen, glm::vec3{0}, [&] { MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{}); });
+}
+
 // Missing entities: a dashed frame where each should stand, in the ghost
 // color, with its name drawn by the HUD. Entities already there show nothing.
 void drawEntities(ScreenContext& screen, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
@@ -828,8 +976,9 @@ LL_TYPE_INSTANCE_HOOK(GhostPass, ll::memory::HookPriority::Normal, LevelRenderer
     &LevelRendererPlayer::$renderEntityEffects, void, BaseActorRenderContext& context) {
     origin(context);
     auto& runtime = Runtime::instance();
-    if (releaseRequested.exchange(false)) release();
+    if (releaseRequested.exchange(false)) { release(); stopSave(); }
     if (!runtime.enabled() || !runtime.snapshot()->schematic.enabled || !context.mImpl) {
+        stopSave();
         if (!sections.empty() || !resolved.empty()) release();
         return;
     }
@@ -839,6 +988,8 @@ LL_TYPE_INSTANCE_HOOK(GhostPass, ll::memory::HookPriority::Normal, LevelRenderer
     try {
         drawPlacements(context, client, *player);
         drawPoint(context.mScreenContext, context.mImpl->mCameraPosition);
+        stepSave(player->getDimensionBlockSource(), *player);
+        drawSelection(context.mScreenContext, context.mImpl->mCameraPosition, static_cast<int>(player->getDimensionId()));
     } catch (std::exception const& error) {
         static bool reported = false;
         if (!std::exchange(reported, true)) log(std::string("drawing failed: ") + error.what());
@@ -854,6 +1005,17 @@ std::vector<std::pair<Position, std::string>> entityLabels() {
     std::lock_guard lock(labelMutex);
     return labels;
 }
+bool save(SaveRequest request) {
+    std::lock_guard lock(saveMutex);
+    if (saveBusy) return false;
+    saveBusy = true;
+    pendingSave = std::move(request);
+    return true;
+}
+std::optional<std::string> takeSaveMessage() {
+    std::lock_guard lock(saveMutex);
+    return std::exchange(saveMessage, std::nullopt);
+}
 void point(Point cell) {
     std::lock_guard lock(pointMutex);
     pointAt = cell;
@@ -864,7 +1026,7 @@ void start() {
     installed = GhostPass::hook(true) == 0;
     if (!installed) throw std::runtime_error("Could not install the schematic ghost pass");
     exitListener = ll::event::EventBus::getInstance().emplaceListener<ll::event::ClientExitLevelEvent>(
-        [](auto&) { releaseRequested = true; items::forget(); });
+        [](auto&) { releaseRequested = true; items::forget(); selection::clear(); });
 }
 void stop() {
     if (exitListener) {

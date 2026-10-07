@@ -6,6 +6,10 @@
 #include <fstream>
 #include <map>
 #include <mutex>
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#include <shellapi.h>
 
 namespace lamium::schematic::session {
 namespace {
@@ -108,6 +112,15 @@ std::vector<FileEntry> files() {
     }
     std::sort(out.begin(), out.end(), [](auto const& a, auto const& b) { return a.relative < b.relative; });
     return out;
+}
+
+bool openFolder() {
+    std::error_code code;
+    auto root = folder();
+    std::filesystem::create_directories(root, code);
+    auto result = reinterpret_cast<INT_PTR>(ShellExecuteW(nullptr, L"open", root.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+    if (result <= 32) log("could not open the schematics folder");
+    return result > 32;
 }
 
 std::shared_ptr<Structure const> structure(std::string const& relative, std::string* error) {

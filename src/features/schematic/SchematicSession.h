@@ -23,6 +23,11 @@ struct FileEntry {
 };
 // Scans the folder (bounded); creates it when missing.
 std::vector<FileEntry> files();
+// Opens the folder in the system's file browser; false when that failed.
+bool openFolder();
+// Files larger than this ask before they are loaded: parsing and drawing
+// them can stall the game (about a quarter million blocks; to be measured).
+inline constexpr std::uintmax_t largeFileBytes = 2ull * 1024 * 1024;
 // Loaded once per file and modification time; null with `error` set on failure.
 std::shared_ptr<Structure const> structure(std::string const& relative, std::string* error = nullptr);
 

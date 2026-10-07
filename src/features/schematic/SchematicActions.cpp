@@ -1,10 +1,12 @@
 #include "features/schematic/SchematicActions.h"
 #include "features/schematic/GhostRenderer.h"
 #include "features/schematic/SchematicSession.h"
+#include "features/schematic/Selection.h"
 #include "ui/Localization.h"
 #include "ui/Toast.h"
 #include "mc/client/game/IClientInstance.h"
 #include "mc/client/player/LocalPlayer.h"
+#include "mc/world/phys/HitResult.h"
 #include <cmath>
 #include <limits>
 
@@ -121,6 +123,17 @@ void nearestMistake(LocalPlayer& player) {
         : nearest->state == CellState::Extra ? "schematic.kind.extra" : "schematic.kind.state";
     ui::showMessageToast(ui::translated("schematic.toast.nearest", ui::translated(kind), static_cast<int>(std::lround(std::sqrt(best)))));
 }
+// A corner of the area to save: the block in the crosshair.
+void setCorner(IClientInstance& client, LocalPlayer& player, int which) {
+    auto const& hit = client.getLatestHitResult();
+    if (hit.mType != HitResultType::Tile) { ui::showMessageToast(ui::translated("schematic.toast.lookAtBlock")); return; }
+    Point at{hit.mBlock.x, hit.mBlock.y, hit.mBlock.z};
+    selection::setCorner(which, at, static_cast<int>(player.getDimensionId()));
+    if (auto area = selection::current().area()) {
+        auto size = area->size();
+        ui::showMessageToast(ui::translated("schematic.toast.cornerArea", which + 1, at.x, at.y, at.z, size.x, size.y, size.z));
+    } else ui::showMessageToast(ui::translated("schematic.toast.corner", which + 1, at.x, at.y, at.z));
+}
 std::string mirrorName(Mirror mirror) {
     return ui::translated(mirror == Mirror::X ? "schematic.mirror.x" : mirror == Mirror::Z ? "schematic.mirror.z" : "schematic.mirror.none");
 }
@@ -135,6 +148,7 @@ bool handles(Action action) {
     case Action::MovePlacementForward: case Action::MovePlacementBack: case Action::MovePlacementHere:
     case Action::MovePlacementLeft: case Action::MovePlacementRight: case Action::MovePlacementUp: case Action::MovePlacementDown:
     case Action::RotatePlacement: case Action::MirrorPlacement: case Action::LayerUp: case Action::LayerDown: case Action::LayerHere:
+    case Action::SchematicCorner1: case Action::SchematicCorner2:
         return true;
     default: return false;
     }
@@ -149,6 +163,8 @@ void press(IClientInstance& client, Action action) {
     switch (action) {
     case Action::NearestMistake: nearestMistake(*player); return;
     case Action::SelectLookedPlacement: selectLooked(*player); return;
+    case Action::SchematicCorner1: setCorner(client, *player, 0); return;
+    case Action::SchematicCorner2: setCorner(client, *player, 1); return;
     case Action::NextPlacement: {
         std::string name;
         bool any = session::change([&](PlacementSet& set) {

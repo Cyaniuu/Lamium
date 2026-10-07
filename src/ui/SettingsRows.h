@@ -79,6 +79,7 @@ inline constexpr auto features = std::to_array<FeatureInfo>({
     {"schematicPlacement", "feature.schematicPlacement", "help.schematicPlacement", ""},
     {"schematicLayers", "feature.schematicLayers", "help.schematicLayers", ""},
     {"schematicCheck", "feature.schematicCheck", "help.schematicCheck", ""},
+    {"schematicSave", "feature.schematicSave", "help.schematicSave", ""},
     {"automationStatus", "feature.automationStatus", "help.automationStatus", "interface.automationStatus", false, input::Action::ToggleAutomationStatus},
     {"settings", "feature.settings", "help.settings", "", false, input::Action::Settings},
     // Headings without a switch: their first row is the switch (no key of its own).
@@ -94,7 +95,7 @@ inline int actionRank(input::Action action) {
         A::OpenSchematicMaterials,
         A::SelectLookedPlacement, A::NextPlacement, A::MovePlacementForward, A::MovePlacementBack, A::MovePlacementLeft,
         A::MovePlacementRight, A::MovePlacementUp, A::MovePlacementDown, A::MovePlacementHere, A::RotatePlacement,
-        A::MirrorPlacement, A::LayerUp, A::LayerDown, A::LayerHere};
+        A::MirrorPlacement, A::LayerUp, A::LayerDown, A::LayerHere, A::SchematicCorner1, A::SchematicCorner2, A::SaveSchematicArea};
     for (size_t i = 0; i < std::size(order); ++i) if (order[i] == action) return static_cast<int>(i);
     return static_cast<int>(std::size(order)) + static_cast<int>(action);
 }

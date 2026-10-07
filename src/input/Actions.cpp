@@ -21,6 +21,7 @@
 #include "ui/SettingsRows.h"
 #include "ui/Toast.h"
 #include "features/schematic/SchematicActions.h"
+#include "features/schematic/Selection.h"
 #include "ui/Localization.h"
 #include "mc/client/game/ClientInstance.h"
 #include "mc/client/input/KeyboardRemappingLayout.h"
@@ -145,7 +146,17 @@ void executeAction(IClientInstance& client, input::Action action) {
     if (action == input::Action::OpenSchematicPlaced) { ui::openSchematics(client, 1); return; }
     if (action == input::Action::OpenSchematicCheck) { ui::openSchematics(client, 2); return; }
     if (action == input::Action::OpenSchematicMaterials) { ui::openSchematics(client, 3); return; }
-    if (schematic::actions::handles(action)) { schematic::actions::press(client, action); return; }
+    if (schematic::actions::handles(action)) {
+        schematic::actions::press(client, action);
+        // The second corner leads straight to saving once both are set.
+        if (action == input::Action::SchematicCorner2 && schematic::selection::current().area()) ui::openSchematicSave(client);
+        return;
+    }
+    if (action == input::Action::SaveSchematicArea) {
+        if (schematic::selection::current().area()) ui::openSchematicSave(client);
+        else ui::showMessageToast(ui::translated("schematic.toast.noArea"));
+        return;
+    }
     if (action == input::Action::OpenWorldMap) {
         if (runtime.preferences().map.worldMap) ui::openWorldMap(client);
         else ui::showMessageToast(ui::translated("worldMap.off"));
