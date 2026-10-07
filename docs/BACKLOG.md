@@ -69,10 +69,13 @@ Keep this section short. It is only the ordering layer; task details and status
 live in the L-items below. If this summary ever disagrees with an L-item, the
 L-item wins. Every entry names what the task is, not only its number.
 
-1. **Bugs:** L-110 overlay faces z-fight with the blocks they cover
-   (restriction faces, Shapes; one shared rule with the ghosts).
+1. **Current batch (chosen 2026-10-08, one in-game check at the end):**
+   L-110 overlay z-fighting; L-93 richer schematic target-card line; L-57
+   client info counters; L-109 death layout restore; L-111 integration
+   design proposal (no in-game check). No release before the batch.
 2. **Before the next release or 0.2.0 — L-111 integration between
-   features:** Design with the maintainer first (scope, risks, order).
+   features:** the agent drafts a proposal in the current batch; the
+   maintainer decides scope, risks and order.
 3. **Small and medium features**, picked by the maintainer:
    - L-90 Simplified Chinese localization: built and checked in game; waits
      for a native review of the wording.
@@ -648,7 +651,9 @@ implementation. Output: a short plan (possibly a demo) that turns into Ready
 items.
 
 ### L-109 Restore the death-time hotbar and inventory layout on pickup
-Kind: Design. Idea from the maintainer 2026-10-07; not chosen for building yet.
+Kind: Design decided 2026-10-08, then Ready **(strong model)**. Idea from the
+maintainer 2026-10-07; chosen for building 2026-10-08.
+Status: decided; implementation in the 2026-10-08 batch.
 When the player picks up the items dropped at their death point, rearrange the
 inventory to be as close as possible to the layout at death: the same items
 back in the same hotbar, inventory, armor and offhand slots. When the feature
@@ -659,11 +664,23 @@ Requirements stated by the maintainer:
 - Items picked up since death and items that were lost (burned, despawned,
   taken by others) are handled by priorities so the result looks close to the
   original to a person, not only by slot count.
-Open (needs the maintainer): the priority rules (hotbar and equipment first?
-items gained since death, partial stacks, changed durability or
-enchantments); when the rearrangement starts and stops (each pickup, after a
-quiet period, a manual key); behavior on servers where rearranging is many
-inventory transactions; and whether keepInventory disables it.
+Decided 2026-10-08 (agent's proposal, maintainer chose the trigger and armor):
+- Trigger: automatic. After an item pickup, once about one second passes
+  without another pickup, rearrange; later pickups trigger again. The death
+  layout expires 10 minutes after death (and on world exit).
+- Order: armor and offhand, then hotbar, then the main inventory, each back
+  in its death-time slot. Armor is put back on; a slot already wearing
+  something else is left alone.
+- Matching: the same item with the same enchantments and durability first,
+  otherwise the same item. A stack goes back up to its death-time count.
+- Items gained since death stay where they are unless they block a target
+  slot; then they move to a free slot. Nothing is ever dropped or destroyed;
+  a move that needs a free slot and finds none is skipped.
+- keepInventory: if the inventory is not empty at respawn, that death is not
+  restored.
+- Servers: a bounded number of moves per tick, each confirmed from the
+  authoritative inventory before the next.
+- Default off, Experimental.
 Builds on the death-point tracking in L-60 (waypoints) and the inventory
 transaction path used by inventory transfer (DESIGN.md "Inventory transfer").
 Rearrangements must be confirmed from the authoritative inventory, never
