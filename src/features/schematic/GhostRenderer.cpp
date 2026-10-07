@@ -1087,8 +1087,8 @@ void drawWaitingColumns(ScreenContext& screen, Vec3 const& camera) {
 // Missing entities: a dashed frame where each should stand, in the ghost
 // color, with its name drawn by the HUD. Entities already there show nothing.
 // Every placement's box in the ghosts' light blue (L-93 screen review): the
-// selected one at full strength, the others faint. Lines are one pixel, so
-// opacity tells them apart.
+// selected one solid, the others dashed. The line material ignores alpha
+// (checked 2026-10-08), so the shape tells them apart.
 void drawPlacementFrames(ScreenContext& screen, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
     mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
     if (!lineMaterial.mRenderMaterialInfoPtr) return;
@@ -1099,7 +1099,7 @@ void drawPlacementFrames(ScreenContext& screen, session::Snapshot const& snapsho
         auto const& shown = snapshot.placements[i];
         bool selected = static_cast<int>(i) == snapshot.selected;
         if (!shown.structure || shown.placement.dimension != dimension || (!shown.placement.visible && !selected)) continue;
-        if (!count) lines.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(snapshot.placements.size() * 24), false);
+        if (!count) lines.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(snapshot.placements.size() * 24 * 8), false);
         ++count;
         Size size = placedSize(shown.structure->size, shown.placement.placement.rotation);
         auto const& o = shown.placement.placement.origin;
@@ -1107,10 +1107,21 @@ void drawPlacementFrames(ScreenContext& screen, session::Snapshot const& snapsho
                     static_cast<float>(o.z - camera.z) - .02f};
         glm::vec3 b = a + glm::vec3{static_cast<float>(size.x) + .04f, static_cast<float>(size.y) + .04f,
                                     static_cast<float>(size.z) + .04f};
-        lines.color(.35f, .85f, 1.f, selected ? 1.f : .35f);
+        lines.color(.35f, .85f, 1.f, 1.f);
         glm::vec3 c[8];
         for (int k = 0; k < 8; ++k) c[k] = {k & 1 ? b.x : a.x, k & 2 ? b.y : a.y, k & 4 ? b.z : a.z};
-        for (auto [p, q] : edges) { lines.vertex(c[p].x, c[p].y, c[p].z); lines.vertex(c[q].x, c[q].y, c[q].z); }
+        for (auto [p, q] : edges) {
+            if (selected) { lines.vertex(c[p].x, c[p].y, c[p].z); lines.vertex(c[q].x, c[q].y, c[q].z); continue; }
+            constexpr float dash = .5f, gap = .5f;
+            glm::vec3 from = c[p], to = c[q];
+            float length = glm::length(to - from);
+            glm::vec3 step = (to - from) / length;
+            for (float t = 0; t < length; t += dash + gap) {
+                glm::vec3 s0 = from + step * t, s1 = from + step * std::min(length, t + dash);
+                lines.vertex(s0.x, s0.y, s0.z);
+                lines.vertex(s1.x, s1.y, s1.z);
+            }
+        }
     }
     if (!count) return;
     translated(screen, glm::vec3{0}, [&] {

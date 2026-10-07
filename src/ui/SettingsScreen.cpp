@@ -2682,14 +2682,14 @@ int schematicTabAt(ShapesLayout const& l, float x, float y) {
         if (x >= schematicTabX(l, i) && x < schematicTabX(l, i) + schematicTabWidth(l)) return i;
     return -1;
 }
-// The Check tab's four filters, in the list's heading row (L-93 screen review).
-float verifyChipX(ShapesLayout const& l, int i) {
-    float w = (l.listWidth - 2 * ShapesLayout::pad) / 4;
-    return l.listLeft + ShapesLayout::pad + w * static_cast<float>(i);
-}
+// The Check tab's four filters, in the list's heading row (L-93 screen review):
+// sized to their text and drawn as outlined pills, so they read as part of the
+// list rather than more tabs. Their spans are kept from the last draw.
+std::array<std::pair<float, float>, 4> verifyChipSpans{};
 int verifyChipAt(ShapesLayout const& l, float x, float y) {
     if (schematicTab != SchematicTab::Verify || y < l.theadTop || y >= l.rowsTop) return -1;
-    for (int i = 0; i < 4; ++i) if (x >= verifyChipX(l, i) && x < verifyChipX(l, i + 1) - 2) return i;
+    for (int i = 0; i < 4; ++i)
+        if (x >= verifyChipSpans[static_cast<size_t>(i)].first && x < verifyChipSpans[static_cast<size_t>(i)].second) return i;
     return -1;
 }
 int stackSizeOf(schematic::MaterialLine const& line) {
@@ -2989,13 +2989,20 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         auto const& t = verification->visible;
         bool counted = checked && !counting;
         std::array<std::uint64_t, 4> counts{t.wrong + t.state + t.extra, t.wrong + t.extra, t.state, t.missing};
+        float cx = left;
         for (int i = 0; i < 4; ++i) {
-            bool on = verifyFilter == i;
+            bool on = verifyFilter == i, hovered = verifyChipAt(l,pointer.x,pointer.y) == i;
             std::string text = translated(chips[static_cast<size_t>(i)]);
             if (counted) text += std::format(" {}", counts[static_cast<size_t>(i)]);
-            drawSmallButton(context,verifyChipX(l,i),l.theadTop,verifyChipX(l,i+1)-verifyChipX(l,i)-2,ShapesLayout::theadHeight-1,
-                std::move(text),verifyChipAt(l,pointer.x,pointer.y) == i,on ? palette::accentDeep : palette::keyFill,
-                on ? palette::accent : palette::keyEdge,on ? palette::text : palette::dim);
+            float w = std::min(textWidth(context, text) + 8, listRight - ShapesLayout::pad - cx);
+            if (w <= 8) break;
+            float top = l.theadTop + 1, h = ShapesLayout::theadHeight - 2;
+            if (on) fill(context,cx,top,w,h,palette::accent,.15f);
+            if (hovered) fill(context,cx,top,w,h,palette::white,.08f);
+            frame(context,cx,top,w,h,on ? palette::accent : palette::keyEdge);
+            label(context,cx+4,top+(h-10)/2+boxTextInset()-1,w-6,std::move(text),on ? palette::accent : palette::dim);
+            verifyChipSpans[static_cast<size_t>(i)] = {cx, cx + w};
+            cx += w + 4;
         }
         break;
     }
@@ -3057,7 +3064,7 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         case SchematicTab::Files: {
             auto const& row = schematicFileRows[static_cast<size_t>(i)];
             if (row.file < 0) {
-                label(context,left,y+5,l.listWidth-2*ShapesLayout::pad,row.folder.empty() ? translated("schematic.topFolder") : row.folder,
+                label(context,left,y+3,l.listWidth-2*ShapesLayout::pad,"/" + row.folder,
                       palette::faint);
                 break;
             }
@@ -3111,18 +3118,28 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         case SchematicTab::Materials: {
             int index = materialListRows[static_cast<size_t>(i)];
             if (index < 0) {
-                label(context,left,y+5,l.listWidth-2*ShapesLayout::pad,translated(index == -1 ? "schematic.section.blocks"
+                label(context,left,y+3,l.listWidth-2*ShapesLayout::pad,translated(index == -1 ? "schematic.section.blocks"
                     : "schematic.section.entities"),palette::faint);
                 break;
             }
             auto const& line = *materialRows[static_cast<size_t>(index)];
             // The counts convert to chests and stacks under the pointer.
-            if (tabHover < 0 && hover.zone == ShapeZone::ListRow && hover.index == i && pointer.x >= neededX && line.remaining())
-                materialTip = {amountText(line.remaining(), stackSizeOf(line)), pointer.x, pointer.y};
+            if (tabHover < 0 && hover.zone == ShapeZone::ListRow && hover.index == i) {
+                bool noItemHere = line.item.empty() || (line.entity && !schematic::items::iconStack(line.icon));
+                std::optional<std::pair<std::string_view, std::uint64_t>> column;
+                if (pointer.x >= carriedX) { if (!noItemHere) column = {{"schematic.column.carried", carried[line.item]}}; }
+                else if (pointer.x >= leftX) column = {{"schematic.column.left", line.remaining()}};
+                else if (showPlaced && pointer.x >= placedX) column = {{"schematic.column.placed", line.placed}};
+                else if (pointer.x >= neededX) column = {{"schematic.column.needed", line.needed}};
+                if (column) materialTip = {translated(column->first) + ": " + amountText(column->second, stackSizeOf(line)),
+                    pointer.x, pointer.y};
+            }
             // Entities: an icon and a carried count only when an item places them.
             bool noItem = line.item.empty() || (line.entity && !schematic::items::iconStack(line.icon));
             drawItemIcon(context, line.icon, left, y + 1, 12);
-            std::string name = line.entity ? translated("schematic.withDetail", line.name, translated("schematic.entityTag")) : line.name;
+            // Under the Entities heading the name needs no "(entity)".
+            bool sectioned = !materialListRows.empty() && materialListRows.front() < 0;
+            std::string name = line.entity && !sectioned ? translated("schematic.withDetail", line.name, translated("schematic.entityTag")) : line.name;
             label(context,left+14,y+3,neededX-left-16,name,line.remaining() ? palette::text : palette::faint);
             auto have = noItem ? std::uint64_t{0} : carried[line.item];
             label(context,neededX,y+3,numW,std::to_string(line.needed),palette::dim,Align::Right);
@@ -3229,29 +3246,32 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         if (!checked) { paragraph(context,dx,l.detailTop+6,dw,translated("schematic.noSelection"),4,palette::faint); break; }
         label(context,dx,l.nameY+1+boxTextInset(),dw,checked->name);
         auto const& t = verification->visible;
-        if (counting) label(context,dx,l.previewY,dw,translated("schematic.counting"),palette::dim);
+        // The whole placement first, then the selected position, each under a heading.
+        label(context,dx,l.previewY-2,dw,translated("schematic.check.whole", layersText(*checked)),palette::faint);
+        if (counting) label(context,dx,l.previewY+10,dw,translated("schematic.counting"),palette::dim);
         else {
-            label(context,dx,l.previewY,dw,translated("schematic.summary.correct", t.correct, t.total()),palette::accent);
-            label(context,dx,l.previewY+11,dw,translated("schematic.summary.missing", t.missing),palette::dim);
-            label(context,dx,l.previewY+22,dw,translated("schematic.summary.wrong", t.wrong + t.extra),Rgb{1.f,.45f,.4f});
-            label(context,dx,l.previewY+33,dw,translated("schematic.summary.state", t.state),Rgb{1.f,.8f,.3f});
+            label(context,dx,l.previewY+10,dw,translated("schematic.summary.correct", t.correct, t.total()),palette::accent);
+            label(context,dx,l.previewY+21,dw,translated("schematic.summary.missing", t.missing),palette::dim);
+            label(context,dx,l.previewY+32,dw,translated("schematic.summary.wrong", t.wrong + t.extra),Rgb{1.f,.45f,.4f});
+            label(context,dx,l.previewY+43,dw,translated("schematic.summary.state", t.state),Rgb{1.f,.8f,.3f});
         }
-        label(context,dx,l.previewY+46,dw,layersText(*checked),palette::faint);
         if (verifySelected >= 0 && verifySelected < static_cast<int>(verifyRows.size())) {
             auto const& m = *verifyRows[static_cast<size_t>(verifySelected)];
             float y = l.previewY + 60;
-            label(context,dx,y,dw,mismatchKind(m.state) + std::format("  {}, {}, {}", m.position.x, m.position.y, m.position.z),
-                mismatchColor(m.state));
+            fill(context,dx,y-3,dw,1,palette::white,.1f);
+            label(context,dx,y,dw,translated("schematic.check.here", std::format("{}, {}, {}", m.position.x, m.position.y, m.position.z))
+                + "  " + mismatchKind(m.state),mismatchColor(m.state));
             if (!m.expectedName.empty()) {
                 drawItemIcon(context, m.expected, dx, y + 12, 12);
                 label(context,dx+14,y+14,dw-14,translated("schematic.expected", m.expectedName),palette::dim);
             }
-            if (!m.actualName.empty() && m.state != schematic::CellState::State) {
+            if (!m.actualName.empty()) {
                 drawItemIcon(context, m.actual, dx, y + 27, 12);
                 label(context,dx+14,y+29,dw-14,translated("schematic.actual", m.actualName),palette::dim);
             }
             // Every differing state: "<state>  <now> -> <should be>", named like the target card's.
-            float sy = y + 30;
+            float sy = y + 45;
+            if (!m.states.empty()) { label(context,dx,sy,dw,translated("schematic.check.states"),palette::faint); sy += 11; }
             Rgb stateColor{1.f, .8f, .25f};
             auto const& identifier = m.identifier;
             for (auto const& d : m.states) {
@@ -3308,28 +3328,12 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
                 amountText(line.remaining(), stackSizeOf(line))),palette::dim);
             y += 26;
         }
-        // What is still missing, drawn like inventory slots: one slot per stack.
-        auto missing = missingMaterials();
-        label(context,dx,y,dw,translated("schematic.materials.missing", missing.size()),missing.empty() ? palette::accent : palette::faint);
-        y += 11;
-        float slot = std::min(18.f, std::floor(dw / 9));
-        int slots = 0, rows = std::max(1, static_cast<int>((l.actionsY - 6 - y) / slot));
-        for (auto const& m : missing) {
-            int size = stackSizeOf(*m.line);
-            for (std::uint64_t left = m.missing; left && slots < 9 * rows; ++slots) {
-                auto count = std::min<std::uint64_t>(left, static_cast<std::uint64_t>(size));
-                left -= count;
-                float sx = dx + static_cast<float>(slots % 9) * slot, sy = y + static_cast<float>(slots / 9) * slot;
-                fill(context,sx,sy,slot-1,slot-1,palette::keyFill);
-                frame(context,sx,sy,slot-1,slot-1,palette::keyEdge);
-                drawItemIcon(context, m.line->icon, sx + (slot - 13) / 2, sy + (slot - 13) / 2, 12);
-                label(context,sx,sy+slot-10,slot-2,std::to_string(count),palette::warning,Align::Right);
-            }
-        }
+        // The rest of the pane is kept for raw materials from the game's recipes (L-116).
+        bool missing = !missingMaterials().empty();
         fill(context,l.detailLeft,l.actionsY-2,l.detailWidth,1,palette::white,.14f);
         drawSmallButton(context,l.actionX(0),l.actionsY+2,l.firstActionWidth,12,translated("schematic.openCalculator"),
-            over(ShapeZone::Action,0),missing.empty() ? palette::keyFill : palette::accentDeep,
-            missing.empty() ? palette::keyEdge : palette::accent, missing.empty() ? palette::faint : palette::text);
+            over(ShapeZone::Action,0),missing ? palette::accentDeep : palette::keyFill,
+            missing ? palette::accent : palette::keyEdge, missing ? palette::text : palette::faint);
         break;
     }
     }
@@ -3360,6 +3364,8 @@ ShapesLayout fitSchematics(SettingsTable const& t, glm::vec2 size, bool docked) 
         schematicFieldFirst, false, false);
     // The first action never runs into the one at the right edge.
     l.firstActionWidth = std::clamp(l.detailWidth - 2 * ShapesLayout::pad - ShapesLayout::deleteWidth - 4, 40.f, 96.f);
+    // Materials has one action: the calculator link, readable across the pane.
+    if (schematicTab == SchematicTab::Materials) l.firstActionWidth = std::max(40.f, l.detailWidth - 2 * ShapesLayout::pad);
     schematicsDisplayed = l;
     schematicListFirst = l.listFirst;
     schematicFieldFirst = l.fieldFirst;
