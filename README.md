@@ -147,8 +147,9 @@ Minecraft's "copy coordinates" while Lamium is installed unless you rebind it.
   yet. Water, lava and powder snow fog hiding is checked with the vanilla
   resources in Fancy graphics; other packs and graphics modes are unverified.
 - FreeCamera is experimental. Underground terrain drawing is checked in a
-  local world and on BDS; other players' view of the body, controllers and
-  some dimension/menu edges remain untested.
+  local world and on BDS; Hold/Toggle operation, menus, focus loss and dimension
+  travel are also checked. Other players' view of the body, controllers and
+  broader graphics/resource configurations remain untested.
 - Edge Guard works in local worlds; on multiplayer servers the server may
   still move the player over the edge (untested).
 - Inventory transfer works only in ordinary storage (chests, barrels, Shulker

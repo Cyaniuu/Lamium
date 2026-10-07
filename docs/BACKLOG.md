@@ -159,9 +159,10 @@ unmet gates for versions already published:
 - FreeCamera underground visibility (L-37): the 2026-10-07 native-request
   adapter passed cave drawing in a local world and on BDS on `d56b81e`;
   the log confirms the native 3 -> 5 replacement. Normal-view and player
-  control restoration also passed. Other players' view of the body,
-  detailed Hold/menu/focus/world/dimension
-  cleanup and surface/shadow/graphics coverage remain unreported separately.
+  control restoration also passed. The follow-up confirms intended Hold/Toggle
+  operation, camera retention through menus/focus loss and OFF on dimension
+  travel. Other players' view of the body, world-exit/death regression coverage
+  for the adapter, controllers and surface/shadow/graphics coverage remain open.
   See CAMERA.md and VALIDATION.md.
 - FreeCamera speed controls (L-26): five-step adjustment and speed keys passed
   on `7e72244`; revised labels and forward-only sprint follow-up passed on

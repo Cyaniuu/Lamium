@@ -12,6 +12,24 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-37 Hold/Toggle, menus, focus and dimension follow-up (2026-10-07)
+
+By the maintainer, follow-up on deployed `d56b81e`, DLL
+`822285b2f0ecceb4a9b6bf1b0310c0f15fa1e2e96a4edd1af9f095835f8bfe7c`,
+Minecraft 1.26.51.01 / LeviLamina Client 26.51.6, all trace options off.
+Reported that both Hold and Toggle behave as intended, as before the cave
+rendering change. Menus and focus loss retain the detached camera rather
+than returning to the player; dimension travel turns FreeCamera OFF.
+The maintainer considers this correct behavior. The environment for each
+individual lifecycle case was not specified separately; the preceding entry
+records cave drawing in both a local world and on BDS.
+
+This covers the reported activation/menu/focus/dimension behavior, not every
+input sequence or lifecycle event. Other players' view of the body remains
+unchecked, as do controllers, world-exit/death regression coverage for the
+terrain adapter, other graphics/resource configurations and loader 26.51.5.
+No code or camera lifecycle policy was changed for this result.
+
 ## L-37 underground terrain visible locally and on BDS (2026-10-07)
 
 By the maintainer, local world and BDS, `d56b81e`, DLL

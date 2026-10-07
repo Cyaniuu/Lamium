@@ -191,8 +191,11 @@ Client 26.51.6 (DLL `822285b2...5f8bfe7c`, trace options off). The runtime log
 confirms binding at SDK-derived virtual slot 26 and the native 3 -> 5 request
 being retained. The maintainer also confirmed normal-view and player-control
 restoration after turning FreeCamera off. Other players' view of the body is
-explicitly unchecked; detailed lifecycle/graphics cases were not reported
-separately. See VALIDATION.md and VALIDATION-LOG.md.
+explicitly unchecked. A further report confirms intended Hold/Toggle behavior,
+camera retention through menus and focus loss, and FreeCamera turning OFF on
+dimension travel. Per-case environments were not listed separately. World
+exit/death, controllers and broader graphics/resource coverage remain open
+for the terrain adapter. See VALIDATION.md and VALIDATION-LOG.md.
 
 The first candidate (`aa5efa9`)
 was tested on 2026-10-07 but its 26.51.5-only loader gate disabled it on the
@@ -252,9 +255,9 @@ and on BDS; the following individual cases were not all reported):
 - Fly through open cave space and back to the surface; inspect terrain,
   shadows and overlays. Toggle off/on repeatedly and confirm the normal view
   and player controls return without flicker or missing terrain.
-- Open Settings/inventory and change window focus during Toggle FreeCamera:
-  the retained pose should keep its visibility while flight pauses. Test Hold
-  release, world exit/re-entry and dimension cleanup separately.
+- Hold/Toggle operation, camera retention through menus/focus loss and OFF on
+  dimension travel were confirmed in the follow-up. Check world exit/re-entry
+  and death separately for the terrain adapter.
 - Check ordinary first/third person, Freelook and Zoom with FreeCamera off.
   Check the player's mode and body remain unchanged from another player's
   view. BDS cave drawing passed; remote body appearance remains unverified.
