@@ -545,7 +545,12 @@ Requirements, technical notes and the retained decision/build/research record:
 Accepted follow-ups (2026-10-07; known gaps, not 0.1.7 blockers):
 - Placement markers on the minimap/world map.
 - A richer target-card line: expected block icon and differing state values
-  (built 2026-10-08, checked in game the same day).
+  (built 2026-10-08, checked in game the same day). Redesigned 2026-10-08
+  (maintainer chose the agent's proposal): rows say what to do and take the
+  verifier colors (red wrong/extra, yellow state, light blue missing); a
+  wrong or extra block reads "Should be [icon] <block>"; each differing
+  state is one row "<state>: <now> → <should be>" with readable names
+  (L-112), and the block's own row for that state is not repeated.
 - Beds sometimes drawing only one half or an outline; heads, doors and
   honey blocks still drawing as outlines.
 - The Check tab's verifier-colored preview and the Files tab's rotatable
@@ -628,6 +633,18 @@ breeding cooldown. The client SDK has `AgeableComponent::mAge` and
 Estimating from observed events (feeding speeds growth up) is not accurate
 enough to show as a time.
 
+### L-112 Readable block state names in the target card
+Kind: Ready. Chosen 2026-10-08 with the L-93 target-card redesign.
+Status: in the 2026-10-08 batch.
+Show common block states by name instead of their internal keys and values,
+for the card's own state rows and the schematic differences: stairs facing
+(`weirdo_direction`), upside down (`upside_down_bit`), slab half
+(`minecraft:vertical_half`, `top_slot_bit`), axis (`pillar_axis`),
+trapdoor facing (`direction`), alongside the existing facing, open, half and
+hinge rows. Unknown states keep their internal name and value. The value
+mappings come from the game's documented state values; each new one is
+checked in game against the block's look before it counts as verified.
+
 ### L-111 Integration between features (before the next release or 0.2.0)
 Kind: Design. Raised by the maintainer 2026-10-08 after checking the
 2026-10-07 batch; not chosen for building yet.
@@ -659,10 +676,12 @@ same day except two failures, fixed after (VALIDATION-LOG): rejoining read
 the player as not alive and dropped the layout (now `LifeWatch`: only a
 player seen alive in the world can die), and removing the death point
 before the first pickup went unnoticed (now watched every tick). Restore
-scope (maintainer, 2026-10-08): Hotbar & equipment (default; armor and offhand
-included) or Everything; restoring everything takes a while, and a
-hotbar-only choice was dropped as unneeded. The fixes and the first
-three-way scope passed the recheck on `1bd1102`. Planner `DeathLayout.h` (one move at a time: swap, or move part of a
+scope (maintainer, 2026-10-08): the hotbar, armor and offhand by default; a
+switch "Also restore the inventory" (off) adds the rest, which takes a
+while. A hotbar-only choice was dropped as unneeded, and the two-choice
+setting ("Hotbar & equipment" / "Everything", checked on `89950fc`) became
+the switch because the English value was cut off and read awkwardly. The
+fixes passed the recheck on `1bd1102`. Planner `DeathLayout.h` (one move at a time: swap, or move part of a
 stack; equipment never emptied; tested, including 2000 random inventories
 for termination and conservation), document `DeathLayoutStore.cpp`
 (`death-layout.json` beside the waypoints), glue `DeathRestore.cpp`: the

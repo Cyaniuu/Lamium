@@ -12,6 +12,17 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-109 two-choice restore scope (2026-10-08)
+
+By the maintainer, deployed `89950fc`, DLL
+`787f0d899f2df24fa4823f969ff8b4600478b693ec2078e130cdb03e9736bfc3`,
+Minecraft 1.26.51.01, local world, all trace options off. The setting offers
+the two choices and, with the default, a death and pickup restored the
+hotbar, armor and offhand. The English value "Hotbar & equipment" was cut
+off in the settings row and read awkwardly; replaced by a switch (below).
+Screenshots also showed the schematic target-card rows listing raw state
+names ("weirdo_direction 0 (now 3)") twice; redesigned (L-93, L-112).
+
 ## L-109 recheck: rejoin, death point removal, restore scope (2026-10-08)
 
 By the maintainer, deployed `1bd1102`, DLL
