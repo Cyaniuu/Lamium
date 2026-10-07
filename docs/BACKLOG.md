@@ -972,6 +972,33 @@ Scope for 0.1.7 (maintainer, 2026-10-07), in this order:
 4. Blocks without a mesh on the ghost path that the block-entity renderer
    does not draw either (torch, bed, skull, door ...): at least the outline
    alone, so no block of a schematic is invisible.
+Built 2026-10-07, not yet checked in game:
+- 1 (`1a82afe`): missing entities get a dashed frame (one size, 0.8 x 1.8;
+  the client cannot know a type's size without the entity) and their name
+  above it; an entity counts when one of the same type stands within one
+  block of its spot. Entities are judged only within 48 blocks of the
+  player and in loaded chunks (beyond that the client does not know them),
+  so they are neither placed nor missing there. Check lists missing ones as
+  "not placed (entity)"; Materials lists them after the blocks, carried only
+  when an item of the same name exists (armor stand), "-" otherwise. The
+  HUD's materials can include them.
+- 2 (`14c2265`): keys "corner 1" / "corner 2" on the looked-at block
+  (unbound, new "Save an area" key group); the second corner, or the save
+  key, opens a save prompt over the world with both corners as − / +
+  steppers (Shift: 10), the size, the name, the file it becomes and
+  "Include entities". The world shows the area as a white frame with yellow
+  corners, following the steppers. The world render reads 32768 cells per
+  frame and writes the file; a chunk not loaded stops the save with its
+  position. Blocks with their states and the water layer are saved; block
+  entity data (container contents, sign text) is not; entities keep type,
+  position and facing. An existing file needs a second press
+  ("Overwrite").
+- 3 (`14c2265`): "Open folder" replaces "Reload files"; the Files list
+  rescans every two seconds while shown. Files over 2 MB (about a quarter
+  million blocks; not measured) show a warning and a "Load" button first.
+- 4: already in place: a block that gives no mesh and no block-entity
+  model still gets the light-blue outline of its cell (to be checked with
+  torch, bed, skull and door).
 If there is room before 0.1.7 (maintainer's call, not required): the
 rotatable 3D preview in Files, neighbor-dependent shapes (fences, panes,
 stair corners, redstone) following the schematic's neighbors instead of the
