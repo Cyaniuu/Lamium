@@ -71,6 +71,15 @@
 #include <chrono>
 #include <cmath>
 #include <map>
+#ifdef LAMIUM_SCHEMATIC_MODEL_PROBE
+#include "mc/client/renderer/actor/ActorRenderDispatcher.h"
+#include "mc/client/renderer/actor/DataDrivenRenderer.h"
+#include "mc/client/model/models/Model.h"
+#include "mc/client/model/geom/ModelPart.h"
+#include "mc/client/model/geom/Cube.h"
+#include "mc/deps/core/math/Matrix.h"
+#include "mc/common/client/renderer/helpers/MeshHelpers.h"
+#endif
 #include <optional>
 #include <set>
 #include <tuple>
@@ -1128,8 +1137,110 @@ void drawPlacementFrames(ScreenContext& screen, session::Snapshot const& snapsho
         MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
     });
 }
+#ifdef LAMIUM_SCHEMATIC_MODEL_PROBE
+// L-115 research: missing entities drawn with their game model. The model is
+// looked up by the entity's identifier, which is also its renderer name for
+// data-driven entities (the radar faces use the same lookup with a live actor).
+std::vector<std::pair<Position, std::string>> modelSpots;
+std::map<std::string, std::shared_ptr<DataDrivenRenderer>> modelRenderers;
+int modelLogs = 0;
+void modelLog(std::string const& text) {
+    if (++modelLogs > 80) return;
+    try { Runtime::instance().self().getLogger().info("L-115 probe: {}", text); } catch (...) {}
+}
+void describeModel(std::string const& id, DataDrivenRenderer* renderer) {
+    if (!renderer) { modelLog(std::format("{}: no data-driven renderer", id)); return; }
+    auto* model = static_cast<std::shared_ptr<Model>&>(renderer->mModel).get();
+    auto const& skin = static_cast<mce::TexturePtr const&>(renderer->mDefaultSkin);
+    std::string texture = skin.mResourceLocationPtr.get() ? skin.mResourceLocationPtr.get()->mPath->value : std::string("-");
+    if (!model) { modelLog(std::format("{}: renderer without a model, texture {}", id, texture)); return; }
+    int cubes = 0;
+    for (auto const* part : *model->mAllParts) if (part) cubes += static_cast<int>(part->mCubes->size());
+    modelLog(std::format("{}: {} parts, {} cubes, texture {}", id, model->mAllParts->size(), cubes, texture));
+    int shown = 0;
+    for (auto const* part : *model->mAllParts) {
+        if (!part || ++shown > 8) continue;
+        auto pos = *part->mPos, rot = *part->mRot;
+        auto origin = part->mCubes->empty() ? Vec3{} : *part->mCubes->front().mOrigin;
+        modelLog(std::format("  part {} parent {} pos {:.2f},{:.2f},{:.2f} rot {:.3f},{:.3f},{:.3f} cubes {} first origin {:.2f},{:.2f},{:.2f}",
+            part->mName->getString(), static_cast<ModelPart*>(part->mParent) ? static_cast<ModelPart*>(part->mParent)->mName->getString() : std::string("-"),
+            pos.x, pos.y, pos.z, rot.x, rot.y, rot.z, part->mCubes->size(), origin.x, origin.y, origin.z));
+    }
+}
+void compilePart(Tessellator& batch, ModelPart& part, Matrix const& parent, int depth) {
+    if (depth > 16) return;
+    Matrix m = parent;
+    part.translateTo(m, 1.f);
+    static_cast<bool&>(batch.mApplyTransform) = true;
+    static_cast<glm::mat4x4&>(batch.mTransformMatrix) = m._m;
+    part.compileCubes(batch);
+    for (auto* child : *part.mChildren) if (child) compilePart(batch, *child, m, depth + 1);
+}
+void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& camera) {
+    auto dispatcher = client.getEntityRenderDispatcher();
+    if (!dispatcher || modelSpots.empty()) return;
+    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
+    for (auto const& [at, id] : modelSpots) {
+        auto found = modelRenderers.find(id);
+        if (found == modelRenderers.end()) {
+            std::shared_ptr<DataDrivenRenderer> renderer;
+            try { renderer = dispatcher->getDataDrivenRenderer(HashedString{id}); } catch (...) {}
+            describeModel(id, renderer.get());
+            found = modelRenderers.emplace(id, renderer).first;
+        }
+        auto* renderer = found->second.get();
+        if (!renderer) continue;
+        auto* model = static_cast<std::shared_ptr<Model>&>(renderer->mModel).get();
+        if (!model) continue;
+        // Camera-relative, turned to face south like a fresh entity, model
+        // pixels to blocks.
+        Matrix base = Matrix::IDENTITY();
+        base.translate(static_cast<float>(at.x - camera.x), static_cast<float>(at.y - camera.y), static_cast<float>(at.z - camera.z));
+        base.rotate(180.f, 0.f, 1.f, 0.f);
+        base.scale(1.f / 16);
+        int cubes = 0;
+        for (auto const* part : *model->mAllParts) if (part) cubes += static_cast<int>(part->mCubes->size());
+        Tessellator faces(screen.tessellator.mBufferResourceService);
+        faces.begin({}, mce::PrimitiveMode::QuadList, cubes * 24, false);
+        for (auto* part : *model->mAllParts)
+            if (part && !static_cast<ModelPart*>(part->mParent)) compilePart(faces, *part, base, 0);
+        // The cubes' stored corners through the base alone, to compare with
+        // where the game puts them.
+        Tessellator lines(screen.tessellator.mBufferResourceService);
+        lines.begin({}, mce::PrimitiveMode::LineList, cubes * 24, false);
+        lines.color(.35f, .85f, 1.f, 1.f);
+        constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
+        for (auto const* part : *model->mAllParts) {
+            if (!part) continue;
+            for (auto const& cube : *part->mCubes) {
+                auto o = *cube.mOrigin, z = *cube.mSize;
+                glm::vec3 c[8];
+                for (int k = 0; k < 8; ++k) {
+                    glm::vec4 v{k & 1 ? o.x + z.x : o.x, k & 2 ? o.y + z.y : o.y, k & 4 ? o.z + z.z : o.z, 1.f};
+                    c[k] = glm::vec3(base._m.get() * v);
+                }
+                for (auto [a, b] : edges) { lines.vertex(c[a].x, c[a].y, c[a].z); lines.vertex(c[b].x, c[b].y, c[b].z); }
+            }
+        }
+        translated(screen, glm::vec3{0}, [&] {
+            auto const& material = static_cast<mce::MaterialPtr const&>(renderer->mEntityAlphatestMaterial);
+            if (material.mRenderMaterialInfoPtr)
+            {
+                using Texture = std::variant<std::monostate, mce::TexturePtr, mce::ClientTexture, mce::ServerTexture>;
+                Texture texture{static_cast<mce::TexturePtr const&>(renderer->mDefaultSkin)};
+                std::function<void(ScreenContext const&, mce::Mesh const&, mce::MaterialPtr const&, Texture const&)> none;
+                MeshHelpers::renderMeshImmediately(screen, faces, material, texture, none);
+            }
+            if (lineMaterial.mRenderMaterialInfoPtr) MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
+        });
+    }
+}
+#endif
 void drawEntities(ScreenContext& screen, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
     std::vector<std::pair<Position, std::string>> named;
+#ifdef LAMIUM_SCHEMATIC_MODEL_PROBE
+    modelSpots.clear();
+#endif
     std::vector<Position> frames;
     for (size_t i = 0; i < snapshot.placements.size() && i < resolved.size(); ++i) {
         auto const& shown = snapshot.placements[i];
@@ -1142,6 +1253,9 @@ void drawEntities(ScreenContext& screen, session::Snapshot const& snapshot, int 
             double dx = at.x - camera.x, dy = at.y - camera.y, dz = at.z - camera.z, distance = dx * dx + dy * dy + dz * dz;
             if (distance > drawDistance * drawDistance) continue;
             frames.push_back(at);
+#ifdef LAMIUM_SCHEMATIC_MODEL_PROBE
+            modelSpots.push_back({at, r.entities[e].identifier});
+#endif
             if (named.size() < 64 && distance < 32 * 32) named.push_back({{at.x, at.y + entityFrameHeight + .3, at.z}, r.entities[e].name});
         }
     }
@@ -1462,6 +1576,9 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
     }
     drawPlacementFrames(screen, snapshot, dimension, camera);
     drawEntities(screen, snapshot, dimension, camera);
+#ifdef LAMIUM_SCHEMATIC_MODEL_PROBE
+    drawModels(screen, client, camera);
+#endif
     drawNameTags(screen, client, region, *moving, camera);
 }
 
