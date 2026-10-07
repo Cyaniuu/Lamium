@@ -662,6 +662,94 @@ void addEntityResults(Verification& result, session::Shown const& shown, Resolve
     for (auto& [key, line] : visible) result.visibleMaterials.push_back(std::move(line));
 }
 
+// One cell of a placement, the n-th of its placed box (x, then y, then z
+// fastest), compared with the world.
+struct Cell {
+    bool inside = false;      // false: outside the structure or a structure void
+    CellState state = CellState::Unknown;
+    int palette = -1;
+    bool air = false, visible = false;
+    Point world, offset;
+    Block const* expected = nullptr;
+    Block const* actual = nullptr;
+};
+Cell classifyCell(BlockSource& region, session::Shown const& shown, Resolved const& blocks, Size placed, std::uint64_t n) {
+    Cell c;
+    auto const& structure = *shown.structure;
+    auto const& placement = shown.placement;
+    int ox = static_cast<int>(n / (static_cast<std::uint64_t>(placed.y) * placed.z));
+    int oy = static_cast<int>(n / placed.z % placed.y);
+    int oz = static_cast<int>(n % placed.z);
+    c.offset = {ox, oy, oz};
+    c.world = {placement.placement.origin.x + ox, placement.placement.origin.y + oy, placement.placement.origin.z + oz};
+    auto local = toLocal(structure.size, placement.placement, c.world);
+    if (!local) return c;
+    auto paletteIndex = structure.blocks[static_cast<size_t>(structure.cell(local->x, local->y, local->z))];
+    if (paletteIndex == voidCell || static_cast<size_t>(paletteIndex) >= blocks.blocks.size()) return c;
+    c.inside = true;
+    c.palette = static_cast<int>(paletteIndex);
+    c.air = structure.palette[static_cast<size_t>(paletteIndex)].isAir();
+    c.expected = blocks.blocks[static_cast<size_t>(paletteIndex)];
+    c.visible = layerShown(placement.layers, placed, c.offset);
+    BlockPos pos{c.world.x, c.world.y, c.world.z};
+    auto* chunk = region.getChunkAt(pos);
+    if (!chunk || chunk->mLoadState->load() < ChunkState::Loaded) { c.state = CellState::Unknown; return c; }
+    c.actual = &region.getBlock(pos);
+    auto const* actual = c.actual;
+    auto const* expected = c.expected;
+    if (actual->getMaterial().mType == SharedTypes::v1_26_20::MaterialType::ClientRequestPlaceholder) c.state = CellState::Unknown;
+    else if (c.air) c.state = actual->isAir() ? CellState::Correct : placement.countExtras ? CellState::Extra : CellState::Ignored;
+    else if (!expected) c.state = CellState::Unknown;
+    else if (actual == expected) c.state = CellState::Correct;
+    else if (actual->isAir()) c.state = CellState::Missing;
+    else c.state = &actual->getBlockType() == &expected->getBlockType() ? CellState::State : CellState::Wrong;
+    return c;
+}
+// Progress of every placement for the Placed list: correct / total in its
+// shown layers, counted in the background only while the list is on screen.
+// The selected placement takes its numbers from the full check instead.
+constexpr std::uint64_t progressBudget = 8192;
+std::atomic<std::int64_t> progressWanted{0}; // steady-clock milliseconds of the last request
+struct ProgressScan {
+    size_t index = 0;
+    std::string key;
+    std::uint64_t next = 0;
+    Tally tally;
+} progressScan;
+std::mutex progressMutex;
+std::map<std::string, Tally> progressDone; // by drawKey
+void recordProgress(std::string const& key, Tally const& tally) {
+    std::lock_guard lock(progressMutex);
+    progressDone[key] = tally;
+}
+std::int64_t steadyMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+}
+void stepProgress(BlockSource& region, session::Snapshot const& snapshot, int dimension) {
+    if (steadyMs() - progressWanted.load() > 1000) return;
+    size_t count = snapshot.placements.size();
+    if (!count || resolved.size() != count) return;
+    for (std::uint64_t budget = progressBudget, tries = 0; budget && tries <= count; ) {
+        if (progressScan.index >= count) progressScan.index = 0;
+        auto const& shown = snapshot.placements[progressScan.index];
+        bool usable = static_cast<int>(progressScan.index) != snapshot.selected && shown.structure
+            && shown.placement.dimension == dimension && resolved[progressScan.index].structure == shown.structure.get();
+        auto key = drawKey(shown.placement);
+        if (!usable) { ++progressScan.index; progressScan.key.clear(); ++tries; continue; }
+        if (progressScan.key != key) { progressScan.key = key; progressScan.next = 0; progressScan.tally = {}; }
+        Size placed = placedSize(shown.structure->size, shown.placement.placement.rotation);
+        std::uint64_t total = static_cast<std::uint64_t>(placed.x) * placed.y * placed.z;
+        for (; progressScan.next < total && budget; ++progressScan.next, --budget) {
+            auto c = classifyCell(region, shown, resolved[progressScan.index], placed, progressScan.next);
+            if (c.inside && c.visible) progressScan.tally.add(c.state, !c.air);
+        }
+        if (progressScan.next < total) return;
+        recordProgress(key, progressScan.tally);
+        progressScan.key.clear();
+        ++progressScan.index;
+        ++tries;
+    }
+}
 void stepScan(BlockSource& region, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
     int index = snapshot.selected;
     bool valid = index >= 0 && index < static_cast<int>(snapshot.placements.size())
@@ -701,32 +789,14 @@ void stepScan(BlockSource& region, session::Snapshot const& snapshot, int dimens
         if (correct) line.placed += static_cast<std::uint64_t>(info.perBlock);
     };
     for (std::uint64_t budget = scanBudget; scan.next < total && budget; ++scan.next, --budget) {
-        int ox = static_cast<int>(scan.next / (static_cast<std::uint64_t>(placed.y) * placed.z));
-        int oy = static_cast<int>(scan.next / placed.z % placed.y);
-        int oz = static_cast<int>(scan.next % placed.z);
-        Point world{placement.placement.origin.x + ox, placement.placement.origin.y + oy, placement.placement.origin.z + oz};
-        auto local = toLocal(structure.size, placement.placement, world);
-        if (!local) continue;
-        auto paletteIndex = structure.blocks[static_cast<size_t>(structure.cell(local->x, local->y, local->z))];
-        if (paletteIndex == voidCell || static_cast<size_t>(paletteIndex) >= blocks.blocks.size()) continue;
-        auto const& entry = structure.palette[static_cast<size_t>(paletteIndex)];
-        Block const* expected = blocks.blocks[static_cast<size_t>(paletteIndex)];
-        bool visible = layerShown(placement.layers, placed, {ox, oy, oz});
-        bool air = entry.isAir();
-        BlockPos pos{world.x, world.y, world.z};
-        CellState state;
-        Block const* actual = nullptr;
-        auto* chunk = region.getChunkAt(pos);
-        if (!chunk || chunk->mLoadState->load() < ChunkState::Loaded) state = CellState::Unknown;
-        else {
-            actual = &region.getBlock(pos);
-            if (actual->getMaterial().mType == SharedTypes::v1_26_20::MaterialType::ClientRequestPlaceholder) state = CellState::Unknown;
-            else if (air) state = actual->isAir() ? CellState::Correct : placement.countExtras ? CellState::Extra : CellState::Ignored;
-            else if (!expected) state = CellState::Unknown;
-            else if (actual == expected) state = CellState::Correct;
-            else if (actual->isAir()) state = CellState::Missing;
-            else state = &actual->getBlockType() == &expected->getBlockType() ? CellState::State : CellState::Wrong;
-        }
+        auto c = classifyCell(region, shown, blocks, placed, scan.next);
+        if (!c.inside) continue;
+        auto paletteIndex = c.palette;
+        bool visible = c.visible, air = c.air;
+        CellState state = c.state;
+        Block const* actual = c.actual;
+        Block const* expected = c.expected;
+        Point world = c.world;
         if (!air) {
             auto const& info = blocks.items[static_cast<size_t>(paletteIndex)];
             addMaterial(scan.all, info, state == CellState::Correct);
@@ -756,6 +826,7 @@ void stepScan(BlockSource& region, session::Snapshot const& snapshot, int dimens
     result->placement = index;
     result->complete = true;
     result->visible = scan.tally;
+    recordProgress(drawKey(placement), scan.tally);
     result->mismatches = std::move(scan.mismatches);
     for (auto& [key, line] : scan.all) result->materials.push_back(std::move(line));
     for (auto& [key, line] : scan.shown) result->visibleMaterials.push_back(std::move(line));
@@ -1012,6 +1083,37 @@ void drawWaitingColumns(ScreenContext& screen, Vec3 const& camera) {
 
 // Missing entities: a dashed frame where each should stand, in the ghost
 // color, with its name drawn by the HUD. Entities already there show nothing.
+// Every placement's box in the ghosts' light blue (L-93 screen review): the
+// selected one at full strength, the others faint. Lines are one pixel, so
+// opacity tells them apart.
+void drawPlacementFrames(ScreenContext& screen, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
+    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
+    if (!lineMaterial.mRenderMaterialInfoPtr) return;
+    constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
+    Tessellator lines(screen.tessellator.mBufferResourceService);
+    int count = 0;
+    for (size_t i = 0; i < snapshot.placements.size(); ++i) {
+        auto const& shown = snapshot.placements[i];
+        bool selected = static_cast<int>(i) == snapshot.selected;
+        if (!shown.structure || shown.placement.dimension != dimension || (!shown.placement.visible && !selected)) continue;
+        if (!count) lines.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(snapshot.placements.size() * 24), false);
+        ++count;
+        Size size = placedSize(shown.structure->size, shown.placement.placement.rotation);
+        auto const& o = shown.placement.placement.origin;
+        glm::vec3 a{static_cast<float>(o.x - camera.x) - .02f, static_cast<float>(o.y - camera.y) - .02f,
+                    static_cast<float>(o.z - camera.z) - .02f};
+        glm::vec3 b = a + glm::vec3{static_cast<float>(size.x) + .04f, static_cast<float>(size.y) + .04f,
+                                    static_cast<float>(size.z) + .04f};
+        lines.color(.35f, .85f, 1.f, selected ? 1.f : .35f);
+        glm::vec3 c[8];
+        for (int k = 0; k < 8; ++k) c[k] = {k & 1 ? b.x : a.x, k & 2 ? b.y : a.y, k & 4 ? b.z : a.z};
+        for (auto [p, q] : edges) { lines.vertex(c[p].x, c[p].y, c[p].z); lines.vertex(c[q].x, c[q].y, c[q].z); }
+    }
+    if (!count) return;
+    translated(screen, glm::vec3{0}, [&] {
+        MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
+    });
+}
 void drawEntities(ScreenContext& screen, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
     std::vector<std::pair<Position, std::string>> named;
     std::vector<Position> frames;
@@ -1300,6 +1402,7 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
 
     checkEntities(region, player, snapshot, dimension);
     stepScan(region, snapshot, dimension, camera);
+    stepProgress(region, snapshot, dimension);
 
     // Draw: alpha-tested ghost faces (empty texels let water and glass show
     // through), then outlines, then block-entity models.
@@ -1343,6 +1446,7 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
             dispatcher.render(context, region, *component, *block, renderPos, pos, false, none, nullptr, 0, std::nullopt);
         }
     }
+    drawPlacementFrames(screen, snapshot, dimension, camera);
     drawEntities(screen, snapshot, dimension, camera);
     drawNameTags(screen, client, region, *moving, camera);
 }
@@ -1422,6 +1526,13 @@ LL_TYPE_INSTANCE_HOOK(GhostPass, ll::memory::HookPriority::Normal, LevelRenderer
 }
 }
 
+void wantProgress() { progressWanted = steadyMs(); }
+std::optional<Tally> progress(SavedPlacement const& placement) {
+    std::lock_guard lock(progressMutex);
+    auto found = progressDone.find(drawKey(placement));
+    if (found == progressDone.end()) return std::nullopt;
+    return found->second;
+}
 std::shared_ptr<Verification const> verification() {
     std::lock_guard lock(resultMutex);
     return published;
