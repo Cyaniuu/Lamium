@@ -2853,7 +2853,8 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
                 if (!icon.empty()) drawItemIcon(context, icon, x, y + 1, 12);
                 label(context,x+14,y+3,w-14,name,color);
             };
-            if (m.state == schematic::CellState::Missing) block(bx, bw, m.expected, m.expectedName, palette::text);
+            if (m.entity) block(bx, bw, m.expected, m.expectedName + " (" + translated("schematic.entityTag") + ")", palette::text);
+            else if (m.state == schematic::CellState::Missing) block(bx, bw, m.expected, m.expectedName, palette::text);
             else if (m.state == schematic::CellState::Extra) {
                 // Same columns as a wrong block: air where the schematic's block would be.
                 float half = (bw - 10) / 2;
@@ -2873,14 +2874,17 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         }
         case SchematicTab::Materials: {
             auto const& line = *materialRows[static_cast<size_t>(i)];
+            // Entities: an icon and a carried count only when an item places them.
+            bool noItem = line.item.empty() || (line.entity && !schematic::items::iconStack(line.icon));
             drawItemIcon(context, line.icon, left, y + 1, 12);
-            label(context,left+14,y+3,neededX-left-16,line.name,line.remaining() ? palette::text : palette::faint);
-            auto have = line.item.empty() ? std::uint64_t{0} : carried[line.item];
+            std::string name = line.entity ? line.name + " (" + translated("schematic.entityTag") + ")" : line.name;
+            label(context,left+14,y+3,neededX-left-16,name,line.remaining() ? palette::text : palette::faint);
+            auto have = noItem ? std::uint64_t{0} : carried[line.item];
             label(context,neededX,y+3,numW,std::to_string(line.needed),palette::dim,Align::Right);
             label(context,placedX,y+3,numW,std::to_string(line.placed),palette::dim,Align::Right);
             label(context,leftX,y+3,numW,std::to_string(line.remaining()),palette::text,Align::Right);
             Rgb haveColor = !line.remaining() ? palette::faint : have >= line.remaining() ? palette::accent : palette::warning;
-            label(context,carriedX,y+3,numW,line.item.empty() ? "-" : std::to_string(have),haveColor,Align::Right);
+            label(context,carriedX,y+3,numW,noItem ? "-" : std::to_string(have),noItem ? palette::faint : haveColor,Align::Right);
             break;
         }
         }
@@ -3016,7 +3020,8 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
                 ++kinds;
                 needed += line->needed;
                 remaining += line->remaining();
-                if (line->remaining() && !line->item.empty() && carried[line->item] < line->remaining()) ++shortKinds;
+                bool noItem = line->item.empty() || (line->entity && !schematic::items::iconStack(line->icon));
+                if (line->remaining() && !noItem && carried[line->item] < line->remaining()) ++shortKinds;
             }
             label(context,dx,l.previewY,dw,translated("schematic.materials.kinds", kinds),palette::text);
             label(context,dx,l.previewY+11,dw,translated("schematic.materials.left", remaining, needed),palette::dim);
@@ -3026,8 +3031,9 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         stepperRow(0, "schematic.shownLayersOnly", {}, true, materialsShownOnly);
         float y = l.fieldY(1) + 6;
         label(context,dx,y,dw,translated("schematic.materials.howTitle"),palette::faint);
-        static constexpr std::array<std::string_view, 5> how{"schematic.materials.how.need", "schematic.materials.how.placed",
-            "schematic.materials.how.left", "schematic.materials.how.have", "schematic.materials.how.colors"};
+        static constexpr std::array<std::string_view, 6> how{"schematic.materials.how.need", "schematic.materials.how.placed",
+            "schematic.materials.how.left", "schematic.materials.how.have", "schematic.materials.how.colors",
+            "schematic.materials.how.entities"};
         for (size_t i = 0; i < how.size(); ++i)
             label(context,dx,y+12+11*static_cast<float>(i),dw,translated(how[i]),palette::dim);
         break;

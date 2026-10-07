@@ -30,6 +30,9 @@
 #include "mc/deps/nbt/CompoundTag.h"
 #include "mc/deps/renderer/Camera.h"
 #include "mc/deps/renderer/MatrixStack.h"
+#include "mc/locale/I18n.h"
+#include "mc/world/actor/Actor.h"
+#include "mc/world/phys/AABB.h"
 #include "mc/util/Mirror.h"
 #include "mc/util/Rotation.h"
 #include "mc/world/level/BlockPos.h"
@@ -91,12 +94,22 @@ struct ItemInfo {
     std::string item, name, icon; // icon: the item as binary NBT for ItemStack::fromTag
     int perBlock = 1;
 };
+// An entity of the schematic where the placement puts it.
+struct EntityGhost {
+    std::string identifier, name, icon; // icon: an item of the same name, if the game has one
+    Position at;   // world position of its feet
+    Point offset;  // its cell inside the placed box, for layers
+};
 struct Resolved {
     Structure const* structure = nullptr;
     int rotation = 0;
     Mirror mirror = Mirror::None;
     std::vector<Block const*> blocks;
     std::vector<ItemInfo> items;
+    std::vector<EntityGhost> entities;
+    // Whether each entity stands at its spot; nullopt while it cannot be
+    // judged (too far for the client to know its entities, chunk not loaded).
+    std::vector<std::optional<bool>> entityPlaced;
 };
 
 std::map<SectionKey, Section> sections;
@@ -104,6 +117,16 @@ std::vector<Resolved> resolved;
 // Created once per cell; a null result is remembered too.
 std::map<std::tuple<int, int, int>, std::optional<std::shared_ptr<BlockActor>>> actors;
 std::vector<std::pair<BlockPos, Block const*>> watched; // Recently looked-at cells and what was there.
+// Entities are looked up this often, and only this close to the player: the
+// client does not know entities beyond its tracking range.
+constexpr std::chrono::milliseconds entityRefresh{250};
+constexpr double entityRange = 48;
+constexpr size_t maxEntities = 512; // per placement
+constexpr float entityFrameWidth = .8f, entityFrameHeight = 1.8f;
+Clock::time_point entitiesChecked{};
+// Names over missing entities' frames, drawn by the HUD.
+std::mutex labelMutex;
+std::vector<std::pair<Position, std::string>> labels;
 
 // Verification of the selected placement, a bounded number of cells per
 // frame; a finished pass is published and the next begins.
@@ -141,6 +164,11 @@ void release() {
     resolved.clear();
     actors.clear();
     watched.clear();
+    entitiesChecked = {};
+    {
+        std::lock_guard lock(labelMutex);
+        labels.clear();
+    }
     builtRevision = 0;
     scan = {};
     publish(std::make_shared<Verification const>());
@@ -206,6 +234,25 @@ Resolved resolve(Structure const& structure, SavedPlacement const& placement) {
         out.blocks.push_back(block);
     }
     if (missing) log(std::format("{}: {} palette entries are not known blocks", placement.file, missing));
+    Size placed = placedSize(structure.size, placement.placement.rotation);
+    for (auto const& entity : structure.entities) {
+        if (entity.identifier.empty() || out.entities.size() >= maxEntities) continue;
+        EntityGhost ghost{entity.identifier, {}, {}, toWorldPosition(structure.size, placement.placement, {entity.x, entity.y, entity.z}), {}};
+        auto const& o = placement.placement.origin;
+        ghost.offset = {std::clamp(static_cast<int>(std::floor(ghost.at.x)) - o.x, 0, placed.x - 1),
+                        std::clamp(static_cast<int>(std::floor(ghost.at.y)) - o.y, 0, placed.y - 1),
+                        std::clamp(static_cast<int>(std::floor(ghost.at.z)) - o.z, 0, placed.z - 1)};
+        auto key = entityNameKey(entity.identifier);
+        ghost.name = getI18n().get(key, getI18n().getCurrentLanguage());
+        if (ghost.name.empty() || ghost.name == key) ghost.name = entity.identifier;
+        nbt::Root tag;
+        tag.compound.set("Name", {entity.identifier});
+        tag.compound.set("Count", {std::int8_t{1}});
+        tag.compound.set("Damage", {std::int16_t{0}});
+        ghost.icon = nbt::write(tag);
+        out.entities.push_back(std::move(ghost));
+    }
+    out.entityPlaced.assign(out.entities.size(), std::nullopt);
     return out;
 }
 
@@ -342,6 +389,78 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
     }
 }
 
+// Which of each placement's entities stand at their spots, from the
+// entities the client knows around the placement.
+void checkEntities(BlockSource& region, LocalPlayer& player, session::Snapshot const& snapshot, int dimension) {
+    auto now = Clock::now();
+    if (now - entitiesChecked < entityRefresh) return;
+    entitiesChecked = now;
+    Vec3 feet = player.getFeetPos();
+    for (size_t i = 0; i < snapshot.placements.size() && i < resolved.size(); ++i) {
+        auto const& shown = snapshot.placements[i];
+        auto& r = resolved[i];
+        std::fill(r.entityPlaced.begin(), r.entityPlaced.end(), std::nullopt);
+        bool wanted = shown.placement.visible || static_cast<int>(i) == snapshot.selected;
+        if (r.entities.empty() || !shown.structure || !shown.placement.entities || !wanted || shown.placement.dimension != dimension)
+            continue;
+        std::vector<EntitySpot> expected;
+        std::vector<size_t> judged;
+        double lowX = 1e18, lowY = 1e18, lowZ = 1e18, highX = -1e18, highY = -1e18, highZ = -1e18;
+        for (size_t e = 0; e < r.entities.size(); ++e) {
+            auto const& at = r.entities[e].at;
+            double dx = at.x - feet.x, dy = at.y - feet.y, dz = at.z - feet.z;
+            if (dx * dx + dy * dy + dz * dz > entityRange * entityRange) continue;
+            BlockPos pos{static_cast<int>(std::floor(at.x)), static_cast<int>(std::floor(at.y)), static_cast<int>(std::floor(at.z))};
+            auto* chunk = region.getChunkAt(pos);
+            if (!chunk || chunk->mLoadState->load() < ChunkState::Loaded) continue;
+            expected.push_back({r.entities[e].identifier, at.x, at.y, at.z});
+            judged.push_back(e);
+            lowX = std::min(lowX, at.x); lowY = std::min(lowY, at.y); lowZ = std::min(lowZ, at.z);
+            highX = std::max(highX, at.x); highY = std::max(highY, at.y); highZ = std::max(highZ, at.z);
+        }
+        if (expected.empty()) continue;
+        constexpr float grow = static_cast<float>(entityReach) + .5f;
+        AABB area{Vec3{static_cast<float>(lowX) - grow, static_cast<float>(lowY) - grow, static_cast<float>(lowZ) - grow},
+                  Vec3{static_cast<float>(highX) + grow, static_cast<float>(highY) + grow, static_cast<float>(highZ) + grow}};
+        // Owned copies: the actors are not kept past this call.
+        std::vector<std::string> names;
+        std::vector<Vec3> positions;
+        for (Actor* actor : region.fetchEntities(&player, area, false, false)) {
+            if (!actor || actor->mRemoved || names.size() >= 4 * maxEntities) continue;
+            names.push_back(actor->getTypeName());
+            positions.push_back(actor->getFeetPos());
+        }
+        std::vector<EntitySpot> actual;
+        for (size_t a = 0; a < names.size(); ++a) actual.push_back({names[a], positions[a].x, positions[a].y, positions[a].z});
+        auto placed = matchEntities(expected, actual);
+        for (size_t k = 0; k < judged.size(); ++k) r.entityPlaced[judged[k]] = placed[k];
+    }
+}
+// The schematic's entities in the finished pass: their own material lines
+// and a "not placed" row for each one missing in the shown layers.
+void addEntityResults(Verification& result, session::Shown const& shown, Resolved const& r) {
+    if (!shown.placement.entities) return;
+    Size placed = placedSize(shown.structure->size, shown.placement.placement.rotation);
+    std::map<std::string, MaterialLine> all, visible;
+    for (size_t e = 0; e < r.entities.size(); ++e) {
+        auto const& ghost = r.entities[e];
+        bool here = r.entityPlaced[e].value_or(false);
+        bool inLayer = layerShown(shown.placement.layers, placed, ghost.offset);
+        for (auto* lines : {&all, &visible}) {
+            if (lines == &visible && !inLayer) continue;
+            auto& line = (*lines)[ghost.identifier];
+            if (line.name.empty()) { line.item = ghost.identifier; line.name = ghost.name; line.icon = ghost.icon; line.entity = true; }
+            ++line.needed;
+            if (here) ++line.placed;
+        }
+        if (inLayer && r.entityPlaced[e] == false && result.mismatches.size() < maxMismatches) {
+            Point cell{static_cast<int>(std::floor(ghost.at.x)), static_cast<int>(std::floor(ghost.at.y)), static_cast<int>(std::floor(ghost.at.z))};
+            result.mismatches.push_back({CellState::Missing, cell, ghost.icon, {}, ghost.name, {}, true});
+        }
+    }
+    for (auto& [key, line] : all) result.materials.push_back(std::move(line));
+    for (auto& [key, line] : visible) result.visibleMaterials.push_back(std::move(line));
+}
 
 void stepScan(BlockSource& region, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
     int index = snapshot.selected;
@@ -432,9 +551,10 @@ void stepScan(BlockSource& region, session::Snapshot const& snapshot, int dimens
     result->complete = true;
     result->visible = scan.tally;
     result->mismatches = std::move(scan.mismatches);
-    sortMismatches(result->mismatches, camera.x, camera.y, camera.z);
     for (auto& [key, line] : scan.all) result->materials.push_back(std::move(line));
     for (auto& [key, line] : scan.shown) result->visibleMaterials.push_back(std::move(line));
+    addEntityResults(*result, shown, blocks);
+    sortMismatches(result->mismatches, camera.x, camera.y, camera.z);
     sortMaterials(result->materials);
     sortMaterials(result->visibleMaterials);
     publish(std::move(result));
@@ -459,6 +579,56 @@ void translated(ScreenContext& screen, glm::vec3 offset, Draw&& draw) {
     ref.stack->stack->pop_back();
     ref.mat = nullptr;
     ref.stack = nullptr;
+}
+
+// Missing entities: a dashed frame where each should stand, in the ghost
+// color, with its name drawn by the HUD. Entities already there show nothing.
+void drawEntities(ScreenContext& screen, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
+    std::vector<std::pair<Position, std::string>> named;
+    std::vector<Position> frames;
+    for (size_t i = 0; i < snapshot.placements.size() && i < resolved.size(); ++i) {
+        auto const& shown = snapshot.placements[i];
+        if (!shown.structure || !shown.placement.visible || !shown.placement.entities || shown.placement.dimension != dimension) continue;
+        Size placed = placedSize(shown.structure->size, shown.placement.placement.rotation);
+        auto const& r = resolved[i];
+        for (size_t e = 0; e < r.entities.size(); ++e) {
+            if (r.entityPlaced[e] != false || !layerShown(shown.placement.layers, placed, r.entities[e].offset)) continue;
+            auto const& at = r.entities[e].at;
+            double dx = at.x - camera.x, dy = at.y - camera.y, dz = at.z - camera.z, distance = dx * dx + dy * dy + dz * dz;
+            if (distance > drawDistance * drawDistance) continue;
+            frames.push_back(at);
+            if (named.size() < 64 && distance < 32 * 32) named.push_back({{at.x, at.y + entityFrameHeight + .3, at.z}, r.entities[e].name});
+        }
+    }
+    {
+        std::lock_guard lock(labelMutex);
+        labels = std::move(named);
+    }
+    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
+    if (frames.empty() || !lineMaterial.mRenderMaterialInfoPtr) return;
+    // Each edge as dashes. The frame has one size: it does not claim the
+    // entity's real size, which the client cannot know without the entity.
+    constexpr float dash = .2f, gap = .15f, half = entityFrameWidth / 2;
+    constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
+    Tessellator lines(screen.tessellator.mBufferResourceService);
+    lines.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(frames.size() * 12 * 12), false);
+    lines.color(.35f, .85f, 1.f, 1.f);
+    for (auto const& at : frames) {
+        glm::vec3 base{static_cast<float>(at.x - camera.x), static_cast<float>(at.y - camera.y), static_cast<float>(at.z - camera.z)};
+        glm::vec3 a = base + glm::vec3{-half, 0, -half}, b = base + glm::vec3{half, entityFrameHeight, half}, c[8];
+        for (int k = 0; k < 8; ++k) c[k] = {k & 1 ? b.x : a.x, k & 2 ? b.y : a.y, k & 4 ? b.z : a.z};
+        for (auto [p, q] : edges) {
+            glm::vec3 from = c[p], to = c[q];
+            float length = glm::length(to - from);
+            glm::vec3 step = (to - from) / length;
+            for (float t = 0; t < length; t += dash + gap) {
+                glm::vec3 s0 = from + step * t, s1 = from + step * std::min(length, t + dash);
+                lines.vertex(s0.x, s0.y, s0.z);
+                lines.vertex(s1.x, s1.y, s1.z);
+            }
+        }
+    }
+    translated(screen, glm::vec3{0}, [&] { MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{}); });
 }
 
 void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, LocalPlayer& player) {
@@ -558,6 +728,7 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
         --budget;
     }
 
+    checkEntities(region, player, snapshot, dimension);
     stepScan(region, snapshot, dimension, camera);
 
     // Draw: alpha-tested ghost faces (empty texels let water and glass show
@@ -601,6 +772,7 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
             dispatcher.render(context, region, *component, *block, renderPos, pos, false, none, nullptr, 0, std::nullopt);
         }
     }
+    drawEntities(screen, snapshot, dimension, camera);
 }
 
 // The cell chosen with "Show in world": a pulsing tinted box with outlines
@@ -677,6 +849,10 @@ LL_TYPE_INSTANCE_HOOK(GhostPass, ll::memory::HookPriority::Normal, LevelRenderer
 std::shared_ptr<Verification const> verification() {
     std::lock_guard lock(resultMutex);
     return published;
+}
+std::vector<std::pair<Position, std::string>> entityLabels() {
+    std::lock_guard lock(labelMutex);
+    return labels;
 }
 void point(Point cell) {
     std::lock_guard lock(pointMutex);

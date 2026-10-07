@@ -172,6 +172,38 @@ void placementTransforms() {
     check(!toLocal(size, turned, {5, 0, 0}) && !toLocal(size, turned, {0, 2, 0}) && !toLocal(size, turned, {-1, 0, 0}),
           "cells outside the placed box have no local cell");
     check(quarterTurns(-1) == 3 && quarterTurns(5) == 1, "turn counts wrap");
+
+    bool centers = true;
+    for (int rotation = 0; rotation < 4; ++rotation)
+        for (auto mirror : {Mirror::None, Mirror::X, Mirror::Z}) {
+            Placement placement{{10, 64, -7}, rotation, mirror};
+            for (int x = 0; x < size.x; ++x) for (int z = 0; z < size.z; ++z) {
+                auto cell = toWorld(size, placement, Point{x, 1, z});
+                auto free = toWorldPosition(size, placement, Position{x + .5, 1.25, z + .5});
+                centers = centers && free == Position{cell.x + .5, cell.y + .25, cell.z + .5};
+            }
+        }
+    check(centers, "an entity in a cell's center stays in that cell's center after any turn and mirror");
+}
+
+void entityRules() {
+    std::vector<EntitySpot> expected{{"minecraft:armor_stand", 1.5, 64, 1.5}, {"minecraft:armor_stand", 3.5, 64, 1.5},
+                                     {"minecraft:pig", 5.5, 64, 5.5}};
+    std::vector<EntitySpot> actual{{"minecraft:armor_stand", 1.8, 64, 1.4}, {"minecraft:pig", 9, 64, 9},
+                                   {"minecraft:cow", 5.5, 64, 5.5}};
+    auto placed = matchEntities(expected, actual);
+    check(placed == std::vector<bool>{true, false, false}, "an entity counts near its spot, by type, and only once");
+    std::vector<EntitySpot> high{{"minecraft:pig", 5.5, 66, 5.5}};
+    check(matchEntities(std::span(expected).subspan(2), high) == std::vector<bool>{false}, "an entity two blocks up is not near");
+    check(entityNameKey("minecraft:armor_stand") == "entity.armor_stand.name" && entityNameKey("mod:thing") == "entity.mod:thing.name",
+          "entity name keys drop the vanilla namespace only");
+
+    std::vector<MaterialLine> lines(3);
+    lines[0] = {"minecraft:armor_stand", "Armor Stand", "", 2, 0, true};
+    lines[1] = {"minecraft:stone", "Stone", "", 1, 1, false};
+    lines[2] = {"minecraft:dirt", "Dirt", "", 5, 0, false};
+    sortMaterials(lines);
+    check(lines[0].name == "Dirt" && lines[1].name == "Stone" && lines[2].entity, "entity lines come after all block lines");
 }
 
 void layerRules() {
@@ -279,6 +311,7 @@ void schematicTests() {
     verificationOrder();
     placementDocuments();
     placementTransforms();
+    entityRules();
     layerRules();
     verifyRules();
     nbtBasics();

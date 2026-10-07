@@ -104,20 +104,20 @@ void cross(MinecraftUIRenderContext& context, float cx, float cy) {
 }
 }
 
+std::optional<CameraView> lastCamera() {
+    std::lock_guard lock(mutex);
+    if (!camera || !cameraWorld) return std::nullopt;
+    auto view = *camera;
+    view.x = cameraWorld->x;
+    view.y = cameraWorld->y;
+    view.z = cameraWorld->z;
+    return view;
+}
 void draw(MinecraftUIRenderContext& context, float width, float height, Settings::Map const& settings) {
     if (!settings.waypoints || !worldMarkersShown(settings.waypointsWorld, held.load())) return;
     auto* player = context.mClient.getLocalPlayer();
     if (!player) return;
-    std::optional<CameraView> view;
-    {
-        std::lock_guard lock(mutex);
-        view = camera;
-        if (view && cameraWorld) {
-            view->x = cameraWorld->x;
-            view->y = cameraWorld->y;
-            view->z = cameraWorld->z;
-        } else view.reset();
-    }
+    auto view = lastCamera();
     if (!view) return;
     auto feet = player->getFeetPos();
     int dimension = static_cast<int>(player->getDimensionId());

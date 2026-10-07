@@ -37,6 +37,24 @@ inline Point toWorld(Size size, Placement const& placement, Point local) {
     }
     return {placement.origin.x + x, placement.origin.y + local.y, placement.origin.z + z};
 }
+// A free position in structure space (an entity's) -> world, turned and
+// mirrored like cells: a cell's center lands on the center of its world cell.
+struct Position {
+    double x = 0, y = 0, z = 0;
+    bool operator==(Position const&) const = default;
+};
+inline Position toWorldPosition(Size size, Placement const& placement, Position local) {
+    double x = local.x, z = local.z;
+    if (placement.mirror == Mirror::X) x = size.x - x;
+    if (placement.mirror == Mirror::Z) z = size.z - z;
+    double width = size.x, depth = size.z;
+    for (int i = 0; i < quarterTurns(placement.rotation); ++i) {
+        double turnedX = depth - z, turnedZ = x;
+        x = turnedX; z = turnedZ;
+        std::swap(width, depth);
+    }
+    return {placement.origin.x + x, placement.origin.y + local.y, placement.origin.z + z};
+}
 // World cell -> structure-local cell, or nullopt outside the placed box.
 inline std::optional<Point> toLocal(Size size, Placement const& placement, Point world) {
     Size placed = placedSize(size, placement.rotation);

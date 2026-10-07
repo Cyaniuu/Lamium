@@ -1,10 +1,13 @@
 #pragma once
 #include "features/schematic/Placement.h"
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // Comparing a placed schematic with what the client sees, and counting what
 // is left to place (BACKLOG L-93). Blocks are identified by name and by the
@@ -55,6 +58,36 @@ struct Tally {
         }
     }
 };
+
+// Entities are checked by type and place only: one of the same type standing
+// near the spot counts, and each entity in the world counts for one spot.
+struct EntitySpot {
+    std::string_view identifier;
+    double x = 0, y = 0, z = 0;
+};
+inline constexpr double entityReach = 1.0;
+inline std::vector<bool> matchEntities(std::span<EntitySpot const> expected, std::span<EntitySpot const> actual,
+                                       double reach = entityReach) {
+    std::vector<bool> placed(expected.size()), used(actual.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        auto const& want = expected[i];
+        size_t best = actual.size();
+        double bestDistance = reach * reach;
+        for (size_t j = 0; j < actual.size(); ++j) {
+            auto const& have = actual[j];
+            if (used[j] || have.identifier != want.identifier || std::abs(have.y - want.y) > reach) continue;
+            double dx = have.x - want.x, dz = have.z - want.z, distance = dx * dx + dz * dz;
+            if (distance <= bestDistance) { bestDistance = distance; best = j; }
+        }
+        if (best < actual.size()) { used[best] = true; placed[i] = true; }
+    }
+    return placed;
+}
+// The language key of an entity's name: vanilla keys leave out "minecraft:".
+inline std::string entityNameKey(std::string_view identifier) {
+    if (identifier.starts_with("minecraft:")) identifier.remove_prefix(10);
+    return "entity." + std::string(identifier) + ".name";
+}
 
 // Per palette block name: how many the schematic needs and how many are placed.
 struct Material {

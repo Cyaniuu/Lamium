@@ -14,12 +14,14 @@ struct Mismatch {
     Point position;
     std::string expected, actual; // item icons as binary NBT ("" when there is none)
     std::string expectedName, actualName; // display names
+    bool entity = false; // a missing entity rather than a block
 };
 struct MaterialLine {
     std::string item;      // item name, e.g. minecraft:oak_stairs; empty when the block has no item
     std::string name;      // display name
     std::string icon;      // the item as binary NBT, for drawing its icon
     std::uint64_t needed = 0, placed = 0;
+    bool entity = false; // an entity line; `item` is the item that places it, if one exists
     std::uint64_t remaining() const { return needed - std::min(needed, placed); }
 };
 struct Verification {
@@ -44,9 +46,11 @@ inline void sortMismatches(std::vector<Mismatch>& list, double x, double y, doub
         return distance(a) < distance(b);
     });
 }
-// Lines by remaining count, then name; finished lines last.
+// Blocks before entities; then by remaining count, then name, so finished
+// lines go last within each group.
 inline void sortMaterials(std::vector<MaterialLine>& lines) {
     std::stable_sort(lines.begin(), lines.end(), [](MaterialLine const& a, MaterialLine const& b) {
+        if (a.entity != b.entity) return !a.entity;
         if (a.remaining() != b.remaining()) return a.remaining() > b.remaining();
         return a.name < b.name;
     });
