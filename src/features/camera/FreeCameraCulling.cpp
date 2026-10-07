@@ -28,9 +28,7 @@ void unavailable(char const* reason) noexcept {
     catch (...) {}
 }
 
-bool supportedVersion() {
-    auto loader = ll::getLoaderVersion();
-    if (loader.major != 26 || loader.minor != 51 || loader.patch != 5) return false;
+bool supportedGameVersion() {
     wchar_t path[32768];
     DWORD length = GetModuleFileNameW(nullptr, path, 32768);
     if (!length || length == 32768) return false;
@@ -133,10 +131,17 @@ void startTerrainCulling() noexcept {
     appliedLogged = false;
     verified = false;
     try {
-        if (!supportedVersion()) { unavailable("unverified game/loader version"); return; }
+        auto loader = ll::getLoaderVersion();
+        Runtime::instance().self().getLogger().info("FreeCamera terrain: detected LeviLamina {}.{}.{}",
+            loader.major, loader.minor, loader.patch);
+        if (!terrainLoaderSupported(loader.major, loader.minor, loader.patch)) {
+            unavailable("unsupported loader version"); return;
+        }
+        if (!supportedGameVersion()) { unavailable("unverified game executable version"); return; }
         if (TerrainPreRender::hook(true) != 0) { unavailable("pre-render hook unavailable"); return; }
         renderInstalled = true;
         enabled = true;
+        Runtime::instance().self().getLogger().info("FreeCamera terrain: adapter armed; awaiting FreeCamera renderer");
     } catch (...) { unavailable("initialization failed"); }
 }
 

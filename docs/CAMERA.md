@@ -185,7 +185,12 @@ verification and was removed: starting from third person begins at the head.
 
 ## Underground terrain visibility (L-37; candidate 2026-10-07)
 
-Runtime status: **unverified**. Earlier game checks found normal/FreeCamera
+Runtime status: **substitution unverified**. The first candidate (`aa5efa9`)
+was tested on 2026-10-07 but its 26.51.5-only loader gate disabled it on the
+installed 26.51.6. Screenshots showed unchanged partial cave rendering; no
+native request was replaced. The next build admits that installed patch and
+logs arming separately from the actual substitution. See VALIDATION-LOG.md.
+Earlier game checks found normal/FreeCamera
 terrain culler type 3 and spectator type 5; caves were clipped at straight
 chunk boundaries from inside solid blocks, while a camera inside open cave
 space rendered normally. A separate forced update to 5 fought native requests
@@ -203,7 +208,8 @@ check. Pure tests cover all byte-sized requests and stable selection across
 repeated activation/exit frames; they do not exercise the game renderer.
 
 The candidate requires Minecraft executable file version 1.26.51.1
-(launcher version 1.26.51.01) and LeviLamina Client 26.51.5. A pre-render hook
+(launcher version 1.26.51.01) and LeviLamina Client 26.51.5 or 26.51.6. These
+are candidate environments, not a claim of verified cave drawing. A pre-render hook
 binds lazily from an actual primary renderer while FreeCamera is active. The
 SDK virtual-call thunk provides the slot; the implementation must be executable
 code in the game module. There is no hard-coded vtable slot or game address.
@@ -215,7 +221,9 @@ a mismatch disables the adapter. These checks establish a narrow call/field
 contract, not correctness of cave rendering. A warning explains a disabled
 path; the rest of FreeCamera retains its previous rendering behavior.
 
-One-time ordinary-build messages identify the binding and first substitution:
+Ordinary-build startup messages report the detected loader and
+`FreeCamera terrain: adapter armed; awaiting FreeCamera renderer` after the
+version gates pass. One-time messages identify the binding and first substitution:
 `FreeCamera terrain: culler hook bound at virtual slot ...` and
 `FreeCamera terrain: native request 3 -> 5 retained`. No trace option is needed.
 Absence of the latter after flight means the replacement was not observed;

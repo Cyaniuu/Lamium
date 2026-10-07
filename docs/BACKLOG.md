@@ -157,7 +157,8 @@ unmet gates for versions already published:
 ### Pending feature checks
 
 - FreeCamera underground visibility (L-37): the 2026-10-07 native-request
-  candidate needs its first game check. Compare solid-ground and open-cave
+  candidate needs its first active game check (the first build was disabled
+  by its loader version gate). Compare solid-ground and open-cave
   rendering, repeated frames, release, menus and world/dimension cleanup;
   also check surface terrain and shadows. CAMERA.md describes the gates and
   diagnostic messages. Cave visibility remains a known limit until confirmed.
@@ -572,7 +573,9 @@ Stop and hand back after two runtime rounds without a new candidate.
 ### L-37 FreeCamera sees caves from underground (reopened)
 Kind: Research. Reopened 2026-09-30: the maintainer wants it. Four traces and
 the parked write-up are in BACKLOG-DONE.md (L-37).
-Status: open; native-request candidate built 2026-10-07, runtime unverified.
+Status: open; first native-request candidate tested 2026-10-07 but disabled
+by the loader version gate (26.51.6 installed, 26.51.5 required). The gate is
+corrected in the next build; actual substitution/cave rendering remain unverified.
 Known: underground FreeCamera uses culler type 3 like survival; spectator uses
 type 5. Answering spectator from `Actor::isSpectator` or
 `getPlayerGameType` did not change the culler.

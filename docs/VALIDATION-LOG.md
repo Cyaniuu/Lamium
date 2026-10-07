@@ -12,6 +12,26 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-37 first candidate disabled by loader version gate (2026-10-07)
+
+By the maintainer, local world, `aa5efa9`, DLL
+`f08a49689a8d6096eed9dbf967678fc8d01136f549379f579765a725669e2ef8`,
+all trace options off. Two screenshots near (-2, -9, 215) and (0, -8, 215)
+showed the surrounding cave almost completely absent in one view and visible
+in the other. The maintainer reported no improvement over previous partial
+cave rendering. No separate restoration or lifecycle result was supplied.
+
+The runtime log at 22:26:15 says
+`FreeCamera terrain: vanilla visibility retained (unverified game/loader version)`;
+there are no binding/substitution messages. The installed LeviLamina manifest
+is 26.51.6, while this build required 26.51.5. The game executable file version
+is 1.26.51.1 (launcher 1.26.51.01). The candidate never ran; the screenshots
+confirm the existing limitation, not the effect of replacing native requests.
+Next build permits the installed 26.51.6 patch, keeps the exact game version
+and runtime call/field checks, and logs arming plus the detected loader.
+The next check must establish a native 3 -> 5 substitution before interpreting
+the cave image as a result of this approach. L-37 remains open.
+
 ## 0.1.7 release smoke test (2026-10-07)
 
 By the maintainer, local world, release build `b3c6555`, DLL
