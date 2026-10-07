@@ -219,7 +219,9 @@ unmet gates for versions already published:
 
 ### L-108 Target card text overflows the card during its resize animation
 Kind: Bug. Reported by the maintainer 2026-10-07 while checking L-107.
-Status: open; recorded only, implementation not started.
+Status: fixed 2026-10-07 (`8366cb9`): while the card grows, its content
+waits until the easing background covers it (`cardContentFits`, tested);
+not yet checked in game.
 With animations on, switching the target from one with few lines to one with
 more (for example a block showing its properties) briefly draws the text
 outside the card. Expected: no text outside the card at any point while it
