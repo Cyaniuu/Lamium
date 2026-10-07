@@ -16,9 +16,6 @@ void start();
 void stop();
 // The latest finished verification of the selected placement (never null).
 std::shared_ptr<Verification const> verification();
-// Names over the frames of missing entities, at world positions; the HUD
-// draws them.
-std::vector<std::pair<Position, std::string>> entityLabels();
 // Marks a cell in the world for a while ("Show in world").
 void point(Point cell);
 
@@ -33,6 +30,14 @@ struct SaveRequest {
 };
 // False while another save runs.
 bool save(SaveRequest request);
+// How far the running save is; `waiting` while no loaded column is left.
+struct SaveStatus {
+    std::string file;
+    std::uint64_t done = 0, total = 0;
+    bool waiting = false;
+};
+std::optional<SaveStatus> saveStatus();
+void stopSaving();
 // A finished save's message for a toast, handed out once.
 std::optional<std::string> takeSaveMessage();
 }

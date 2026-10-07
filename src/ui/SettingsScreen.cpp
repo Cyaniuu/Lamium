@@ -148,6 +148,7 @@ int editingWaypointField = -1;
 bool editingWaypointName = false, waypointNameDirty = false;
 SearchQuery waypointNameInput;
 void applyWaypointName();
+void drawEditText(MinecraftUIRenderContext&, float x, float y, float width, SearchQuery const&);
 map::Waypoint const* selectedWaypoint();
 void changeSelected(std::function<void(map::Waypoint&)> const& apply);
 void copyVersion();
@@ -1374,9 +1375,8 @@ void drawShapesBody(MinecraftUIRenderContext& context, ShapesLayout const& l, gl
         fill(context,dx,l.nameY,dw,ShapesLayout::rowHeight-1,Rgb{0,0,0},.4f);
         frame(context,dx,l.nameY,dw,ShapesLayout::rowHeight-1,editingShapeName ? palette::accent : palette::keyEdge);
         drawTypeIcon(context,dx+3,l.nameY+1.5f,shape::typeIndex(*definition),shapeDraft ? draftRgb : shapeRgb(definition->color));
-        std::string name = editingShapeName
-            ? (shapeNameInput.selectedAll() ? "[" + shapeNameInput.value() + "]" : shapeNameInput.value() + "_") : definition->name;
-        label(context,dx+17,l.nameY+1+boxTextInset(),dw-20,std::move(name));
+        if (editingShapeName) drawEditText(context,dx+17,l.nameY+1+boxTextInset(),dw-20,shapeNameInput);
+        else label(context,dx+17,l.nameY+1+boxTextInset(),dw-20,definition->name);
         // Preview: one layer seen from above; plane seen along its normal.
         float px = dx, py = l.previewY, size = ShapesLayout::previewSize;
         fill(context,px,py,size,size,Rgb{0,0,0},.35f);
@@ -2256,9 +2256,8 @@ void drawWaypointsBody(MinecraftUIRenderContext& context, ShapesLayout const& l,
         fill(context,dx,l.nameY,dw,ShapesLayout::rowHeight-1,Rgb{0,0,0},.4f);
         frame(context,dx,l.nameY,dw,ShapesLayout::rowHeight-1,editingWaypointName ? palette::accent : palette::keyEdge);
         drawDiamondGlyph(context, dx + 7, l.nameY + 6.5f, 7, waypointRgb(w->color));
-        std::string name = editingWaypointName
-            ? (waypointNameInput.selectedAll() ? "[" + waypointNameInput.value() + "]" : waypointNameInput.value() + "_") : w->name;
-        label(context,dx+17,l.nameY+1+boxTextInset(),dw-20,std::move(name));
+        if (editingWaypointName) drawEditText(context,dx+17,l.nameY+1+boxTextInset(),dw-20,waypointNameInput);
+        else label(context,dx+17,l.nameY+1+boxTextInset(),dw-20,w->name);
         // The preview area: a large diamond and where the waypoint is.
         float size = ShapesLayout::previewSize;
         fill(context,dx,l.previewY,size,size,Rgb{0,0,0},.35f);
@@ -3168,8 +3167,7 @@ void renderPrompt(MinecraftUIRenderContext& context, glm::vec2 size, glm::vec2 p
     label(context, x, l.whereY(), l.inner(), std::format("{}, {}, {}  {}", d.x, d.y, d.z, translated(dimension)), palette::dim);
     fill(context, x, l.fieldY(), l.inner(), L::fieldHeight, Rgb{0, 0, 0}, .4f);
     frame(context, x, l.fieldY(), l.inner(), L::fieldHeight, palette::accent);
-    std::string name = prompt->name.selectedAll() ? "[" + prompt->name.value() + "]" : prompt->name.value() + "_";
-    label(context, x + 3, l.fieldY() + 1 + boxTextInset(), l.inner() - 6, std::move(name));
+    drawEditText(context, x + 3, l.fieldY() + 1 + boxTextInset(), l.inner() - 6, prompt->name);
     for (int i = 0; i < L::swatches; ++i) {
         auto c = map::waypointColors[static_cast<size_t>(i)];
         float sx = l.swatchX(i), sy = l.swatchY();
@@ -3189,10 +3187,22 @@ void renderPrompt(MinecraftUIRenderContext& context, glm::vec2 size, glm::vec2 p
     label(context, x, l.hintY(), l.inner(), translated("waypoint.hint"), palette::faint);
     context.flushText(0, std::nullopt);
 }
+// Text being typed: the selection as a highlight, otherwise a blinking bar
+// after the text, so a typed "_" never looks like the caret.
+void drawEditText(MinecraftUIRenderContext& context, float x, float y, float width, SearchQuery const& input) {
+    auto const& value = input.value();
+    float w = std::min(textWidth(context, value), width - 2);
+    if (input.selectedAll() && !value.empty()) fill(context, x - 1, y - 1, w + 2, 10, palette::accentDeep);
+    label(context, x, y, width, value);
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (!input.selectedAll() && ms / 530 % 2 == 0) fill(context, x + w + 1, y - 1, 1, 10, palette::text);
+}
 // ---- Schematic save prompt ----
 void commitSave() {
     if (!savePrompt) return;
     auto& p = *savePrompt;
+    // While a save runs, the button stops it.
+    if (schematic::ghosts::saveStatus()) { schematic::ghosts::stopSaving(); return; }
     auto file = schematic::schematicFileName(p.name.value());
     if (file.empty()) { p.problem = translated("schematic.save.noName"); return; }
     if (p.area.cells() > schematic::maxCells) { p.problem = translated("schematic.save.tooLarge", p.area.cells(), schematic::maxCells); return; }
@@ -3252,7 +3262,7 @@ void renderSavePrompt(MinecraftUIRenderContext& context, glm::vec2 size, glm::ve
         auto const& c = corner == 0 ? p.area.a : p.area.b;
         // In the colors of the corner blocks in the world.
         label(context, x, y + boxTextInset(), L::labelWidth - 4, translated(corner == 0 ? "schematic.save.corner1" : "schematic.save.corner2"),
-            corner == 0 ? palette::accent : palette::warning);
+            corner == 0 ? Rgb{1.f, .4f, .35f} : Rgb{.45f, .65f, 1.f});
         for (int axis = 0; axis < 3; ++axis) {
             float cx = l.cellX(axis), w = l.cellWidth();
             int value = axis == 0 ? c.x : axis == 1 ? c.y : c.z;
@@ -3270,23 +3280,28 @@ void renderSavePrompt(MinecraftUIRenderContext& context, glm::vec2 size, glm::ve
     label(context, x, l.sizeY(), l.inner(), translated("schematic.save.size", s.x, s.y, s.z, p.area.cells()), palette::dim);
     fill(context, x, l.fieldY(), l.inner(), L::fieldHeight, Rgb{0, 0, 0}, .4f);
     frame(context, x, l.fieldY(), l.inner(), L::fieldHeight, palette::accent);
-    std::string name = p.name.selectedAll() ? "[" + p.name.value() + "]" : p.name.value() + "_";
-    label(context, x + 3, l.fieldY() + 1 + boxTextInset(), l.inner() - 6, std::move(name));
+    drawEditText(context, x + 3, l.fieldY() + 1 + boxTextInset(), l.inner() - 6, p.name);
     auto file = schematic::schematicFileName(p.name.value());
     label(context, x, l.whereY(), l.inner(), translated("schematic.save.where", file.empty() ? std::string("-") : file), palette::faint);
     label(context, x, l.entitiesY() + boxTextInset(), l.inner() - L::switchWidth - 4, translated("schematic.save.entities"),
         hover.part == L::Part::Entities ? palette::text : palette::dim);
     toggleSwitch(context, l.switchX(), l.entitiesY() + (L::rowHeight - switchHeight) / 2, p.entities);
-    if (!p.problem.empty()) label(context, x, l.buttonY() + boxTextInset(), l.saveX() - x - 4, p.problem, palette::warning);
+    auto running = schematic::ghosts::saveStatus();
+    if (running) {
+        int percent = running->total ? static_cast<int>(running->done * 100 / running->total) : 0;
+        label(context, x, l.statusY(), l.inner(), translated(running->waiting ? "schematic.save.progressWaiting" : "schematic.save.progress",
+            running->file, percent), running->waiting ? palette::warning : palette::dim);
+    } else if (!p.problem.empty()) label(context, x, l.statusY(), l.inner(), p.problem, palette::warning);
     drawSmallButton(context, l.saveX(), l.buttonY(), L::buttonWidth, L::buttonHeight,
-        translated(p.overwrite ? "schematic.save.overwrite" : "schematic.save.button"), hover.part == L::Part::Save,
-        p.overwrite ? Rgb{.54f, .18f, .16f} : palette::accentDeep, p.overwrite ? Rgb{.54f, .23f, .2f} : palette::accent);
+        translated(running ? "schematic.save.stop" : p.overwrite ? "schematic.save.overwrite" : "schematic.save.button"),
+        hover.part == L::Part::Save, p.overwrite || running ? Rgb{.54f, .18f, .16f} : palette::accentDeep,
+        p.overwrite || running ? Rgb{.54f, .23f, .2f} : palette::accent);
+    drawSmallButton(context, l.clearX(), l.buttonY(), L::buttonWidth, L::buttonHeight, translated("schematic.save.clear"),
+        hover.part == L::Part::Clear);
     drawSmallButton(context, l.cancelX(), l.buttonY(), L::buttonWidth, L::buttonHeight, translated("schematic.save.cancel"),
         hover.part == L::Part::Cancel);
-    drawSmallButton(context, l.clearX(), l.keysY() - 2, L::buttonWidth, L::buttonHeight, translated("schematic.save.clear"),
-        hover.part == L::Part::Clear);
-    paragraph(context, x, l.hintY(), l.inner(), translated("schematic.save.hint"), 2, palette::faint);
-    label(context, x, l.keysY(), l.clearX() - x - 4, translated("schematic.save.keys"), palette::faint);
+    paragraph(context, x, l.hintY(), l.inner(), translated("schematic.save.hint"), 3, palette::faint);
+    label(context, x, l.keysY(), l.inner(), translated("schematic.save.keys"), palette::faint);
     context.flushText(0, std::nullopt);
 }
 void enterWorldMap(bool fromSettings, bool resume) {

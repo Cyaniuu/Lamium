@@ -23,6 +23,28 @@ struct Area {
 };
 inline constexpr size_t maxSaveName = 64; // bytes of the name, without the extension
 
+// The area cut along chunk borders. A save reads one column when its chunk
+// is loaded and waits for the others, so an area larger than the render
+// distance can be saved by walking along it.
+struct Column {
+    int chunkX = 0, chunkZ = 0;
+    int lowX = 0, highX = 0, lowZ = 0, highZ = 0; // world blocks, inclusive
+    std::uint64_t cells(int height) const {
+        return static_cast<std::uint64_t>(highX - lowX + 1) * (highZ - lowZ + 1) * static_cast<std::uint64_t>(height);
+    }
+};
+inline int chunkOf(int block) { return block >= 0 ? block / 16 : -((-block + 15) / 16); }
+inline std::vector<Column> chunkColumns(Area const& area) {
+    Point low = area.low();
+    Size size = area.size();
+    std::vector<Column> out;
+    for (int cx = chunkOf(low.x); cx <= chunkOf(low.x + size.x - 1); ++cx)
+        for (int cz = chunkOf(low.z); cz <= chunkOf(low.z + size.z - 1); ++cz)
+            out.push_back({cx, cz, std::max(low.x, cx * 16), std::min(low.x + size.x - 1, cx * 16 + 15),
+                           std::max(low.z, cz * 16), std::min(low.z + size.z - 1, cz * 16 + 15)});
+    return out;
+}
+
 // A typed name as a file name in the schematics folder: characters a Windows
 // file name cannot hold are dropped, surrounding spaces and trailing dots
 // trimmed, a typed ".mcstructure" not doubled. Empty when nothing usable is left.

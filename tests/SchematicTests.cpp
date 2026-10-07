@@ -202,6 +202,16 @@ void saveRules() {
           && (static_cast<unsigned char>(longJapanese[longJapanese.size() - 13]) & 0xc0) != 0xc0,
           "long names are cut without splitting a character");
 
+    check(chunkOf(0) == 0 && chunkOf(15) == 0 && chunkOf(16) == 1 && chunkOf(-1) == -1 && chunkOf(-16) == -1 && chunkOf(-17) == -2,
+          "blocks map to chunks with floor division");
+    Area wide{{-20, 60, 5}, {17, 62, 40}};
+    auto columns = chunkColumns(wide);
+    std::uint64_t covered = 0;
+    for (auto const& c : columns) covered += c.cells(wide.size().y);
+    check(columns.size() == 4 * 3 && covered == wide.cells() && columns.front().lowX == -20 && columns.front().highX == -17
+          && columns.back().lowX == 16 && columns.back().highX == 17 && columns.back().highZ == 40,
+          "chunk columns cover the area exactly, cut at chunk borders");
+
     StructureBuilder builder({2, 1, 2}, {10, 64, 20});
     PaletteBlock stone{"minecraft:stone", {}, 1}, air{"minecraft:air", {}, 1}, water{"minecraft:water", {}, 1};
     nbt::Compound west;
@@ -234,8 +244,8 @@ void savePromptHits() {
     check(minus.part == Part::Minus && minus.corner == 1 && minus.axis == 2 && plus.part == Part::Plus && plus.corner == 0
           && plus.axis == 0, "the save prompt's steppers name their corner and axis");
     check(l.hit(l.saveX() + 1, l.buttonY() + 1).part == Part::Save && l.hit(l.cancelX() + 1, l.buttonY() + 1).part == Part::Cancel
-          && l.hit(l.left + 20, l.fieldY() + 2).part == Part::Field && l.hit(l.clearX() + 1, l.keysY()).part == Part::Clear
-          && l.keysY() - 2 + lamium::ui::SavePromptLayout::buttonHeight <= l.top + l.height(),
+          && l.hit(l.left + 20, l.fieldY() + 2).part == Part::Field && l.hit(l.clearX() + 1, l.buttonY() + 1).part == Part::Clear
+          && l.clearX() + lamium::ui::SavePromptLayout::buttonWidth < l.saveX() && l.keysY() + 10 <= l.top + l.height(),
           "the save prompt's buttons and name field are where they are drawn, inside the panel");
 }
 

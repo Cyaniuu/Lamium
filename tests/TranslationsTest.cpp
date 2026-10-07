@@ -53,8 +53,10 @@ void translationTests() {
                 rendered = std::vformat(pattern, std::make_format_args(remaining, remaining, remaining, remaining, remaining, remaining, remaining));
             else if (entry.key == "schematic.save.done")
                 rendered = std::vformat(pattern, std::make_format_args(key, remaining, remaining, remaining));
-            else if (entry.key == "schematic.save.notLoaded")
-                rendered = std::vformat(pattern, std::make_format_args(remaining, remaining, remaining));
+            else if (entry.key == "schematic.save.waiting")
+                rendered = std::vformat(pattern, std::make_format_args(key, remaining, remaining, remaining));
+            else if (entry.key == "schematic.save.progress" || entry.key == "schematic.save.progressWaiting")
+                rendered = std::vformat(pattern, std::make_format_args(key, remaining));
             else if (entry.key == "schematic.save.tooLarge") rendered = std::vformat(pattern, std::make_format_args(remaining, remaining));
             else if (entry.key == "durabilityValue") {
                 rendered = std::vformat(pattern, std::make_format_args(remaining, maximum));

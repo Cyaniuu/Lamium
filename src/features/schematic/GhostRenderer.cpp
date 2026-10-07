@@ -4,7 +4,6 @@
 #include "features/schematic/Selection.h"
 #include "app/AtomicFile.h"
 #include "ui/Localization.h"
-#include "ui/Widgets.h"
 #include "app/Runtime.h"
 #include "ll/api/event/EventBus.h"
 #include "ll/api/event/client/ClientExitLevelEvent.h"
@@ -13,6 +12,11 @@
 #include "mc/client/gui/screens/ScreenContext.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/client/renderer/ActorShaderManager.h"
+#include "mc/client/renderer/BaseActorRenderer.h"
+#include "mc/client/game/IMinecraftGame.h"
+#include "mc/client/gui/Font.h"
+#include "mc/client/gui/FontHandle.h"
+#include "mc/client/gui/FontRepository.h"
 #include "mc/client/renderer/BaseActorRenderContext.h"
 #include "mc/client/renderer/RenderMaterialGroup.h"
 #include "mc/client/renderer/SupplementaryFieldAutoGenerationMode.h"
@@ -53,6 +57,7 @@
 #include "mc/world/level/block/BrightnessPair.h"
 #include "mc/world/level/block/actor/BlockActor.h"
 #include "mc/world/level/block/actor/BlockActorRendererId.h"
+#include "mc/world/level/block/actor/BlockActorType.h"
 #include "mc/world/level/block/actor/VanillaBlockActorFactory.h"
 #include "mc/world/level/block/states/VanillaBlockStateTransformUtils.h"
 #include "mc/world/level/chunk/ChunkState.h"
@@ -128,9 +133,10 @@ constexpr std::chrono::milliseconds entityRefresh{250};
 constexpr double entityRange = 48;
 constexpr size_t maxEntities = 512; // per placement
 constexpr float entityFrameWidth = .8f, entityFrameHeight = 1.8f;
+constexpr float nameTagScale = .025f; // blocks per font pixel
 Clock::time_point entitiesChecked{};
-// Names over missing entities' frames, drawn by the HUD.
-std::mutex labelMutex;
+// Names over missing entities' frames, collected with the frames and drawn
+// as name tags in the same pass.
 std::vector<std::pair<Position, std::string>> labels;
 
 // Verification of the selected placement, a bounded number of cells per
@@ -154,30 +160,41 @@ void publish(std::shared_ptr<Verification const> value) {
 // Saving an area. The request is handed over under the mutex; the job itself
 // belongs to the render thread.
 constexpr std::uint64_t saveBudget = 32768; // cells read per frame
+// Columns are read when their chunk is loaded; the others wait until the
+// player comes near. While nothing can be read, a reminder every so often.
+constexpr std::chrono::seconds waitReminder{8};
 struct SaveJob {
     SaveRequest request;
     StructureBuilder builder;
-    std::uint64_t next = 0;
+    std::vector<Column> columns;
+    std::vector<std::uint64_t> progress; // cells read per column
+    std::uint64_t done = 0;
     std::map<Block const*, PaletteBlock> palette;
+    Clock::time_point lastProgress = Clock::now(), lastReminder{};
 };
 std::mutex saveMutex;
 std::optional<SaveRequest> pendingSave;
 std::optional<std::string> saveMessage;
+std::optional<SaveStatus> status; // published copy of the job's progress
 bool saveBusy = false;
+std::atomic<bool> stopRequested{false};
 std::optional<SaveJob> saveJob;
 void finishSave(std::string message) {
     saveJob.reset();
     std::lock_guard lock(saveMutex);
     saveBusy = false;
+    status.reset();
     saveMessage = std::move(message);
 }
-// A save in progress or waiting ends when the world is left or the feature is off.
+// A save in progress or waiting ends when the world is left, the feature is
+// off or the player stops it.
 void stopSave() {
     {
         std::lock_guard lock(saveMutex);
         if (!saveBusy) return;
         pendingSave.reset();
     }
+    stopRequested = false;
     finishSave(ui::translated("schematic.save.stopped"));
 }
 // "Show in world": a marked cell until `pointUntil`.
@@ -199,10 +216,7 @@ void release() {
     actors.clear();
     watched.clear();
     entitiesChecked = {};
-    {
-        std::lock_guard lock(labelMutex);
-        labels.clear();
-    }
+    labels.clear();
     builtRevision = 0;
     scan = {};
     publish(std::make_shared<Verification const>());
@@ -370,11 +384,25 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
                 size_t before = batch.mMeshData->mPositions->size();
                 own.tessellateInWorld(batch, *expected, pos, false);
                 auto& positions = batch.mMeshData->mPositions.get();
-                if (positions.size() == before) {
+                if (positions.size() == before && expected->getBlockType().getBlockEntityType() != BlockActorType::Undefined) {
                     // No block mesh: block entities draw through their renderer.
                     out.entities.push_back({pos, expected});
                     outlines.push_back({boxLow, boxHigh, .35f, .85f, 1.f});
                     continue;
+                }
+                if (positions.size() == before) {
+                    // Neither (honey block, door): the block's own shape mesh,
+                    // set on the cell's floor and centered. It ignores states.
+                    own.appendTessellatedBlock(batch, *expected);
+                    auto& appended = batch.mMeshData->mPositions.get();
+                    if (appended.size() == before) { outlines.push_back({boxLow, boxHigh, .35f, .85f, 1.f}); continue; }
+                    glm::vec3 low{1e9f}, high{-1e9f};
+                    for (size_t v = before; v < appended.size(); ++v) { low = glm::min(low, appended[v]); high = glm::max(high, appended[v]); }
+                    glm::vec3 shift{pos.x + .5f - (low.x + high.x) / 2, pos.y - low.y, pos.z + .5f - (low.z + high.z) / 2};
+                    for (size_t v = before; v < appended.size(); ++v) appended[v] += shift;
+                    auto& data = batch.mMeshData.get();
+                    data.mColors->resize(appended.size(), 0xffffffffu);
+                    data.mTextureUVs[1]->resize(appended.size(), glm::vec2{1.f, 1.f});
                 }
                 glm::vec3 shapeLow{1e9f}, shapeHigh{-1e9f};
                 for (size_t v = before; v < positions.size(); ++v) {
@@ -628,6 +656,7 @@ PaletteBlock paletteEntry(Block const& block) {
     return out;
 }
 void stepSave(BlockSource& region, LocalPlayer& player) {
+    if (stopRequested.exchange(false)) { stopSave(); return; }
     if (!saveJob) {
         std::optional<SaveRequest> request;
         {
@@ -635,8 +664,10 @@ void stepSave(BlockSource& region, LocalPlayer& player) {
             request = std::exchange(pendingSave, std::nullopt);
         }
         if (!request) return;
-        auto low = request->area.low();
-        saveJob.emplace(SaveJob{*request, StructureBuilder(request->area.size(), low), 0, {}});
+        auto columns = chunkColumns(request->area);
+        auto count = columns.size();
+        saveJob.emplace(SaveJob{*request, StructureBuilder(request->area.size(), request->area.low()), std::move(columns),
+                                std::vector<std::uint64_t>(count), 0, {}});
     }
     auto& job = *saveJob;
     if (static_cast<int>(player.getDimensionId()) != job.request.dimension) {
@@ -645,32 +676,64 @@ void stepSave(BlockSource& region, LocalPlayer& player) {
     }
     Point low = job.request.area.low();
     auto const& structure = job.builder.structure();
-    std::uint64_t total = structure.cells();
-    for (std::uint64_t budget = saveBudget; job.next < total && budget; ++job.next, --budget) {
-        auto cell = static_cast<std::int32_t>(job.next);
-        auto [x, y, z] = structure.position(cell);
-        BlockPos pos{low.x + x, low.y + y, low.z + z};
+    int height = structure.size.y;
+    std::uint64_t total = structure.cells(), budget = saveBudget;
+    auto loaded = [&](BlockPos const& pos) {
         auto* chunk = region.getChunkAt(pos);
-        if (!chunk || chunk->mLoadState->load() < ChunkState::Loaded) {
-            finishSave(ui::translated("schematic.save.notLoaded", pos.x, pos.y, pos.z));
-            return;
-        }
-        Block const& block = region.getBlock(pos);
-        if (block.getMaterial().mType == SharedTypes::v1_26_20::MaterialType::ClientRequestPlaceholder) {
-            finishSave(ui::translated("schematic.save.notLoaded", pos.x, pos.y, pos.z));
-            return;
-        }
+        return chunk && chunk->mLoadState->load() >= ChunkState::Loaded;
+    };
+    auto entry = [&](Block const& block) -> PaletteBlock const& {
         auto found = job.palette.find(&block);
         if (found == job.palette.end()) found = job.palette.emplace(&block, paletteEntry(block)).first;
-        job.builder.setBlock(cell, found->second);
-        Block const& extra = region.getExtraBlock(pos);
-        if (!extra.isAir()) {
-            auto liquid = job.palette.find(&extra);
-            if (liquid == job.palette.end()) liquid = job.palette.emplace(&extra, paletteEntry(extra)).first;
-            job.builder.setLiquid(cell, liquid->second);
+        return found->second;
+    };
+    std::uint64_t before = job.done;
+    for (size_t c = 0; c < job.columns.size() && budget; ++c) {
+        auto const& column = job.columns[c];
+        auto& read = job.progress[c];
+        std::uint64_t cells = column.cells(height);
+        if (read >= cells || !loaded(BlockPos{column.lowX, low.y, column.lowZ})) continue;
+        int width = column.highX - column.lowX + 1, depth = column.highZ - column.lowZ + 1;
+        for (; read < cells && budget; ++read, --budget) {
+            // Within a column: z fastest, then x, then y.
+            int z = column.lowZ + static_cast<int>(read % depth);
+            int x = column.lowX + static_cast<int>(read / depth % width);
+            int y = low.y + static_cast<int>(read / (static_cast<std::uint64_t>(width) * depth));
+            BlockPos pos{x, y, z};
+            Block const& block = region.getBlock(pos);
+            // A placeholder: the chunk is still arriving; come back later.
+            if (block.getMaterial().mType == SharedTypes::v1_26_20::MaterialType::ClientRequestPlaceholder) break;
+            auto cell = structure.cell(x - low.x, y - low.y, z - low.z);
+            job.builder.setBlock(cell, entry(block));
+            Block const& extra = region.getExtraBlock(pos);
+            if (!extra.isAir()) job.builder.setLiquid(cell, entry(extra));
+            ++job.done;
         }
     }
-    if (job.next < total) return;
+    auto now = Clock::now();
+    if (job.done != before) job.lastProgress = now;
+    {
+        std::lock_guard lock(saveMutex);
+        status = SaveStatus{job.request.file, job.done, total, now - job.lastProgress > std::chrono::seconds(1)};
+    }
+    if (job.done < total) {
+        if (now - job.lastProgress > std::chrono::seconds(1) && now - job.lastReminder > waitReminder) {
+            job.lastReminder = now;
+            // Point at the nearest column still waiting.
+            auto feet = player.getFeetPos();
+            Column const* nearest = nullptr;
+            double best = 1e18;
+            for (size_t c = 0; c < job.columns.size(); ++c) {
+                if (job.progress[c] >= job.columns[c].cells(height)) continue;
+                double dx = (job.columns[c].lowX + job.columns[c].highX) / 2.0 - feet.x, dz = (job.columns[c].lowZ + job.columns[c].highZ) / 2.0 - feet.z;
+                if (dx * dx + dz * dz < best) { best = dx * dx + dz * dz; nearest = &job.columns[c]; }
+            }
+            std::lock_guard lock(saveMutex);
+            saveMessage = ui::translated("schematic.save.waiting", job.request.file, static_cast<int>(job.done * 100 / total),
+                nearest ? (nearest->lowX + nearest->highX) / 2 : 0, nearest ? (nearest->lowZ + nearest->highZ) / 2 : 0);
+        }
+        return;
+    }
     if (job.request.entities) {
         Size size = structure.size;
         AABB area{Vec3{static_cast<float>(low.x), static_cast<float>(low.y), static_cast<float>(low.z)},
@@ -693,45 +756,62 @@ void stepSave(BlockSource& region, LocalPlayer& player) {
     try {
         std::filesystem::create_directories(job.request.path.parent_path());
         writeFileReplacing(job.request.path, writeStructure(structure), "schematic");
-        auto s = structure.size;
-        finishSave(ui::translated("schematic.save.done", job.request.file, s.x, s.y, s.z));
+        auto sz = structure.size;
+        finishSave(ui::translated("schematic.save.done", job.request.file, sz.x, sz.y, sz.z));
     } catch (std::exception const& error) {
         log(std::string("could not save an area: ") + error.what());
         finishSave(ui::translated("schematic.save.failed", job.request.file));
     }
 }
-// The area chosen for saving: a white frame, corner 1 green and corner 2
-// yellow (the save prompt labels them in the same colors).
+// The area chosen for saving: a white frame; corner 1 outlined red and
+// corner 2 blue on the block's own edges, with tinted faces just outside so
+// a full block still shows which corner it is.
 void drawSelection(ScreenContext& screen, Vec3 const& camera, int dimension) {
     auto state = selection::current();
     if (state.dimension != dimension || (!state.first && !state.second)) return;
     Area area = state.area().value_or(Area{state.first ? *state.first : *state.second, state.first ? *state.first : *state.second});
     mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
+    mce::MaterialPtr faceMaterial(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"});
     if (!lineMaterial.mRenderMaterialInfoPtr) return;
     Point low = area.low();
     Size size = area.size();
+    constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
+    auto corners = [](glm::vec3 a, glm::vec3 b, glm::vec3 (&c)[8]) {
+        for (int k = 0; k < 8; ++k) c[k] = {k & 1 ? b.x : a.x, k & 2 ? b.y : a.y, k & 4 ? b.z : a.z};
+    };
     Tessellator lines(screen.tessellator.mBufferResourceService);
     lines.begin({}, mce::PrimitiveMode::LineList, 72, false);
-    constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
     auto box = [&](glm::vec3 a, glm::vec3 b) {
         glm::vec3 c[8];
-        for (int k = 0; k < 8; ++k) c[k] = {k & 1 ? b.x : a.x, k & 2 ? b.y : a.y, k & 4 ? b.z : a.z};
+        corners(a, b, c);
         for (auto [p, q] : edges) { lines.vertex(c[p].x, c[p].y, c[p].z); lines.vertex(c[q].x, c[q].y, c[q].z); }
     };
     glm::vec3 base{static_cast<float>(low.x - camera.x), static_cast<float>(low.y - camera.y), static_cast<float>(low.z - camera.z)};
     lines.color(1.f, 1.f, 1.f, 1.f);
-    box(base - glm::vec3{.01f}, base + glm::vec3{static_cast<float>(size.x), static_cast<float>(size.y), static_cast<float>(size.z)} + glm::vec3{.01f});
+    box(base - glm::vec3{.03f}, base + glm::vec3{static_cast<float>(size.x), static_cast<float>(size.y), static_cast<float>(size.z)} + glm::vec3{.03f});
+    Tessellator faces(screen.tessellator.mBufferResourceService);
+    faces.begin({}, mce::PrimitiveMode::QuadList, 96, false);
+    constexpr int sides[6][4] = {{0,2,6,4},{1,5,7,3},{0,4,5,1},{2,3,7,6},{0,1,3,2},{4,6,7,5}};
     for (int i = 0; i < 2; ++i) {
         auto const& corner = i == 0 ? state.first : state.second;
         if (!corner) continue;
-        auto color = i == 0 ? ui::palette::accent : ui::palette::warning;
-        lines.color(color.r, color.g, color.b, 1.f);
+        glm::vec3 color = i == 0 ? glm::vec3{1.f, .25f, .2f} : glm::vec3{.25f, .5f, 1.f};
         glm::vec3 at{static_cast<float>(corner->x - camera.x), static_cast<float>(corner->y - camera.y), static_cast<float>(corner->z - camera.z)};
-        // Two nested boxes make the corner block stand out from the frame.
-        box(at + glm::vec3{.04f}, at + glm::vec3{.96f});
-        box(at + glm::vec3{.1f}, at + glm::vec3{.9f});
+        lines.color(color.r, color.g, color.b, 1.f);
+        box(at - glm::vec3{.005f}, at + glm::vec3{1.005f});
+        faces.color(color.r, color.g, color.b, .25f);
+        glm::vec3 c[8];
+        corners(at - glm::vec3{.01f}, at + glm::vec3{1.01f}, c);
+        for (auto const& side : sides) {
+            for (int k = 0; k < 4; ++k) faces.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
+            for (int k = 3; k >= 0; --k) faces.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
+        }
     }
-    translated(screen, glm::vec3{0}, [&] { MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{}); });
+    translated(screen, glm::vec3{0}, [&] {
+        if (faceMaterial.mRenderMaterialInfoPtr && faces.mCount)
+            MeshHelpers::renderMeshImmediately(screen, faces, faceMaterial, OffscreenCaptureDescription{});
+        MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
+    });
 }
 
 // Missing entities: a dashed frame where each should stand, in the ghost
@@ -753,10 +833,7 @@ void drawEntities(ScreenContext& screen, session::Snapshot const& snapshot, int 
             if (named.size() < 64 && distance < 32 * 32) named.push_back({{at.x, at.y + entityFrameHeight + .3, at.z}, r.entities[e].name});
         }
     }
-    {
-        std::lock_guard lock(labelMutex);
-        labels = std::move(named);
-    }
+    labels = std::move(named);
     mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
     if (frames.empty() || !lineMaterial.mRenderMaterialInfoPtr) return;
     // Each edge as dashes. The frame has one size: it does not claim the
@@ -782,6 +859,50 @@ void drawEntities(ScreenContext& screen, session::Snapshot const& snapshot, int 
         }
     }
     translated(screen, glm::vec3{0}, [&] { MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{}); });
+}
+
+// The names of missing entities like a named entity's tag: a dark plate with
+// the text, facing the camera, a fixed size in the world. Drawn with the
+// game's name tag materials (the both-sides variants).
+void drawNameTags(ScreenContext& screen, IClientInstance& client, BaseActorRenderer& renderer, Vec3 const& camera) {
+    if (labels.empty()) return;
+    auto const& backgroundMaterial = renderer.mNameTagBackgroundWithBackfaceMat.get();
+    auto const& textMaterial = renderer.mNameTagTextWithBackfaceMat.get();
+    if (!backgroundMaterial.mRenderMaterialInfoPtr || !textMaterial.mRenderMaterialInfoPtr) return;
+    if (screen.camera.viewMatrixStack->stack->empty()) return;
+    auto view = *screen.camera.viewMatrixStack->top()._m;
+    // The view's rotation rows are the camera axes.
+    glm::vec3 right{view[0][0], view[1][0], view[2][0]}, up{view[0][1], view[1][1], view[2][1]};
+    glm::vec3 across = glm::cross(right, -up);
+    auto& font = client.getMinecraftGame_DEPRECATED().getFontRepository()->getFontFromFontType("default").getFont();
+    auto background = BaseActorRenderer::NAME_TAG_BACKGROUND_COLOR();
+    for (auto const& [at, name] : labels) {
+        float width = static_cast<float>(font.getLineLength(name, 1.f, false));
+        glm::vec3 offset{static_cast<float>(at.x - camera.x), static_cast<float>(at.y - camera.y), static_cast<float>(at.z - camera.z)};
+        // Font pixels: x to the camera's right, y downward.
+        glm::mat4 model{glm::vec4(right * nameTagScale, 0), glm::vec4(-up * nameTagScale, 0), glm::vec4(across * nameTagScale, 0),
+                        glm::vec4(offset, 1)};
+        auto ref = screen.camera.worldMatrixStack->push(false);
+        ref.stack->_isDirty = true;
+        ref.mat->_m = ref.mat->_m.get() * model;
+        Tessellator plate(screen.tessellator.mBufferResourceService);
+        plate.begin({}, mce::PrimitiveMode::QuadList, 8, false);
+        plate.color(background.r, background.g, background.b, background.a);
+        float x0 = -width / 2 - 1, x1 = width / 2 + 1, y0 = -1, y1 = 8;
+        glm::vec2 quad[4]{{x0, y0}, {x0, y1}, {x1, y1}, {x1, y0}};
+        for (int k = 0; k < 4; ++k) plate.vertex(quad[k].x, quad[k].y, .01f);
+        for (int k = 3; k >= 0; --k) plate.vertex(quad[k].x, quad[k].y, .01f);
+        MeshHelpers::renderMeshImmediately(screen, plate, backgroundMaterial, OffscreenCaptureDescription{});
+        mce::Color white{1.f, 1.f, 1.f, 1.f}, black{0.f, 0.f, 0.f, 1.f};
+        font.drawCached(screen, name, -width / 2, 0, white, false, false, false, &textMaterial, -1, false, 0, white, black, 0, 0,
+            OffscreenCaptureDescription{}, false);
+        ref.stack->_isDirty = true;
+        if (ref.stack->sortOrigin->has_value() && (ref.stack->stack->size() - 1) <= ref.stack->sortOrigin->value())
+            ref.stack->sortOrigin->reset();
+        ref.stack->stack->pop_back();
+        ref.mat = nullptr;
+        ref.stack = nullptr;
+    }
 }
 
 void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, LocalPlayer& player) {
@@ -926,6 +1047,7 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
         }
     }
     drawEntities(screen, snapshot, dimension, camera);
+    drawNameTags(screen, client, *moving, camera);
 }
 
 // The cell chosen with "Show in world": a pulsing tinted box with outlines
@@ -1006,10 +1128,6 @@ std::shared_ptr<Verification const> verification() {
     std::lock_guard lock(resultMutex);
     return published;
 }
-std::vector<std::pair<Position, std::string>> entityLabels() {
-    std::lock_guard lock(labelMutex);
-    return labels;
-}
 bool save(SaveRequest request) {
     std::lock_guard lock(saveMutex);
     if (saveBusy) return false;
@@ -1017,6 +1135,11 @@ bool save(SaveRequest request) {
     pendingSave = std::move(request);
     return true;
 }
+std::optional<SaveStatus> saveStatus() {
+    std::lock_guard lock(saveMutex);
+    return status;
+}
+void stopSaving() { stopRequested = true; }
 std::optional<std::string> takeSaveMessage() {
     std::lock_guard lock(saveMutex);
     return std::exchange(saveMessage, std::nullopt);
