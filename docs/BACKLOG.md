@@ -220,6 +220,17 @@ unmet gates for versions already published:
 
 ## Bugs
 
+### L-117 Schematic entity name tags render badly in Japanese
+Kind: Bug. Reported by the maintainer 2026-10-08 (L-93 checks); present
+before the step 1 changes.
+Status: open; recorded only.
+The world name tags over missing schematic entities show colored fringes and
+look broken with the Japanese locale (screenshot in the conversation). They
+are drawn in `GhostRenderer.cpp` `drawNameTags` with the "default" font and
+the game's name tag materials. Starting points: compare with how vanilla
+draws a named entity's tag in Japanese (font type, glyph texture filtering,
+the text material) and with Lamium's waypoint labels in the world.
+
 ### L-113 Numbers sit higher than Japanese text in the settings screen
 Kind: Bug. Reported by the maintainer 2026-10-08 while checking the change
 arrow.
