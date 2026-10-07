@@ -218,7 +218,18 @@ unmet gates for versions already published:
 
 ## Bugs
 
-None open.
+### L-113 Numbers sit higher than Japanese text in the settings screen
+Kind: Bug. Reported by the maintainer 2026-10-08 while checking the change
+arrow.
+Status: open; waiting for a screenshot of where it shows.
+With the Japanese locale, Lamium raises Latin runs (letters and digits) by
+1.5 units (`latinRaise()` in `Widgets.cpp`, DESIGN.md) so they share the line
+with kana and kanji. In the settings screen the numbers now read as higher
+than the Japanese text beside them, which suggests the raise is too large
+there (the change arrow, placed for Latin text, sat about 0.8 units above
+the kanji). Changing the raise moves every Japanese label, so measure it on a
+screenshot of the settings screen (and the HUD) before choosing a new value;
+check stepper values, sliders, the key cells and the Info HUD lines.
 
 ---
 
