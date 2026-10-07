@@ -146,9 +146,9 @@ Minecraft's "copy coordinates" while Lamium is installed unless you rebind it.
 - Hide effects cannot hide the carved pumpkin overlay or the spyglass frame
   yet. Water, lava and powder snow fog hiding is checked with the vanilla
   resources in Fancy graphics; other packs and graphics modes are unverified.
-- FreeCamera is experimental; multiplayer, controllers and some dimension/menu
-  edges are untested. Looking from inside solid blocks, distant caves can be
-  cut off along chunk lines (spectator mode does not have this).
+- FreeCamera is experimental. Underground terrain drawing is checked in a
+  local world and on BDS; other players' view of the body, controllers and
+  some dimension/menu edges remain untested.
 - Edge Guard works in local worlds; on multiplayer servers the server may
   still move the player over the edge (untested).
 - Inventory transfer works only in ordinary storage (chests, barrels, Shulker

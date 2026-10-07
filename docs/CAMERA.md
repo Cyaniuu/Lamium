@@ -183,12 +183,21 @@ rotation center felt wrong, so FreeCamera locks first person instead.
 Continuing flight from the previous third-person eye (31323b8) did not pass
 verification and was removed: starting from third person begins at the head.
 
-## Underground terrain visibility (L-37; candidate 2026-10-07)
+## Underground terrain visibility (L-37; implemented 2026-10-07)
 
-Runtime status: **substitution unverified**. The first candidate (`aa5efa9`)
+Runtime status: **underground terrain checked in a local world and on BDS**
+by the maintainer on `d56b81e`, 2026-10-07, Minecraft 1.26.51.01 / LeviLamina
+Client 26.51.6 (DLL `822285b2...5f8bfe7c`, trace options off). The runtime log
+confirms binding at SDK-derived virtual slot 26 and the native 3 -> 5 request
+being retained. The maintainer also confirmed normal-view and player-control
+restoration after turning FreeCamera off. Other players' view of the body is
+explicitly unchecked; detailed lifecycle/graphics cases were not reported
+separately. See VALIDATION.md and VALIDATION-LOG.md.
+
+The first candidate (`aa5efa9`)
 was tested on 2026-10-07 but its 26.51.5-only loader gate disabled it on the
 installed 26.51.6. Screenshots showed unchanged partial cave rendering; no
-native request was replaced. The next build admits that installed patch and
+native request was replaced. `d56b81e` admits that installed patch and
 logs arming separately from the actual substitution. See VALIDATION-LOG.md.
 Earlier game checks found normal/FreeCamera
 terrain culler type 3 and spectator type 5; caves were clipped at straight
@@ -202,14 +211,16 @@ VALIDATION-LOG.md; they are not evidence that this candidate works.
 `updateLevelCullerType` request. It changes only a requested type 3 to 5 during
 the owning FreeCamera session, then calls the original once. Other requested
 types and other cameras pass through. Ending FreeCamera lets the next native
-request choose the normal culler. This should avoid the prior independent
-3/5 updates, but actual call frequency, geometry and restoration need a game
-check. Pure tests cover all byte-sized requests and stable selection across
+request choose the normal culler. The replacement avoids the prior independent
+3/5 requests; cave drawing and restoration are maintainer-confirmed, while
+native call frequency was not measured. Pure tests cover all
+byte-sized requests and stable selection across
 repeated activation/exit frames; they do not exercise the game renderer.
 
 The candidate requires Minecraft executable file version 1.26.51.1
 (launcher version 1.26.51.01) and LeviLamina Client 26.51.5 or 26.51.6. These
-are candidate environments, not a claim of verified cave drawing. A pre-render hook
+have different coverage: cave drawing was checked on 26.51.6; 26.51.5 has not
+been re-tested with this adapter. A pre-render hook
 binds lazily from an actual primary renderer while FreeCamera is active. The
 SDK virtual-call thunk provides the slot; the implementation must be executable
 code in the game module. There is no hard-coded vtable slot or game address.
@@ -231,7 +242,8 @@ capture the log before pursuing a different path. Player game type, abilities,
 position, camera input policy and network packets are not modified here.
 Terrain beyond the client's loaded area remains outside this scope.
 
-First game check on a local test world:
+Further coverage to check when needed (basic cave rendering passed locally
+and on BDS; the following individual cases were not all reported):
 
 - Start FreeCamera above ground, enter solid ground near a known cave, rotate
   and cross chunk boundaries. Compare the surrounding cave/terrain with a
@@ -244,8 +256,8 @@ First game check on a local test world:
   the retained pose should keep its visibility while flight pauses. Test Hold
   release, world exit/re-entry and dimension cleanup separately.
 - Check ordinary first/third person, Freelook and Zoom with FreeCamera off.
-  Check the player's mode and body remain unchanged; multiplayer remains
-  unverified until separately exercised.
+  Check the player's mode and body remain unchanged from another player's
+  view. BDS cave drawing passed; remote body appearance remains unverified.
 
 ## Boundaries
 
@@ -342,8 +354,9 @@ remain unverified; no individual Escape/Close results were supplied.
 The sections below preceded the camera-entity implementation described above.
 The view-matrix approaches did not produce the detached view and were abandoned.
 Their diagnostic options remain development tools; their "next" instructions
-and "not completed" statements describe that earlier checkpoint. L-37 in
-BACKLOG owns current cave-visibility research.
+and "not completed" statements describe that earlier checkpoint. The L-37
+implementation above and completed follow-up in BACKLOG-DONE record the
+current cave-visibility path.
 
 ### SDK surfaces inspected
 

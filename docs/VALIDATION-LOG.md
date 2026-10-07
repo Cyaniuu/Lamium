@@ -12,6 +12,27 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-37 underground terrain visible locally and on BDS (2026-10-07)
+
+By the maintainer, local world and BDS, `d56b81e`, DLL
+`822285b2f0ecceb4a9b6bf1b0310c0f15fa1e2e96a4edd1af9f095835f8bfe7c`,
+Minecraft 1.26.51.01 / LeviLamina Client 26.51.6, all trace options off.
+Reported that underground FreeCamera drew the surrounding terrain correctly
+in both environments. The supplied screenshot shows extensive cave terrain
+below the surface from a camera targeting solid stone.
+
+The runtime log records loader 26.51.6 and adapter arming at 22:37:01,
+binding at SDK-derived virtual slot 26 at 22:37:23.479, and
+`FreeCamera terrain: native request 3 -> 5 retained` at 22:37:23.480.
+Unlike the first build, the replacement actually ran. This validates the
+native-request approach for the reported scenes; it does not measure native
+call frequency or prove every terrain/rendering case.
+The maintainer also confirmed normal-view and player-control restoration
+after turning FreeCamera off. Other players' view of the body is explicitly
+unverified. Detailed Hold/menu/focus/world/dimension cleanup, controllers,
+other graphics/resource configurations and other game/loader versions were
+not individually reported. Current coverage remains in VALIDATION.md.
+
 ## L-37 first candidate disabled by loader version gate (2026-10-07)
 
 By the maintainer, local world, `aa5efa9`, DLL

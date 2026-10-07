@@ -1936,6 +1936,36 @@ https://github.com/maruohon/tweakeroo/blob/ornithe/1.12.2/src/main/java/tweakero
 
 ## Research
 
+### L-37 FreeCamera sees caves from underground (completed follow-up)
+
+Kind: Research. Reopened 2026-09-30; completed 2026-10-07 on `d56b81e`.
+The maintainer confirmed underground terrain drawing in a local world and
+on BDS, then confirmed normal-view and player-control restoration after
+FreeCamera was turned off. Other players' view of the body is explicitly
+unchecked; broader lifecycle/graphics coverage stays in VALIDATION.md and
+BACKLOG's Pre-release checks. The earlier parked L-37 entry remains intact.
+
+Normal/underground FreeCamera used culler type 3, while spectator used type 5.
+Answering spectator from `Actor::isSpectator` or `getPlayerGameType` did not
+change the culler. Independently forcing 5 every frame fought native 3 and
+blanked the view. The successful implementation intercepts the primary
+renderer's own `updateLevelCullerType` request and substitutes 5 for 3 only
+during the owning FreeCamera session, calling the original once. It resolves
+the implementation from the SDK virtual method and an actual renderer,
+checks the game/loader version and observes one unmodified request first.
+No game-type, ability or packet changes. The first build `aa5efa9` was disabled
+by a 26.51.5-only loader gate; `d56b81e` corrected it for installed 26.51.6.
+The successful log confirms SDK-derived virtual slot 26 and a retained
+native 3 -> 5 request. Technical notes: [CAMERA.md](CAMERA.md#underground-terrain-visibility-l-37-implemented-2026-10-07).
+Build/hash/environment and runtime evidence: VALIDATION-LOG.md.
+
+Retained earlier hypothesis (2026-09-30; source: GroupMountain FreeCamera
+README, a GPL-3.0 BDS plugin, PROVENANCE.md group 3; its source was not opened):
+that plugin shows caves by making the client really switch to spectator through
+the server's game-type packet. The culler might follow the client's actual
+game-type change rather than queried values. This path was not needed by the
+successful render-only implementation.
+
 ### L-89 Distant player positions for map and radar
 Kind: Research, then implementation if a typed authoritative path is viable.
 Chosen by the maintainer 2026-10-02.

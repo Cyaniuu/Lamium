@@ -84,8 +84,8 @@ L-item wins. Every entry names what the task is, not only its number.
    included in 0.1.7 and checked locally. Choose the next accepted follow-up
    with the maintainer; the L-item lists them and SCHEMATIC.md retains the
    contract and build record. Server/broader coverage remains open.
-5. **Research when convenient:** L-37 FreeCamera seeing caves (wanted),
-   L-79 carved pumpkin and spyglass frame draw path (cheap-model friendly
+5. **Research when convenient:** L-79 carved pumpkin and spyglass frame draw
+   path (cheap-model friendly
    trace/test steps), L-71 starting a glide from the mod, L-57
    client counters, L-30 Ender Dragon part hitboxes, L-33 mob growth and
    breeding timers, L-96 Connected Textures (glass first; step 1 is the
@@ -157,11 +157,12 @@ unmet gates for versions already published:
 ### Pending feature checks
 
 - FreeCamera underground visibility (L-37): the 2026-10-07 native-request
-  candidate needs its first active game check (the first build was disabled
-  by its loader version gate). Compare solid-ground and open-cave
-  rendering, repeated frames, release, menus and world/dimension cleanup;
-  also check surface terrain and shadows. CAMERA.md describes the gates and
-  diagnostic messages. Cave visibility remains a known limit until confirmed.
+  adapter passed cave drawing in a local world and on BDS on `d56b81e`;
+  the log confirms the native 3 -> 5 replacement. Normal-view and player
+  control restoration also passed. Other players' view of the body,
+  detailed Hold/menu/focus/world/dimension
+  cleanup and surface/shadow/graphics coverage remain unreported separately.
+  See CAMERA.md and VALIDATION.md.
 - FreeCamera speed controls (L-26): five-step adjustment and speed keys passed
   on `7e72244`; revised labels and forward-only sprint follow-up passed on
   `41b1ff6`. Restart persistence and detailed input/menu/focus combinations
@@ -569,34 +570,6 @@ Steps, one at a time, each with a written hypothesis first:
    opaque layouts.
 3. Record each result in VISUAL-EFFECTS.md and VALIDATION-LOG.md.
 Stop and hand back after two runtime rounds without a new candidate.
-
-### L-37 FreeCamera sees caves from underground (reopened)
-Kind: Research. Reopened 2026-09-30: the maintainer wants it. Four traces and
-the parked write-up are in BACKLOG-DONE.md (L-37).
-Status: open; first native-request candidate tested 2026-10-07 but disabled
-by the loader version gate (26.51.6 installed, 26.51.5 required). The gate is
-corrected in the next build; actual substitution/cave rendering remain unverified.
-Known: underground FreeCamera uses culler type 3 like survival; spectator uses
-type 5. Answering spectator from `Actor::isSpectator` or
-`getPlayerGameType` did not change the culler.
-Current candidate (2026-10-07): intercept the primary renderer's own
-`updateLevelCullerType` request and substitute 5 for 3 only during the owning
-FreeCamera session. This replaces the argument in the native update instead
-of separately forcing 5 every frame, which previously fought native 3 and
-blanked the view. Resolve the implementation from the SDK virtual method and
-an actual renderer; gate the game/loader version and observe one unmodified
-request first. No game-type, ability or packet changes. Details and first-game
-checklist: [CAMERA.md](CAMERA.md#underground-terrain-visibility-l-37-candidate-2026-10-07).
-Keep L-37 open until cave drawing and normal-view restoration are confirmed.
-
-Earlier hypothesis (2026-09-30; source: GroupMountain FreeCamera README, a GPL-3.0 BDS plugin,
-PROVENANCE.md group 3; its source is not opened): that plugin shows caves by
-making the client really switch to spectator through the server's game-type
-packet. So the culler may follow the client's actual game-type change (the
-path the packet handler takes), not the queried value. Check whether applying
-that change locally during FreeCamera, and restoring it after, selects type 5
-without changing server-side game mode, abilities the server checks, or
-movement sent to it. Fail open to the current behavior if it does.
 
 ### L-71 Start an elytra glide from the mod
 Kind: Research (cheap models may collect traces). Split from L-70 on
