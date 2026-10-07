@@ -270,6 +270,11 @@ void arrow(MinecraftUIRenderContext& context, float x, float y, bool left, Rgb v
     for (int i = 0; i < 3; ++i)
         fill(context,left ? x+i : x+2-i,y+2-i,1,1+2*i,value);
 }
+void changeArrow(MinecraftUIRenderContext& context, float x, float y, float scale, Rgb color) {
+    fill(context, x, y + 2 * scale, 4 * scale, scale, color); // Shaft.
+    for (int i = 0; i < 3; ++i)                               // Head, narrowing to the tip.
+        fill(context, x + (4 + i) * scale, y + i * scale, scale, (5 - 2 * i) * scale, color);
+}
 float keycaps(MinecraftUIRenderContext& context, float x, float y, float width, std::vector<std::string> const& keys,
               KeyTone tone) {
     bool filled = tone == KeyTone::Filled;

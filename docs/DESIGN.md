@@ -74,7 +74,10 @@ subsystems:
 - Dark translucent panels over the live world. Flat fills and 1-unit frames.
   No gradients, glow, blur or decorative motion.
 - Only rectangles and text are drawn (`src/ui/Widgets.h`). The game font is
-  used as is; no custom fonts.
+  used as is; no custom fonts. Symbols outside its glyphs (arrows such as
+  U+2192, other pictographs) fall back to another font or a box, differently
+  per language, so draw them from rectangles in Widgets (`arrow`,
+  `chevron`, `changeArrow`) instead of putting them in text (2026-10-08).
 - Dense rows for mouse and keyboard, not Bedrock's large touch buttons.
 - The information structure is list-first: name, state, key, then options.
 

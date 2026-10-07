@@ -38,6 +38,7 @@ struct TargetInfo {
         std::string icon;             // An item icon before the value (binary NBT), if any.
         bool labelIsKey = true;
         Tone tone = Tone::Normal;
+        std::string before; // A change: drawn before an arrow, then `value`.
     };
     std::vector<DetailRow> details;
     struct BlockPosition { int x, y, z; };

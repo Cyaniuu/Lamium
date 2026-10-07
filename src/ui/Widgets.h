@@ -72,6 +72,11 @@ constexpr float sliderKnobWidth = 6, sliderKnobHeight = 10, sliderTrackHeight = 
 // Glyph-independent disclosure and stepper arrows drawn from rectangles.
 void chevron(MinecraftUIRenderContext&, float x, float y, bool expanded, Rgb color = palette::dim);
 void arrow(MinecraftUIRenderContext&, float x, float y, bool left, Rgb color = palette::dim);
+// A right-pointing "changes to" arrow, 7 by 5 units times `scale`, for rows
+// like "North -> East": the game fonts lack U+2192 (it fell back to another
+// font in English and showed as a box in Japanese, 2026-10-08).
+constexpr float changeArrowWidth = 7, changeArrowHeight = 5;
+void changeArrow(MinecraftUIRenderContext&, float x, float y, float scale, Rgb color);
 // Warning caps mark a binding that relates to another: Outline overlaps,
 // Filled is the exact same chord (all its actions fire together).
 enum class KeyTone { Plain, Outline, Filled };

@@ -141,10 +141,16 @@ void targetCardTests() {
         auto stairs = schematicRows(CellState::State, "Stairs", "icon",
             {{"weirdo_direction", "0", "3"}, {"minecraft:corner", "none", "inner_left"}}, "minecraft:stone_stairs", translate);
         check(stairs.size() == 2 && stairs[0].label == "target.facing" && stairs[0].labelIsKey
-              && stairs[0].value == "<target.dirNorth> → <target.dirEast>" && stairs[0].tone == Tone::State,
+              && stairs[0].before == "<target.dirNorth>" && stairs[0].value == "<target.dirEast>" && stairs[0].tone == Tone::State,
               "a wrong state reads '<state>: now -> should be' by name");
-        check(stairs[1].label == "minecraft:corner" && !stairs[1].labelIsKey && stairs[1].value == "inner_left → none",
+        check(stairs[1].label == "minecraft:corner" && !stairs[1].labelIsKey && stairs[1].before == "inner_left"
+              && stairs[1].value == "none",
               "an unknown state keeps its raw name and values");
+        TargetInfo card{"Stairs", "minecraft:stone_stairs"};
+        card.details = stairs;
+        auto drawn = cardRows(card, CardOptions{});
+        check(drawn.size() == 2 && drawn[0].before == "<target.dirNorth>" && drawn[0].tone == Tone::State,
+              "card rows keep the change and its color");
         auto extra = schematicRows(CellState::Extra, "", "", {}, "minecraft:dirt", translate);
         check(extra.size() == 1 && extra[0].value == "<schematic.air>" && extra[0].icon.empty(), "an extra block should be air");
     }

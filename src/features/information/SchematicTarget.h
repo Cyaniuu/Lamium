@@ -30,8 +30,10 @@ inline std::vector<TargetInfo::DetailRow> schematicRows(schematic::CellState sta
     Translate const& translate) {
     using schematic::CellState;
     std::vector<TargetInfo::DetailRow> rows;
-    auto row = [&](std::string label, std::string value, bool labelIsKey, Tone tone, std::string withIcon = {}) {
+    auto row = [&](std::string label, std::string value, bool labelIsKey, Tone tone, std::string withIcon = {},
+                   std::string before = {}) {
         TargetInfo::DetailRow r{std::move(label), std::move(value)};
+        r.before = std::move(before);
         r.kind = DetailKind::Schematic;
         r.labelIsKey = labelIsKey;
         r.tone = tone;
@@ -43,12 +45,13 @@ inline std::vector<TargetInfo::DetailRow> schematicRows(schematic::CellState sta
     case CellState::Extra: row("schematic.shouldBe", translate("schematic.air"), true, Tone::Wrong); break;
     case CellState::Missing: row("schematic.placeHere", expectedName, true, Tone::Missing, icon); break;
     case CellState::State:
-        // One row per differing state: "<state>: <now> → <should be>".
+        // One row per differing state: "<state>: <now> -> <should be>", the
+        // arrow drawn by the card (the fonts lack U+2192).
         for (auto const& d : differences) {
             auto now = stateName(d.key, d.actual, identifier, translate);
             auto want = stateName(d.key, d.expected, identifier, translate);
             auto const& named = now.labelIsKey ? now : want;
-            row(named.label, now.value + " → " + want.value, named.labelIsKey, Tone::State);
+            row(named.label, want.value, named.labelIsKey, Tone::State, {}, now.value);
         }
         if (differences.empty()) row("target.schematic", translate("schematic.kind.state"), true, Tone::State);
         break;

@@ -484,6 +484,8 @@ std::optional<ui::hud_editor::Box> drawTargetCard(MinecraftUIRenderContext& cont
         if (row.progress && row.meter == Meter::Hearts) valueW += heartsWidth(row);
         if (row.progress && row.meter == Meter::Icons) valueW += (10 * 8 + 1 + 4) * z;
         if (rowStack(row)) valueW += rowIcon + 2 * z;
+        if (!row.before.empty())
+            valueW += ui::textWidthScaled(context, row.before, z) + (ui::changeArrowWidth + 6) * z;
         valuesW = std::max(valuesW, valueW);
     }
     float nameW = ui::textWidthScaled(context, target.name, z);
@@ -571,6 +573,13 @@ std::optional<ui::hud_editor::Box> drawTargetCard(MinecraftUIRenderContext& cont
         // Schematic rows in the verifier's colors (the HUD and Check tab use the same).
         auto color = row.tone == Tone::Wrong ? ui::Rgb{1.f, .35f, .3f} : row.tone == Tone::State ? ui::Rgb{1.f, .8f, .25f}
             : row.tone == Tone::Missing ? ui::Rgb{.75f, .85f, .9f} : ui::palette::text;
+        if (!row.before.empty()) {
+            float w = ui::textWidthScaled(context, row.before, z);
+            ui::labelScaled(context, x, y, w + 2, row.before, z, color, ui::Align::Left, element.shadow);
+            x += w + 3 * z;
+            ui::changeArrow(context, x, y + 1.5f * z, z, color);
+            x += (ui::changeArrowWidth + 3) * z;
+        }
         ui::labelScaled(context, x, y, left + contentW - x + 2, values[i], z, color, ui::Align::Left, element.shadow);
     }
     context.flushText(0, std::nullopt);

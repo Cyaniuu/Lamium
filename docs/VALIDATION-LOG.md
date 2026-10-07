@@ -12,6 +12,22 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 target-card redesign, L-112 state names, L-109 switch (2026-10-08)
+
+By the maintainer, deployed `f325932`, DLL
+`3e571290aa07fd204bb8304527d9d5de7ca1ad4fe2021eabb9e386e4c5309030`,
+Minecraft 1.26.51.01, local world, all trace options off. Every checklist
+item passed: "Should be [icon] <block>" in red for wrong blocks and
+"Should be Air" for extra ones; a wrong stair's facing row in yellow with
+the block's own facing row left out; facings matching the stairs and
+trapdoors seen in game; upside down, slab half, log axis and translated
+door directions; the "Also restore the inventory" switch fits, restores only
+the hotbar, armor and offhand when off and everything when on.
+Reported: the U+2192 arrow in "North → East" is not in the game fonts. In
+English it fell back to a smaller glyph from another font; in Japanese it
+showed as a box (screenshots in the conversation). Replaced by an arrow
+drawn from rectangles (`ui::changeArrow`) after this check.
+
 ## L-109 two-choice restore scope (2026-10-08)
 
 By the maintainer, deployed `89950fc`, DLL
