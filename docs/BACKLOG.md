@@ -69,30 +69,35 @@ Keep this section short. It is only the ordering layer; task details and status
 live in the L-items below. If this summary ever disagrees with an L-item, the
 L-item wins. Every entry names what the task is, not only its number.
 
-1. **Small and medium features**, picked by the maintainer:
+1. **Current batch (chosen 2026-10-07, one in-game check at the end):**
+   L-108 target card overflow fix; L-15 step 1 breaking restrictions
+   together with L-73 step 13 (shared mining-session control); L-93
+   schematic placement markers on the minimap and world map.
+2. **Small and medium features**, picked by the maintainer:
    - L-90 Simplified Chinese localization: built and checked in game; waits
      for a native review of the wording.
-2. **Placement and breaking — L-15 restrictions and L-59 held placement
-   style:** specs written after the 2026-09-28 discussion; building waits for
-   the maintainer's go.
-3. **Map — L-60 minimap, waypoints and world map:**
+3. **Placement and breaking — L-15 restrictions and L-59 held placement
+   style:** L-15 breaking is in the current batch; L-15 placement and L-59
+   wait for the maintainer's go.
+4. **Map — L-60 minimap, waypoints and world map:**
    core built and checked locally and on an external BDS. Runs in parallel
    with the small/medium features; neither ranks above the other. Open:
    waypoint server storage checks and L-86 radar-face follow-ups. Details
    are in the L-item and MAP.md.
-4. **Schematic — L-93 load, place, project, verify and list materials:**
+5. **Schematic — L-93 load, place, project, verify and list materials:**
    included in 0.1.7 and checked locally. Choose the next accepted follow-up
    with the maintainer; the L-item lists them and SCHEMATIC.md retains the
    contract and build record. Server/broader coverage remains open.
-5. **Research when convenient:** L-79 carved pumpkin and spyglass frame draw
+6. **Research when convenient:** L-79 carved pumpkin and spyglass frame draw
    path (cheap-model friendly
    trace/test steps), L-71 starting a glide from the mod, L-57
    client counters, L-30 Ender Dragon part hitboxes, L-33 mob growth and
    breeding timers, L-96 Connected Textures (glass first; step 1 is the
    tessellator spike), L-105 performance profiling (measure before any
    optimization).
-6. **L-73 architecture review:** only step 13 remains, with L-15 breaking.
-7. **Before a release:** the pre-release checks below. 0.1.7 was released
+7. **L-73 architecture review:** only step 13 remains, with L-15 breaking
+   (current batch).
+8. **Before a release:** the pre-release checks below. 0.1.7 was released
    on 2026-10-07; server checks of the 2026-10-06/07 work stay listed
    below as known gaps (Release policy does not require a full
    regression).
@@ -375,8 +380,11 @@ Kind: Design done (discussion with the maintainer, 2026-09-28); breaking is
 then Ready **(strong model)**, placement needs Research first. Replaces the
 current Breaking Restriction (capture/reset keys) and the unimplemented
 placement mode.
-Status: planning. Nothing is built, and no step starts until the maintainer
-says so.
+Status: step 1 (breaking) started 2026-10-07 at the maintainer's go, with
+L-73 step 13. Placement (steps 2-3) still waits for the maintainer.
+Decided 2026-10-07: breaking keeps the existing Breaking Restriction toggle
+and Cycle Breaking Mode bindings (no new default keys); the saved breaking
+mode carries over unchanged and Height band is added to the list.
 What it is for: leveling ground and digging tunnels without breaking past a
 chosen level or face, and laying floors, walls and roofs flat without
 placing outside them. Placing with a chosen facing is not wanted for now.
@@ -636,7 +644,7 @@ Accepted follow-ups (2026-10-07; known gaps, not 0.1.7 blockers):
 - Entity name-tag distance and quantity.
 
 Pick the next follow-up with the maintainer; the list is not an implementation
-order. Runtime gaps stay under Pre-release checks and VALIDATION.
+order. Chosen 2026-10-07: placement markers on the minimap/world map. Runtime gaps stay under Pre-release checks and VALIDATION.
 
 ### L-57 Client info counters
 Kind: Research. Split from L-53 on 2026-09-27 (wave 2).
