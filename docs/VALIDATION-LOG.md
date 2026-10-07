@@ -12,6 +12,20 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 menu tidy-up and drawing, second look (2026-10-07)
+
+By the maintainer, local world, `4e413ed` (DLL `3604d22b...19c87b`), with
+screenshots. The menu now matches Lamium's look, but the small lower-right
+menu let items touch each other and the center, and the stepper hint was
+cut off. Adjacent ghost blocks z-fought where their faces met (seen from
+inside a block). The drawing problem with skipping enclosed ghosts was
+being inside a schematic: around the camera blocks were missing, which is
+far from the truth for filled terrain. Map links and menu animation can
+wait until after 0.1.7. Changed in `f6f5386` (not yet checked): faces
+toward opaque ghosts dropped (no z-fighting), the camera's cells kept
+open, skipping on for everyone with the option removed, the ring sized so
+items never meet, hints one per line.
+
 ## L-93 menu, adjust key and drawing, first look (2026-10-07)
 
 By the maintainer, local world, `b80f4dc` (DLL `ff622d33...db200be`), with

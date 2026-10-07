@@ -1108,9 +1108,18 @@ for large schematics" (off), suggested by a toast when a file over 256k
 cells is placed; a waiting save names a direction and distance and frames
 the columns it waits for in yellow; key labels without "start here" /
 "recommended" and the footer tip in faint text.
-Open (maintainer, 2026-10-07): drawing that is both light and true to the
-view (per-face culling against the schematic's own neighbors rather than
-whole cells), and placements on the minimap and world map.
+Second look (`f6f5386`, 2026-10-07, not yet checked): each tessellated
+ghost drops its quads on a side touching an opaque ghost (`GhostFaces.h`;
+collapsed to a point so no vertex data moves), which also ends the
+z-fighting between adjacent ghosts; the camera's eye and feet cells are
+not drawn and count as open, so from inside a schematic the ghosts around
+form walls, and the sections around them rebuild when the camera changes
+cell; enclosed ghosts are skipped for everyone again (the option is
+gone). The ring is sized from the item and center sizes so no item meets
+its neighbor or the center at any count (`RadialLayout`, tested); small
+mode scales the whole menu; hints are one per line.
+After 0.1.7 (maintainer, 2026-10-07): placements on the minimap and world
+map; an opening animation for the menu.
 To check before 0.1.7: see "Pre-release checks".
 - Menu settings (decided 2026-10-07): background dimming light by default
   (none and dark selectable); shown centered at full size by default, or
