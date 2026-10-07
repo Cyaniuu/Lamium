@@ -1125,6 +1125,9 @@ legs show blocks); the menu's items spread out from 55% of the ring over
 0.15 s with ease-out when a level opens, their text appearing once the
 plates are mostly in (`RadialLayout::spread`, tested); the key groups are
 named "Placement keys", "Shown layers", "Check", "Save an area" again.
+Fourth look: near the camera each pair of touching ghost faces keeps only
+the one facing the camera (no z-fighting, still solid); the menu opening
+follows the Animations setting (not yet checked).
 After 0.1.7 (maintainer, 2026-10-07): placements on the minimap and world
 map. (The menu animation was moved before 0.1.7 the same day.)
 To check before 0.1.7: see "Pre-release checks".

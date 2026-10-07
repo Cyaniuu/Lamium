@@ -12,6 +12,15 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 fourth look at drawing (2026-10-07)
+
+By the maintainer, local world, `efcbda7` (DLL `91167736...4d4d20`), with a
+screenshot. Inside a schematic the blocks around the camera now look
+right, and the menu animation is good, but z-fighting came back near the
+camera (both faces of touching ghosts were kept), and the menu animation
+ignored Lamium's Animations setting. Both changed in the next build (not
+yet checked).
+
 ## L-93 third look at drawing and the menu (2026-10-07)
 
 By the maintainer, local world, `f6f5386` (DLL `68a0d497...85864`), with a
