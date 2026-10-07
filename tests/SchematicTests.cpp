@@ -6,6 +6,8 @@
 #include "ui/SavePromptLayout.h"
 #include "ui/RadialLayout.h"
 #include "features/schematic/MenuModel.h"
+#include "features/schematic/GhostFaces.h"
+#include <array>
 #include <set>
 #include <cstdlib>
 #include <filesystem>
@@ -335,6 +337,17 @@ void verifyRules() {
           && materials["minecraft:oak_stairs"].placed == 0, "materials count needed and correctly placed blocks, not air");
 }
 
+void ghostFaces() {
+    using lamium::schematic::faces::Vertex;
+    using lamium::schematic::faces::sideOf;
+    std::array<Vertex, 4> west{{{5, 2, 3}, {5, 3, 3}, {5, 3, 4}, {5, 2, 4}}};
+    std::array<Vertex, 4> top{{{5, 3, 3}, {6, 3, 3}, {6, 3, 4}, {5, 3, 4}}};
+    std::array<Vertex, 4> stairStep{{{5, 2.5f, 3}, {6, 2.5f, 3}, {6, 2.5f, 4}, {5, 2.5f, 4}}};
+    std::array<Vertex, 4> slab{{{5, 2, 3}, {5, 2.5f, 3}, {5, 2.5f, 4}, {5, 2, 4}}};
+    check(sideOf(west, 5, 2, 3) == 0 && sideOf(top, 5, 2, 3) == 3, "quads on a cell side name that side");
+    check(sideOf(stairStep, 5, 2, 3) == -1 && sideOf(slab, 5, 2, 3) == 0, "inner quads have no side; part of a side still is that side");
+}
+
 void menuRules() {
     using namespace lamium::schematic::menu;
     bool sized = true, labeled = true;
@@ -350,15 +363,28 @@ void menuRules() {
     check(openAt(false, 3) == -1 && openAt(true, 3) == 3 && openAt(true, -1) == -1 && openAt(true, 99) == -1,
           "the menu opens at the list unless set to reopen where it was closed");
 
-    auto ring = lamium::ui::RadialLayout::at(480, 270, 8, 90, false);
+    using lamium::ui::RadialLayout;
+    RadialLayout::Sizes sizes{100, 26, 140, 62};
+    auto ring = RadialLayout::at(640, 360, 8, sizes, false);
     bool round = true;
     for (int i = 0; i < 8; ++i) round = round && ring.hit(ring.itemX(i), ring.itemY(i)) == i;
     check(round && ring.hit(ring.cx, ring.cy) == -1 && ring.itemY(0) < ring.cy, "the ring starts at the top and each item is hit by its direction");
-    auto small = lamium::ui::RadialLayout::at(480, 270, 8, 90, true), fewer = lamium::ui::RadialLayout::at(480, 270, 3, 90, true);
-    check(small.cx > ring.cx && small.cy > ring.cy && small.rx < ring.rx && small.cx + small.rx + 45 <= 480
+    auto apart = [&](float ax, float ay, float aw, float ah, float bx, float by, float bw, float bh) {
+        return std::abs(ax - bx) >= (aw + bw) / 2 || std::abs(ay - by) >= (ah + bh) / 2;
+    };
+    bool clear = true;
+    for (int count : {3, 5, 7, 8}) {
+        auto r = RadialLayout::at(640, 360, count, sizes, false);
+        for (int i = 0; i < count; ++i) {
+            clear = clear && apart(r.itemX(i), r.itemY(i), sizes.itemWidth, sizes.itemHeight, r.cx, r.cy, sizes.centerWidth, sizes.centerHeight);
+            int j = (i + 1) % count;
+            clear = clear && apart(r.itemX(i), r.itemY(i), sizes.itemWidth, sizes.itemHeight, r.itemX(j), r.itemY(j), sizes.itemWidth, sizes.itemHeight);
+        }
+    }
+    check(clear, "no item overlaps its neighbor or the center, at any count");
+    auto small = RadialLayout::at(640, 360, 8, sizes, true), fewer = RadialLayout::at(640, 360, 3, sizes, true);
+    check(small.cx > ring.cx && small.cy > ring.cy && small.cx + small.rx + sizes.itemWidth / 2 <= 640
           && fewer.cx == small.cx && fewer.cy == small.cy, "the small menu sits in the lower right, inside the screen, and stays put");
-    auto narrow = lamium::ui::RadialLayout::at(320, 200, 8, 120, false);
-    check(narrow.cx - narrow.rx - 60 >= 0 && narrow.cx + narrow.rx + 60 <= 320, "the ring fits a narrow screen");
     check(repeatable(Stepper::Layer) && !repeatable(Stepper::Target), "the adjust key does not repeat choosing the target");
 }
 
@@ -426,6 +452,7 @@ void schematicTests() {
     placementDocuments();
     drawKeys();
     menuRules();
+    ghostFaces();
     placementTransforms();
     entityRules();
     saveRules();

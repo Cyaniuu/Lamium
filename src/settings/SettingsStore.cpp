@@ -185,7 +185,7 @@ Json encode(Settings const& settings) {
         {"schematic", {{"enabled", settings.schematic.enabled}, {"hud", settings.schematic.hud},
                        {"hudVerify", settings.schematic.hudVerify}, {"hudMaterials", settings.schematic.hudMaterials},
                        {"menuBackground", settings.schematic.menuBackground}, {"menuSmall", settings.schematic.menuSmall},
-                       {"menuReopen", settings.schematic.menuReopen}, {"lightDrawing", settings.schematic.lightDrawing}}}
+                       {"menuReopen", settings.schematic.menuReopen}}}
     };
 }
 }
@@ -407,7 +407,6 @@ Settings decodeSettings(std::string_view text) {
         value.schematic.menuBackground = schematic.value("menuBackground", value.schematic.menuBackground);
         value.schematic.menuSmall = schematic.value("menuSmall", value.schematic.menuSmall);
         value.schematic.menuReopen = schematic.value("menuReopen", value.schematic.menuReopen);
-        value.schematic.lightDrawing = schematic.value("lightDrawing", value.schematic.lightDrawing);
     }
     if (data.contains("lighting")) {
         value.lighting.nightVision = data.at("lighting").value("nightVision", value.lighting.nightVision);

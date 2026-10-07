@@ -170,7 +170,6 @@ schematic::PlacementSet schematicSet;
 std::vector<schematic::session::FileEntry> schematicFiles;
 std::chrono::steady_clock::time_point schematicFilesScanned{};
 std::string largeSchematicConfirmed; // a large file the player chose to load
-constexpr std::uint64_t largeSchematicCells = 256 * 1024; // where drawing gets heavy (to be measured)
 ShapesLayout schematicsDisplayed;
 int schematicListFirst = 0, schematicFieldFirst = 0, schematicFieldSelected = -1;
 bool schematicDeleteArmed = false;
@@ -2485,10 +2484,6 @@ void placeSelectedFile() {
         return;
     }
     error.clear();
-    // A large one is heavy to draw: point to the option that lightens it.
-    if (auto structure = schematic::session::structure(schematicFiles[static_cast<size_t>(schematicIndex)].relative);
-        structure && structure->cells() > largeSchematicCells && !Runtime::instance().preferences().schematic.lightDrawing)
-        showMessageToast(translated("schematic.lightDrawingTip"));
     refreshSchematics(false);
     selectSchematicTab(SchematicTab::Placements);
     pickSchematic(SchematicPick::Placement, static_cast<int>(schematicSet.placements.size()) - 1);
@@ -3223,15 +3218,16 @@ void drawEditText(MinecraftUIRenderContext& context, float x, float top, float h
     if (!input.selectedAll() && ms / 530 % 2 == 0) fill(context, x + w + 1, markTop, 1, markHeight, palette::text);
 }
 // ---- Schematic menu ----
-// The ring is sized for the widest name of every level, so it keeps its
-// size and place while moving between levels.
-float menuRingWidth = 96;
-RadialLayout menuLayout(glm::vec2 size, int count = -1) {
-    if (count < 0)
-        count = schematicMenu && schematicMenu->category >= 0
-            ? static_cast<int>(schematic::menu::categories[static_cast<size_t>(schematicMenu->category)].items.size())
-            : static_cast<int>(schematic::menu::categories.size());
-    return RadialLayout::at(size.x, size.y, count, menuRingWidth, Runtime::instance().preferences().schematic.menuSmall);
+// The ring is sized from the widest name and the widest center line of
+// every level, measured when drawn, so it keeps its size and place while
+// moving between levels. Small, everything is drawn at this scale.
+constexpr float menuSmallScale = .8f;
+RadialLayout::Sizes menuSizes{96, 26, 130, 64};
+RadialLayout menuLayout(glm::vec2 size) {
+    int count = schematicMenu && schematicMenu->category >= 0
+        ? static_cast<int>(schematic::menu::categories[static_cast<size_t>(schematicMenu->category)].items.size())
+        : static_cast<int>(schematic::menu::categories.size());
+    return RadialLayout::at(size.x, size.y, count, menuSizes, Runtime::instance().preferences().schematic.menuSmall);
 }
 bool isKeyOf(input::Action action, int key) {
     auto chord = input::effectiveChord(Runtime::instance().preferences().bindings, action);
@@ -3341,18 +3337,29 @@ void renderSchematicMenu(MinecraftUIRenderContext& context, glm::vec2 size, glm:
     static constexpr std::array<float, 3> dims{0.f, .12f, .35f};
     float dim = dims[static_cast<size_t>(std::clamp(preferences.schematic.menuBackground, 0, 2))];
     if (dim > 0) fill(context, 0, 0, size.x, size.y, Rgb{0, 0, 0}, dim);
-    // One width for every level (measured once per opening).
-    float widest = 72;
+    float s = preferences.schematic.menuSmall ? menuSmallScale : 1.f;
+    auto width = [&](std::string const& text) { return textWidthScaled(context, text, s); };
+    static constexpr std::array<char const*, 4> targets{"schematic.target.placement", "schematic.target.corner1",
+        "schematic.target.corner2", "schematic.target.area"};
+    static constexpr std::array<char const*, 6> hints{"schematic.menu.hintList", "schematic.menu.hintClose", "schematic.menu.hintStep",
+        "schematic.menu.hintStepClick", "schematic.menu.hintRun", "schematic.menu.hintBack"};
+    // Sizes for every level at once, so nothing moves between levels.
+    float widest = 72 * s, centerWide = 100 * s;
     for (auto const& category : menu::categories) {
-        widest = std::max(widest, textWidth(context, translated(category.label)) + 16);
-        for (auto const& item : category.items) widest = std::max(widest, textWidth(context, translated(item.label)) + 16);
+        widest = std::max(widest, width(translated(category.label)) + 16 * s);
+        centerWide = std::max(centerWide, width(translated(category.label)) + 16 * s);
+        for (auto const& item : category.items) widest = std::max(widest, width(translated(item.label)) + 16 * s);
     }
-    menuRingWidth = widest;
+    for (auto const* key : hints) centerWide = std::max(centerWide, width(translated(key)) + 16 * s);
+    for (auto const* key : targets) centerWide = std::max(centerWide, width(translated("schematic.menu.target", translated(key))) + 16 * s);
+    float line = 11 * s, title = 16 * s;
+    menuSizes = {widest, RadialLayout::itemHeight(s), centerWide, title + 3 * s + 4 * line + 3 * s};
     auto l = menuLayout(size);
     int hover = l.hit(pointer.x, pointer.y);
     bool list = schematicMenu->category < 0;
     auto const& category = list ? menu::categories[0] : menu::categories[static_cast<size_t>(schematicMenu->category)];
     menu::Item const* hovered = nullptr;
+    float textInset = boxTextInset() * s;
     for (int i = 0; i < l.count; ++i) {
         std::string name, value;
         if (list) name = translated(menu::categories[static_cast<size_t>(i)].label);
@@ -3362,50 +3369,49 @@ void renderSchematicMenu(MinecraftUIRenderContext& context, glm::vec2 size, glm:
             value = menuValue(item);
             if (i == hover) hovered = &item;
         }
-        float h = value.empty() ? ShapesLayout::rowHeight + 2 : RadialLayout::itemHeight;
+        float h = value.empty() ? 16 * s : menuSizes.itemHeight;
         float x = std::round(l.itemX(i) - widest / 2), y = std::round(l.itemY(i) - h / 2);
         panel(context, x, y, widest, h, .86f);
         frame(context, x, y, widest, h, palette::white, .14f);
         rowBackground(context, x, y, widest, h, i == hover, false);
-        label(context, x + 4, y + 2 + boxTextInset(), widest - 8, name, palette::text, Align::Center);
-        if (!value.empty()) label(context, x + 4, y + 13 + boxTextInset(), widest - 8, value, palette::dim, Align::Center);
+        labelScaled(context, x + 4, y + 3 * s + textInset, widest - 8, name, s, palette::text, Align::Center);
+        if (!value.empty()) labelScaled(context, x + 4, y + 14 * s + textInset, widest - 8, value, s, palette::dim, Align::Center);
     }
-    // The center: where the menu is, what Move moves, and what a click would do.
-    std::string title = translated(list ? "schematic.menu.title" : category.label);
+    // The center: where the menu is, what Move moves, and what each button does.
     std::vector<std::pair<std::string, Rgb>> lines;
     if (!list && schematicMenu->category == menu::moveCategory) {
-        static constexpr std::array<char const*, 4> targets{"schematic.target.placement", "schematic.target.corner1",
-            "schematic.target.corner2", "schematic.target.area"};
         static constexpr std::array<Rgb, 4> colors{palette::accent, Rgb{1.f, .4f, .35f}, Rgb{.45f, .65f, 1.f}, palette::white};
         auto t = static_cast<size_t>(schematic::actions::target());
         lines.push_back({translated("schematic.menu.target", translated(targets[t])), colors[t]});
     }
-    if (list) lines.push_back({translated("schematic.menu.hintList"), palette::faint});
+    auto hint = [&](char const* key) { lines.push_back({translated(key), palette::faint}); };
+    if (list) { hint("schematic.menu.hintList"); hint("schematic.menu.hintClose"); }
     else {
-        if (hovered) lines.push_back({translated(hovered->stepper() ? "schematic.menu.hintStep" : "schematic.menu.hintRun"), palette::faint});
-        lines.push_back({translated("schematic.menu.hintBack"), palette::faint});
+        if (hovered && hovered->stepper()) { hint("schematic.menu.hintStep"); hint("schematic.menu.hintStepClick"); }
+        else if (hovered) hint("schematic.menu.hintRun");
+        hint("schematic.menu.hintBack");
     }
-    float cw = textWidth(context, title) + 16;
-    for (auto const& [text, color] : lines) cw = std::max(cw, textWidth(context, text) + 16);
-    cw = std::min(cw, std::max(60.f, 2 * l.rx - widest - 8));
-    float ch = 16 + 2 + 11 * static_cast<float>(lines.size()) + 4;
+    float cw = menuSizes.centerWidth, ch = menuSizes.centerHeight;
     float cx = std::round(l.cx - cw / 2), cy = std::round(l.cy - ch / 2);
     panel(context, cx, cy, cw, ch, .9f);
     frame(context, cx, cy, cw, ch, palette::white, .14f);
-    label(context, cx + 4, cy + 3 + boxTextInset(), cw - 8, title, palette::text, Align::Center);
-    fill(context, cx + 1, cy + 16, cw - 2, 1, palette::white, .14f);
-    float y = cy + 19;
+    labelScaled(context, cx + 4, cy + 4 * s + textInset, cw - 8, translated(list ? "schematic.menu.title" : category.label), s,
+        palette::text, Align::Center);
+    fill(context, cx + 1, cy + title, cw - 2, 1, palette::white, .14f);
+    float y = cy + title + 3 * s;
     for (auto const& [text, color] : lines) {
-        label(context, cx + 4, y + boxTextInset(), cw - 8, text, color, Align::Center);
-        y += 11;
+        labelScaled(context, cx + 4, y + textInset, cw - 8, text, s, color, Align::Center);
+        y += line;
     }
     // A quiet pointer to the adjust key while it is unbound.
     if (hovered && hovered->stepper() && schematic::menu::repeatable(std::get<menu::Stepper>(hovered->what))
         && input::effectiveChord(preferences.bindings, input::Action::AdjustSchematic).empty()) {
         auto tip = translated("schematic.menu.hintAdjust");
-        float tw = std::min(textWidth(context, tip) + 8, size.x - 8);
-        float tx = std::round(std::clamp(l.cx - tw / 2, 4.f, size.x - tw - 4)), ty = std::round(cy + ch + 3);
-        label(context, tx + 4, ty, tw - 8, tip, palette::faint, Align::Center);
+        float tw = std::min(width(tip) + 8, size.x - 8);
+        float tx = std::round(std::clamp(l.cx - tw / 2, 4.f, size.x - tw - 4));
+        float ty = std::round(l.cy + l.ry + menuSizes.itemHeight / 2 + 4);
+        if (ty + line > size.y) ty = std::round(l.cy - l.ry - menuSizes.itemHeight / 2 - line - 4);
+        labelScaled(context, tx + 4, ty, tw - 8, tip, s, palette::faint, Align::Center);
     }
     context.flushText(0, std::nullopt);
 }

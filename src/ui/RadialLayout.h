@@ -6,26 +6,31 @@
 namespace lamium::ui {
 // A ring of `count` items around a center panel, the first at the top and
 // going clockwise (the schematic menu, BACKLOG L-93). Centered, or in the
-// lower right so the view stays free. The center stays put whatever the
-// count, so switching levels never moves the menu. GUI units; pure.
+// lower right so the view stays free. The ring is sized for a full ring of
+// the given item and center sizes, so no two items and no item and the
+// center overlap, and it keeps its size and place on every level. GUI
+// units; pure.
 struct RadialLayout {
     static constexpr int maxCount = 8;
-    static constexpr float itemHeight = 26, gap = 6;
+    static constexpr float gap = 5;
     float cx = 0, cy = 0, rx = 0, ry = 0;
     int count = 0;
-    // `itemWidth` is the widest item's width; `small` shrinks the ring.
-    static RadialLayout at(float screenW, float screenH, int count, float itemWidth, bool small) {
+    struct Sizes { float itemWidth, itemHeight, centerWidth, centerHeight; };
+    // An item with a value line under its name, at a drawing scale.
+    static constexpr float itemHeight(float scale) { return 26 * scale; }
+    static RadialLayout at(float screenW, float screenH, int count, Sizes s, bool small) {
         RadialLayout l;
         l.count = std::clamp(count, 1, maxCount);
-        float scale = small ? .72f : 1.f;
-        // Wide enough that neighbors on a full ring clear each other, but
-        // never wider than the screen allows.
-        l.rx = std::min(scale * std::max(150.f, itemWidth * 1.35f), screenW / 2 - itemWidth / 2 - gap);
-        l.ry = std::min(scale * 104.f, screenH / 2 - itemHeight / 2 - 40);
-        l.rx = std::max(l.rx, 40.f);
-        l.ry = std::max(l.ry, 30.f);
-        float halfW = l.rx + itemWidth / 2 + gap, halfH = l.ry + itemHeight / 2 + gap;
-        if (small) { l.cx = screenW - halfW - 8; l.cy = screenH - halfH - 26; }
+        constexpr float diagonal = std::numbers::sqrt2_v<float> / 2; // sin and cos of 45 degrees
+        // Top and its diagonal neighbor apart sideways, the diagonal and the
+        // side item apart vertically. An item at angle t clears the center
+        // when rx|cos t| >= a or ry|sin t| >= b; on the ellipse that holds for
+        // every t once (a/rx)^2 + (b/ry)^2 <= 1.
+        float a = s.centerWidth / 2 + s.itemWidth / 2 + gap, b = s.centerHeight / 2 + s.itemHeight / 2 + gap;
+        l.rx = std::max((s.itemWidth + gap) / diagonal, a * 1.25f);
+        l.ry = std::max((s.itemHeight + gap) / diagonal, b / std::sqrt(1 - (a / l.rx) * (a / l.rx)));
+        float halfW = l.rx + s.itemWidth / 2 + gap, halfH = l.ry + s.itemHeight / 2 + gap;
+        if (small) { l.cx = screenW - halfW - 6; l.cy = screenH - halfH - 26; }
         else { l.cx = screenW / 2; l.cy = screenH / 2; }
         l.cx = std::max(halfW, l.cx);
         l.cy = std::max(halfH, l.cy);

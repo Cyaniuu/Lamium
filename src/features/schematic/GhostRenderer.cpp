@@ -2,6 +2,7 @@
 #include "features/schematic/SchematicSession.h"
 #include "features/schematic/SchematicItems.h"
 #include "features/schematic/Selection.h"
+#include "features/schematic/GhostFaces.h"
 #include "app/AtomicFile.h"
 #include "ui/Localization.h"
 #include "app/Runtime.h"
@@ -208,7 +209,11 @@ std::mutex pointMutex;
 std::optional<Point> pointAt;
 Clock::time_point pointUntil{};
 std::uint64_t builtRevision = 0;
-bool lightDrawing = false; // the option the built sections were made with
+// The cells the camera is in (eye and feet). Seen from inside, the ghosts
+// around them are walls: these cells are not drawn and count as open, so
+// the faces toward them are.
+std::array<std::optional<Point>, 2> carved;
+bool isCarved(Point p) { return std::any_of(carved.begin(), carved.end(), [&](auto const& c) { return c && *c == p; }); }
 int builtDimension = -1;
 std::atomic<bool> releaseRequested{false};
 ll::event::ListenerPtr exitListener;
@@ -328,25 +333,50 @@ void finishColors(Tessellator& batch, float r, float g, float b) {
 
 // A ghost with an opaque full block on all six sides cannot be seen: real
 // ones, or ghosts that will be drawn there (shown layers, nothing placed).
-bool enclosed(BlockSource& region, session::Shown const& shown, Resolved const& blocks, Point at) {
-    static constexpr int sides[6][3] = {{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}};
+// An opaque full ghost will be drawn at `n`: nothing real is there, the
+// placement asks for an opaque full block in a shown layer, and the camera is
+// not in that cell.
+bool ghostOpaqueAt(BlockSource& region, session::Shown const& shown, Resolved const& blocks, Point n) {
+    if (isCarved(n)) return false;
     auto const& structure = *shown.structure;
     auto const& placement = shown.placement;
     Size placed = placedSize(structure.size, placement.placement.rotation);
     Point const& origin = placement.placement.origin;
-    for (auto const& d : sides) {
+    auto local = toLocal(structure.size, placement.placement, n);
+    if (!local || !layerShown(placement.layers, placed, {n.x - origin.x, n.y - origin.y, n.z - origin.z})) return false;
+    auto index = structure.blocks[static_cast<size_t>(structure.cell(local->x, local->y, local->z))];
+    if (index == voidCell) return false;
+    Block const* ghost = blocks.blocks[static_cast<size_t>(index)];
+    return ghost && ghost->getBlockType().mIsOpaqueFullBlock && region.getBlock(BlockPos{n.x, n.y, n.z}).isAir();
+}
+bool enclosed(BlockSource& region, session::Shown const& shown, Resolved const& blocks, Point at) {
+    for (auto const& d : faces::offsets) {
         Point n{at.x + d[0], at.y + d[1], at.z + d[2]};
-        Block const& there = region.getBlock(BlockPos{n.x, n.y, n.z});
-        if (there.getBlockType().mIsOpaqueFullBlock) continue;
-        if (!there.isAir()) return false;
-        auto local = toLocal(structure.size, placement.placement, n);
-        if (!local || !layerShown(placement.layers, placed, {n.x - origin.x, n.y - origin.y, n.z - origin.z})) return false;
-        auto index = structure.blocks[static_cast<size_t>(structure.cell(local->x, local->y, local->z))];
-        if (index == voidCell) return false;
-        Block const* ghost = blocks.blocks[static_cast<size_t>(index)];
-        if (!ghost || !ghost->getBlockType().mIsOpaqueFullBlock) return false;
+        if (isCarved(n)) return false;
+        if (region.getBlock(BlockPos{n.x, n.y, n.z}).getBlockType().mIsOpaqueFullBlock) continue;
+        if (!ghostOpaqueAt(region, shown, blocks, n)) return false;
     }
     return true;
+}
+// Drops the quads of a just tessellated ghost that lie on a side touching an
+// opaque ghost: unseen from outside, and they fought with the neighbor's own
+// face. Real neighbors are already culled by the tessellator. A dropped
+// quad collapses to one point, so no other vertex data has to move.
+void cullAgainstGhosts(Tessellator& batch, size_t from, BlockSource& region, session::Shown const& shown, Resolved const& blocks, Point at) {
+    auto& positions = batch.mMeshData->mPositions.get();
+    std::array<std::optional<bool>, 6> hidden;
+    for (size_t q = from; q + 4 <= positions.size(); q += 4) {
+        std::array<faces::Vertex, 4> quad;
+        for (size_t k = 0; k < 4; ++k) quad[k] = {positions[q + k].x, positions[q + k].y, positions[q + k].z};
+        int side = faces::sideOf(quad, at.x, at.y, at.z);
+        if (side < 0) continue;
+        auto& known = hidden[static_cast<size_t>(side)];
+        if (!known) {
+            auto const& d = faces::offsets[side];
+            known = ghostOpaqueAt(region, shown, blocks, {at.x + d[0], at.y + d[1], at.z + d[2]});
+        }
+        if (*known) for (size_t k = 1; k < 4; ++k) positions[q + k] = positions[q];
+    }
 }
 // The cells of one section inside a placement's box.
 template <class Visit>
@@ -438,9 +468,10 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
                     marks.push_back(mark);
                     continue;
                 }
-                if (lightDrawing && enclosed(region, shown, blocks, {x, y, z})) continue;
+                if (isCarved({x, y, z}) || enclosed(region, shown, blocks, {x, y, z})) continue;
                 size_t before = batch.mMeshData->mPositions->size();
                 own.tessellateInWorld(batch, *expected, pos, false);
+                cullAgainstGhosts(batch, before, region, shown, blocks, {x, y, z});
                 auto& positions = batch.mMeshData->mPositions.get();
                 if (positions.size() == before) {
                     // No block mesh: block entities draw through their renderer;
@@ -1012,10 +1043,6 @@ void drawNameTags(ScreenContext& screen, IClientInstance& client, BlockSource& r
 void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, LocalPlayer& player) {
     auto snapshot = session::snapshot();
     int dimension = static_cast<int>(player.getDimensionId());
-    if (bool light = Runtime::instance().snapshot()->schematic.lightDrawing; light != lightDrawing) {
-        lightDrawing = light;
-        sections.clear();
-    }
     if (snapshot.revision != builtRevision || dimension != builtDimension) {
         // Placements whose draw key is unchanged keep their resolved blocks
         // and built sections (moved to their new index); only changed ones
@@ -1057,6 +1084,27 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
     ScreenContext& screen = context.mScreenContext;
     Vec3 const camera = context.mImpl->mCameraPosition;
     auto& region = player.getDimensionBlockSource();
+    // When the camera moves to another cell, rebuild the sections around
+    // the old and the new cells (their faces toward the camera change).
+    {
+        auto cellAt = [](double x, double y, double z) {
+            return Point{static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)), static_cast<int>(std::floor(z))};
+        };
+        std::array<std::optional<Point>, 2> now{cellAt(camera.x, camera.y, camera.z), cellAt(camera.x, camera.y - 1.62, camera.z)};
+        if (now != carved) {
+            auto section = [](int v) { return static_cast<int>(std::floor(v / static_cast<double>(sectionSize))); };
+            auto mark = [&](std::optional<Point> const& c) {
+                if (!c) return;
+                for (int dx = -1; dx <= 1; ++dx) for (int dy = -1; dy <= 1; ++dy) for (int dz = -1; dz <= 1; ++dz)
+                    for (auto& [key, built] : sections)
+                        if (std::get<1>(key) == section(c->x + dx) && std::get<2>(key) == section(c->y + dy) && std::get<3>(key) == section(c->z + dz))
+                            built.due = Clock::now();
+            };
+            for (auto const& c : carved) mark(c);
+            for (auto const& c : now) mark(c);
+            carved = now;
+        }
+    }
 
     // What the camera can see: a section entirely outside one side of the
     // view is neither drawn nor built before the ones in view. Without the
