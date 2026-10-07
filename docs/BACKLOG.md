@@ -91,7 +91,9 @@ L-item wins. Every entry names what the task is, not only its number.
    L-79 carved pumpkin and spyglass frame draw path (cheap-model friendly
    trace/test steps), L-71 starting a glide from the mod, L-57
    client counters, L-30 Ender Dragon part hitboxes, L-33 mob growth and
-   breeding timers.
+   breeding timers, L-96 Connected Textures (glass first; step 1 is the
+   tessellator spike), L-105 performance profiling (measure before any
+   optimization).
 6. **L-73 architecture review:** agreed 2026-09-30, in progress step by
    step (order in the L-item); step 13 goes with L-15 breaking.
 7. **Before a release:** the pre-release checks below. 0.1.7 waits until
@@ -476,17 +478,52 @@ and border options come later.
 Approach to test (a feasibility hint is recorded in PROVENANCE.md): change how
 chunk faces are tessellated, look at the neighbor through the block source and
 crop the texture coordinates at the touching edge; changing the setting marks
-chunks dirty so they rebuild.
+chunks dirty so they rebuild. The schematic ghosts already drive
+`BlockTessellator::tessellateInWorld`, `Tessellator` and render materials, so
+the feasibility is high; the difference is that this changes vanilla's chunk
+meshes.
 Constraints:
 - This changes vanilla chunk tessellation, which is more version-sensitive
   than the schematic ghosts' private tessellator. Capability-gated and fail
   open: on an unverified game version do nothing.
 - Bound the neighbor lookups; a toggle rebuilds chunks.
-- Glass is the research target. If the approach extends cleanly, a
-  table-driven design (which blocks, what they connect to, which edges are
-  cropped) can be considered later; do not require one up front.
-  Resource-pack-defined tile sets are not promised. Widen beyond glass only
-  after surveying which vanilla blocks have an inner border line.
+- Glass is the research target. Resource-pack-defined tile sets are not
+  promised. Widen beyond glass only after surveying which vanilla blocks have
+  an inner border line.
+Layering (proposed 2026-10-07, from the maintainer's notes): the first
+user-visible feature stays glass, but the code is split so it can grow
+without a glass-only hack that mixes rendering and connection rules.
+1. Render backend: from `BlockTessellator` / `Tessellator`, get the block,
+   position, face, original texture and block source. Everything
+   version-sensitive stays here.
+2. Connection core, pure and tested (`tests/`): does this neighbor connect
+   (first: the same block; stained glass only with the same color), and the
+   face-neighbor mask in the face's plane (up/down/left/right, and the four
+   corners for later methods).
+3. Method: only "edge trim" at first, cropping the border UVs on connected
+   sides of the loaded (vanilla or resource-pack) texture. No extra
+   textures and no properties parser.
+4. Later methods (a 47-tile set chosen from the 8-neighbor mask, horizontal,
+   vertical) only when a block that needs another sprite is wanted
+   (bookshelf, sandstone). No compatibility with other connected-texture
+   formats is claimed until it is built.
+5. Pane geometry and hidden inner faces are a separate backend from the
+   texture choice; do not force them into the cube-face path.
+Settings name: "Connected Textures", with glass as its first target. No
+rule table or resource-pack format is published at first.
+Order:
+1. Research spike: on one face of plain glass, get block, position, face,
+   texture and block source reliably from the tessellator.
+2. Connection core and edge trim as pure logic with tests.
+3. Glass blocks: clear glass, then stained glass (same color only by
+   default; different colors connecting is not the default).
+4. Lifecycle: block updates, chunk and subchunk borders, chunk load, setting
+   on/off, resource-pack reload, world and dimension change (the setting
+   marks render chunks dirty).
+5. Glass panes through their own tessellation backend.
+6. Optional 47-tile spike after glass is stable: the pure 8-neighbor to
+   47-pattern mapping and a replacement-texture path, to decide whether
+   Lamium should grow a general connected-texture engine.
 Research output: the function(s) that can be intercepted on this game
 version, whether the crop works for glass and panes, the cost on a large
 view distance, and how it behaves with Vibrant Visuals / Deferred rendering.
@@ -1316,6 +1353,53 @@ breeding cooldown. The client SDK has `AgeableComponent::mAge` and
 - otherwise show only "baby" / "in love" states, and say so in the help text.
 Estimating from observed events (feeding speeds growth up) is not accurate
 enough to show as a time.
+
+### L-105 Performance: find the real bottleneck before optimizing
+Kind: Research **(strong model)**. Chosen by the maintainer 2026-10-07 from
+their notes.
+Status: open. Step 1 only; no optimization is built until it names a
+bottleneck.
+Why: Hide particles / weather / overlays avoid some drawing, but they are
+situational wins, not a way to large frame-time gains. Bedrock is already
+native C++ on RenderDragon, so gains that come easily on other platforms may
+already be present; measure what is expensive here first. The ideas worth
+testing are known in general terms (sources for the hypotheses are in
+PROVENANCE.md): rebuild terrain meshes less often or off the critical path,
+submit many small draws as fewer batches, skip entities and block entities
+that cannot be seen, and cache or make event-driven repeated per-tick work.
+Direction: Lamium does not become a renderer replacement. Prefer bounded,
+measurable substitutions that skip, cache, batch or defer one expensive
+vanilla path while keeping vanilla behavior, capability-gated and fail open
+like every version-sensitive path.
+Steps:
+1. Profiler spike (a build option, like the trace options, never on in a
+   release): measure per frame, in heavy real scenes (a village, a large
+   farm, a storage room, flying fast over new terrain), frame time and its
+   1 % lows, and as far as hooks allow: terrain/chunk drawing, chunk mesh
+   rebuild count and time (and on which thread), entity and block-entity
+   drawing, particles, HUD/UI, mesh draw-call counts. Record results in
+   VALIDATION-LOG.md.
+2. Pick at most one or two dominant costs and write a bounded candidate per
+   cost (what is skipped, cached, batched or deferred; how vanilla behavior
+   is kept; how it fails open). Each becomes its own L-item with the
+   maintainer.
+Areas to look at first:
+- Chunk mesh rebuild scheduling: what triggers rebuilds, how much runs on the
+  render or main thread, whether some can be deferred without gameplay
+  change. A likely cause of stutter while turning or moving.
+- Draw submission: whether meshes, entities, block entities, particles or
+  UI still issue many small draws or state changes.
+- Visibility: whether entities and block entities behind walls, underground
+  or in other rooms still cost a lot. Conservative culling could matter in
+  farms, villages and storage.
+- Repeated simulation work (lookups, per-tick scans, collision checks,
+  short-lived allocations), only after the profile points there.
+- Particles: Hide particles skips drawing, not necessarily their creation
+  and updates. A "skip particle processing" path may help particle-heavy
+  scenes; it is not the main route.
+Success: better frame time and 1 % lows in heavy scenes, not a higher
+average in an empty world. One proven large bottleneck beats many guessed
+micro-optimizations.
 
 ---
 

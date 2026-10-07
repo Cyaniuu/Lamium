@@ -76,6 +76,13 @@ it) while doing so.
 - Java mods: MaLiLib, Tweakeroo, MiniHUD, Litematica, Item Scroller, Client
   Sort and similar inventory sorters, Quark, Inventory Profiles Next, Mouse
   Wheelie, Jade / WAILA, AppleSkin, Xaero's Minimap and World Map.
+- Continuity (Java): its design as described publicly is the source of the
+  L-96 layering idea (connection rules apart from texture methods, a
+  47-tile method later). Its source is not opened.
+- Sodium, ImmediatelyFast, Lithium and EntityCulling (Java): their published
+  approaches are the source of the L-105 hypotheses (mesh rebuild
+  scheduling, batching, caching, occlusion culling). Their source is not
+  opened.
 
 If reference-only source later becomes incorporated source, move it to group 2
 in the same change that first imports code. Record the upstream repository and
