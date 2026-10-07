@@ -227,7 +227,7 @@ drawing heads, doors and honey blocks; how far and how many entity name
 tags show. (The menu animation was moved before 0.1.7 the same day.)
 To check before 0.1.7: see [Pre-release checks](BACKLOG.md#pre-release-checks).
 - Placements on the maps (built 2026-10-07; look chosen by the agent at the
-  maintainer's request, not yet checked): while Schematics are on, each
+  maintainer's request, checked in game 2026-10-08): while Schematics are on, each
   placement in the viewed dimension shows its footprint from above as a cyan
   outline (the map palette's cyan) with a black edge and a faint fill, under
   the waypoints; the selected one is outlined white. The minimap shows

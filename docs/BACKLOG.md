@@ -69,34 +69,32 @@ Keep this section short. It is only the ordering layer; task details and status
 live in the L-items below. If this summary ever disagrees with an L-item, the
 L-item wins. Every entry names what the task is, not only its number.
 
-1. **Current batch (chosen 2026-10-07, one in-game check at the end):**
-   L-108 target card overflow fix; L-15 step 1 breaking restrictions
-   together with L-73 step 13 (shared mining-session control); L-93
-   schematic placement markers on the minimap and world map.
-2. **Small and medium features**, picked by the maintainer:
+1. **Bugs:** L-110 overlay faces z-fight with the blocks they cover
+   (restriction faces, Shapes; one shared rule with the ghosts).
+2. **Before the next release or 0.2.0 — L-111 integration between
+   features:** Design with the maintainer first (scope, risks, order).
+3. **Small and medium features**, picked by the maintainer:
    - L-90 Simplified Chinese localization: built and checked in game; waits
      for a native review of the wording.
-3. **Placement and breaking — L-15 restrictions and L-59 held placement
-   style:** L-15 breaking is in the current batch; L-15 placement and L-59
-   wait for the maintainer's go.
-4. **Map — L-60 minimap, waypoints and world map:**
+4. **Placement and breaking — L-15 restrictions and L-59 held placement
+   style:** L-15 breaking built and checked; the restriction plan is reopened
+   for Design before placement. L-59 waits for the maintainer's go.
+5. **Map — L-60 minimap, waypoints and world map:**
    core built and checked locally and on an external BDS. Runs in parallel
    with the small/medium features; neither ranks above the other. Open:
    waypoint server storage checks and L-86 radar-face follow-ups. Details
    are in the L-item and MAP.md.
-5. **Schematic — L-93 load, place, project, verify and list materials:**
+6. **Schematic — L-93 load, place, project, verify and list materials:**
    included in 0.1.7 and checked locally. Choose the next accepted follow-up
    with the maintainer; the L-item lists them and SCHEMATIC.md retains the
    contract and build record. Server/broader coverage remains open.
-6. **Research when convenient:** L-79 carved pumpkin and spyglass frame draw
+7. **Research when convenient:** L-79 carved pumpkin and spyglass frame draw
    path (cheap-model friendly
    trace/test steps), L-71 starting a glide from the mod, L-57
    client counters, L-30 Ender Dragon part hitboxes, L-33 mob growth and
    breeding timers, L-96 Connected Textures (glass first; step 1 is the
    tessellator spike), L-105 performance profiling (measure before any
    optimization).
-7. **L-73 architecture review:** only step 13 remains, with L-15 breaking
-   (current batch).
 8. **Before a release:** the pre-release checks below. 0.1.7 was released
    on 2026-10-07; server checks of the 2026-10-06/07 work stay listed
    below as known gaps (Release policy does not require a full
@@ -217,106 +215,23 @@ unmet gates for versions already published:
 
 ## Bugs
 
-### L-108 Target card text overflows the card during its resize animation
-Kind: Bug. Reported by the maintainer 2026-10-07 while checking L-107.
-Status: fixed 2026-10-07 (`8366cb9`): while the card grows, its content
-waits until the easing background covers it (`cardContentFits`, tested);
-not yet checked in game.
-With animations on, switching the target from one with few lines to one with
-more (for example a block showing its properties) briefly draws the text
-outside the card. Expected: no text outside the card at any point while it
-resizes.
-Starting point: `InfoHud.cpp::drawTargetCard` eases only the background
-(`cardMorph`) from the previous box while the header and rows are drawn at the
-final size from the first frame, although the comment there says the content
-appears once the card settles. Also check targets whose identity
-(identifier and name) is unchanged but whose rows change. Validate with
-animations on and off, small to large and large to small, and FreeCamera.
-
-### L-73 Architecture review
-Kind: Refactor (strong model). Review done 2026-09-30 on main 4d1790b
-(read-only); classification and order agreed with the maintainer the same
-day. No rewrite: pure logic in headers, feature docs and validation records
-are sound. One commit per step; build + LamiumTests after each.
-Status: steps 1-10 done 2026-09-30. In-game checks 1 and 2 passed except
-Auto Attack/Use (fixed in 221edcb, rechecked the same day) and an occasional
-Breaking Restriction hold that stops breaking (cause unknown; carried into B
-and L-15). Step 9 concluded that no further camera split was useful: `Zoom`
-was renamed `CameraSessions` (file and class), with trace/probe code and
-detached-camera state already separated; the main file is 752 lines with 5
-`#if`. Step 10 (084b424) was checked in game. Steps 11 and 12 were dropped
-after review (see D). The only remaining step is 13 with L-15: built 2026-10-07
-(`MiningSession.h/.cpp`), waiting for the in-game check of all combinations.
-
-Fix (can cause wrong behavior)
-- A. Breaking Restriction and Tool Switch read and write their
-  `restartPending` flag before checking that the call is the client's own
-  player. In a local world the integrated server's player runs the same
-  GameMode calls (L-31), so it can consume the client's restart (a held
-  attack then does not resume) or restart the server's session; possibly
-  from another thread. Tool Protection already filters first. In game:
-  singleplayer, hold attack across a rejected block and back; Fetch from
-  inventory wait and restart while held.
-
-Tidy (agreed)
-- B. Shared mining-session control for Breaking Restriction, Tool Switch
-  (L-69) and Tool Protection (L-62). Their order is implicit in hook
-  priorities (Highest/High/Normal); each pause uses `stopDestroyBlock` and
-  each restart re-enters the whole chain through `startDestroyBlock`, which
-  Tool Protection counts as a new press and Tool Switch's stop hook sees as
-  its own. Do it with, or just before, the L-15 breaking step: pure header
-  and tests first, then move one feature per commit. In game: all
-  combinations.
-- C. Split `Zoom.cpp` (1,195 lines, 21 `#if`): trace/probe hooks and helpers
-  to `CameraTrace.cpp`; camera component save/restore (detach, offset,
-  body) to its own file; then decide whether Zoom (magnification, FOV,
-  wheel, sensitivity) moves out. Freelook and FreeCamera share one detached
-  session by design and stay together. Keep the `Zoom` facade (about 40
-  call sites). In game: Zoom, Freelook, FreeCamera, F5, dimension change,
-  leaving the world; also build with camera_trace and both probes.
-- D. `SettingsScreen.cpp` (1,878 lines). Closed after step 10 (maintainer,
-  2026-09-30): the Shapes view and the input listeners use 20+ screen-wide
-  variables and the Shapes list also renders inside the table, so a file
-  split would only move text behind a header of shared variables. Split it
-  when the screen grows again, after grouping its state first. Original
-  plan: The pure parts are already out
-  (SettingsTable, SettingsNavigation, ShapesLayout, ShapeEditor, NumberInput,
-  SearchQuery); what remains is about 80 file-scope variables under one
-  mutex. First, Enter/Esc/Tab while editing a number or a shape name saves
-  settings and shapes from inside the key event; defer that to the frame.
-  Then move the Shapes view and the input listeners to their own files. In
-  game: search, number entry, key binding, shape editing, HUD layout.
-- E. Runtime feature table: one ordered list of start/stop, stopped in
-  reverse. Correction (in-game check 2026-09-30): periodic input and the
-  automation trace must start in `load()`; they capture the button handlers
-  the client registers between load and enable. Moving them into enable()
-  (5e877e5) stopped Auto Attack/Use; 221edcb restores the load() start.
-- F. One budgeted trace helper instead of the four `trace(stage, value)`
-  copies (ElytraSwap, ToolGuard, HandRestock, InventoryMove) and Zoom's own
-  budget loops. The trace-only files (with stubs) already follow the rule;
-  keep `#ifdef` for all research traces.
-- G. SettingsStore fallbacks: 96 literal defaults repeat `Settings.h` (none
-  differ today; camera already uses the struct value). Use the struct value
-  everywhere and test that each empty section decodes to `Settings{}`. No
-  schema framework.
-- H. HideOffhand removes all three hooks on stop even when not installed;
-  give each an installed flag. No general HookSet (HideEffects needs
-  per-hook fail-open).
-
-Not now
-- Moving the totem watch out of `HandRestock.cpp` (about 50 lines sharing
-  Restock state, validated in game).
-- Test registration: every suite and test function is called today.
-- `settings::find()` linear scan, JSON write per change: profile first.
-  (`Runtime::preferences()` no longer locks; hot hooks use `snapshot()`,
-  667031e.)
-- Runtime log levels, renaming `Zoom`, test layers (BDS, computer-use): a
-  separate Research item if wanted.
-
-Order: 1 A; 2 test that empty sections decode to defaults; 3 G; 4 F; 5 H;
-6 E; 7 C trace/probe; 8 C camera state (in-game check); 9 decide on the Zoom
-split; 10 D deferred save; 11 D Shapes view; 12 D input listeners (in-game
-check); 13 B with L-15 (in-game check). In-game check 1 follows step 1.
+### L-110 Overlay faces z-fight with the blocks they cover
+Kind: Bug **(strong model)**. Reported by the maintainer 2026-10-08 while
+checking L-15 step 1.
+Status: open; recorded only.
+The breaking restriction's allowed-region faces flicker against the faces of
+the blocks they lie on, and Shapes faces show the same problem (seen earlier,
+not recorded until now). Schematic ghosts went through several rounds of the
+same problem (SCHEMATIC.md, the "looks" before `e09334d`).
+Expected: overlay faces never flicker against terrain at any distance or view.
+Starting point: `WorldOverlay.cpp` draws Shapes and the restriction faces
+through `drawShape` (faces inset 0.005 into their cell, mesh scaled toward the
+eye by `withTowardEye`); the schematic ghosts use their own rules
+(`faces::beyond`, near-camera handling). Compare the two, then give every
+world-space face overlay one shared, tested rule (pure geometry in a header)
+instead of per-feature fixes, so a new overlay does not repeat the problem.
+Validate Shapes, the restriction faces and the ghosts near and far, in
+Fancy/Simple/Vibrant Visuals, and with FreeCamera.
 
 ---
 
@@ -383,9 +298,13 @@ Kind: Design done (discussion with the maintainer, 2026-09-28); breaking is
 then Ready **(strong model)**, placement needs Research first. Replaces the
 current Breaking Restriction (capture/reset keys) and the unimplemented
 placement mode.
-Status: step 1 (breaking) built 2026-10-07 at the maintainer's go, with
-L-73 step 13; not yet checked in game (VALIDATION.md). Implementation notes:
-RESTRICTIONS.md. Placement (steps 2-3) still waits for the maintainer.
+Status: step 1 (breaking) built 2026-10-07 with L-73 step 13 and checked in
+game 2026-10-08 (VALIDATION-LOG). Implementation notes: RESTRICTIONS.md.
+Reopened for Design (maintainer, 2026-10-08): the plan dates from 2026-09-28
+and should be rethought before placement is built. Problems seen: too many
+modes to cycle through, and the placement mode has no key (and does nothing
+yet). Steps 2-3 below wait for that rethink; the breaking behavior that
+passed stays until it is replaced. Faces z-fighting: L-110.
 Decided 2026-10-07: breaking keeps the existing Breaking Restriction toggle
 and Cycle Breaking Mode bindings (no new default keys); the saved breaking
 mode carries over unchanged and Height band is added to the list.
@@ -649,7 +568,9 @@ Accepted follow-ups (2026-10-07; known gaps, not 0.1.7 blockers):
 
 Pick the next follow-up with the maintainer; the list is not an implementation
 order. Chosen 2026-10-07: placement markers on the minimap/world map,
-built the same day (look in SCHEMATIC.md), not yet checked in game. Runtime
+built the same day (look in SCHEMATIC.md) and checked in game 2026-10-08.
+Deeper map integration (toggling and editing placements from the map) is
+part of L-111. Runtime
 gaps stay under Pre-release checks and VALIDATION.
 
 ### L-57 Client info counters
@@ -706,6 +627,25 @@ breeding cooldown. The client SDK has `AgeableComponent::mAge` and
 - otherwise show only "baby" / "in love" states, and say so in the help text.
 Estimating from observed events (feeding speeds growth up) is not accurate
 enough to show as a time.
+
+### L-111 Integration between features (before the next release or 0.2.0)
+Kind: Design. Raised by the maintainer 2026-10-08 after checking the
+2026-10-07 batch; not chosen for building yet.
+Why: the features have matured on their own, and the links between them have
+weakened recently. Lamium is one mod, so they can work together more.
+Examples from the maintainer:
+- Map and Schematics: placements show on the maps (L-93 follow-up), but the
+  map cannot toggle their display or edit them the way it edits waypoints.
+  The same applies to Shapes.
+- The radial menu built for Schematics' many operations could serve the
+  whole mod's controls.
+- Block Restrictions (L-15) and similar overlays share drawing problems
+  (L-110).
+Constraints: the module split has real benefits (independent lifecycles,
+fail-open per feature, smaller blast radius). Decide with the maintainer
+what to integrate, the risks of each step and the order, before any
+implementation. Output: a short plan (possibly a demo) that turns into Ready
+items.
 
 ### L-109 Restore the death-time hotbar and inventory layout on pickup
 Kind: Design. Idea from the maintainer 2026-10-07; not chosen for building yet.

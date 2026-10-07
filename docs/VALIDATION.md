@@ -38,7 +38,7 @@ game result.
 | Sorting | 2026-09-22, local (inventory, large chest) | Screen closed mid-sort, latency, more container kinds |
 | Inventory transfer gestures (L-41, L-103; inventory screen: Shift + left on a worn item equips it and the held drag continues, a drag begun elsewhere moves worn items, `037a151`) | 2026-09-27, local (overall); 2026-10-07, inventory screen main inventory/hotbar in survival (`bd30648`), creative and adventure (`97c44c6`); drag re-entry (trace `163bb96`) | Trace-disabled drag re-entry; individual edge cases, multiplayer |
 | Tool Switch, hotbar (L-31) | 2026-09-25, local | |
-| Tool Switch, fetch from inventory (L-69) | 2026-09-30, local; light BDS pass | Trace-disabled build, latency; recheck after the shared mining session (L-73 B, 2026-10-07) |
+| Tool Switch, fetch from inventory (L-69) | 2026-09-30, local; light BDS pass | Trace-disabled build, latency; shared mining session (L-73 B) checked 2026-10-08, local |
 | Weapon Switch (L-67) | 2026-10-02, local (`20e8cb5`, enchantments on `7b702da`) | Servers, trident/mace |
 | Hand Restock (L-66) | 2026-09-30, local and BDS (trace builds): blocks, food, eggs, stew and water bucket, held use, largest-first and hotbar sources; 2026-10-07, threshold setting and smallest/largest order (`bd30648`, local) | Trace-disabled build, latency, screens/focus/dimension change during observation, 16-stack throwables other than eggs |
 | Offhand totems (L-68) | 2026-09-30, local; light BDS pass | Trace-disabled build |
@@ -50,12 +50,12 @@ game result.
 
 | Feature | Last confirmed | Not yet checked |
 |---|---|---|
-| Breaking Restriction, resume after a forbidden block (L-36) | 2026-09-30, local (mostly; see L-73 entry), capture/reset design | Replaced by L-15; recheck under the press-anchored design |
-| Breaking Restriction, press-anchored modes and height band (L-15 step 1) | Not seen in game (built 2026-10-07) | Every mode in survival and creative, held target changes, release/new press, Tool Switch and Tool Protection together (shared mining session, L-73 B), faces overlay, Status line, world exit and dimension change |
+| Breaking Restriction, resume after a forbidden block (L-36) | 2026-09-30, local, capture/reset design; 2026-10-08, local, press-anchored design (`178dc00`) | Servers |
+| Breaking Restriction, press-anchored modes and height band (L-15 step 1) | 2026-10-08, local (`178dc00`): all modes in survival, creative, re-anchoring, faces, Status, world exit and dimension change, with Tool Switch and Tool Protection | Servers; faces z-fight with blocks (L-110) |
 | Permanent Sneak, Permanent Sprint (L-43) | 2026-09-26, local | |
 | Edge Guard (L-40) | 2026-09-26, local | Servers |
 | Auto Attack / Auto Use (L-34) | 2026-09-30, local (build 221edcb) | Several clicks per update landing on servers |
-| Tool Protection (L-62) | 2026-09-30, local; light BDS pass: swap from inventory and hotbar, stop toast, strict child | Trace-disabled build, Unbreaking/Mending ordering, elytra replacement in flight; recheck after the shared mining session (L-73 B, 2026-10-07) |
+| Tool Protection (L-62) | 2026-09-30, local; light BDS pass: swap from inventory and hotbar, stop toast, strict child | Trace-disabled build, Unbreaking/Mending ordering, elytra replacement in flight; shared mining session (L-73 B) checked 2026-10-08, local |
 | Auto Elytra, experimental (L-70) | 2026-09-30, local; light BDS pass: key, firework jump, delayed chestplate, hand-worn elytra | Trace-disabled build; no automatic glide (L-71) |
 
 ## Information and overlays
@@ -68,7 +68,7 @@ game result.
 | Durability in the tooltip (L-92) | 2026-10-02, local on `8e7f8a9` | |
 | Saturation on the hunger bar (L-63) | 2026-10-02, local: outline, half marks, held-food preview, UI size, Pocket UI, creative on `70c440c`; values also on a server (trace `8a1214b`) | Resource packs with other drumsticks; hunger effect icons |
 | Offhand slot (L-75) | 2026-10-02, local: placement, count, empty frame, UI size, Pocket UI, F1 and inventory on `bb9cdb5` | Glint on shields (L-91); servers |
-| Target card (L-08, L-55, L-58, L-88) | 2026-09-28, local; absolute-HP hearts, five-line limit and boss bar fallback on `c6378e8` (2026-10-02); hides with F1 (L-107, `18e2cc8`, 2026-10-07) | |
+| Target card (L-08, L-55, L-58, L-88) | 2026-09-28, local; absolute-HP hearts, five-line limit and boss bar fallback on `c6378e8` (2026-10-02); hides with F1 (L-107, `18e2cc8`, 2026-10-07); no text outside the card while it resizes (L-108, `178dc00`, 2026-10-08) | |
 | Debug View and F3 keys (L-54, L-52) | 2026-09-28, local; 2026-10-06: LeviLamina in the first line, right column on screen at UI Profile 50/75/100% (`38373e9`) | |
 | Chunk Borders (L-10), Hitboxes (L-11, L-51) | 2026-09-27, local | Exact border shades side by side |
 | Light Level Overlay (L-16) | 2026-09-26, local | |
@@ -79,7 +79,7 @@ game result.
 | Radar mob faces, experimental (L-85) | 2026-10-02, local: faces opt-in, outline, hold key (`f225a72`) | A server (not reported separately); most mob kinds beyond about 25; silverfish, tadpole, camel, hoglin known gaps (L-86) |
 | Distant players on the map (L-89) | 2026-10-03, phone- and PC-hosted worlds: faded beyond range, sneak and Nether hide, disconnect/rejoin, PC rejoin, players opaque at any height (`a86b076`) | A dedicated server; the release build |
 | Waypoints, experimental (L-60 step 5, L-106) | 2026-10-01, local: 5a add prompt, minimap markers, death point, persistence (`3658749`); 5b world markers, three-way show with its key (`d71d35e`), smooth (`189c554`); 5c Waypoints screen (`8714c20`); 2026-10-07: F1 hides all in-world marker parts, configured display returns, also hides during FreeCamera (`775c8c0`) | Storage per server address and port on a server; individual While held key combinations with F1 not separately reported |
-| Schematic placements on the minimap and world map (L-93 follow-up) | Not seen in game (built 2026-10-07) | Outline position and size against the ghosts, rotated minimap, round minimap clipping, selected/hidden look on the world map, tiny footprints when zoomed out, other dimensions |
+| Schematic placements on the minimap and world map (L-93 follow-up) | 2026-10-08, local (`178dc00`): position against ghosts, rotating and round minimap, selected/hidden on the world map, far zoom | Other dimensions, servers |
 | Schematics, experimental (L-93) | 2026-10-03, local: loading/placing, ghosts, transforms, layers, persistence, checking/materials, HUD/keys/target line; 2026-10-07, local: entities, area save beyond render distance, open folder, corners/caret, menu/adjust key and animation; inside drawing without z-fighting/hollows (`e09334d`), final warning/list scrolling/pane fit (`f4e402d`); trace-disabled 0.1.7 release smoke (`b3c6555`) | Servers, other dimensions, large files, block entity data from files, performance; beds sometimes half drawn, heads/doors/honey as outlines. Accepted UI/rendering follow-ups are in L-93 and [SCHEMATIC.md](SCHEMATIC.md) |
 | Durability HUD, default off (L-61) | 2026-09-30: held-only display, three looks, offhand/armor order, gliding elytra row and layout editor on `87f11cd` (packs removed) | Leather armor's undyeable layer was missing (also in container previews); chunked icon pass in `e987861` unchecked. Elytra row removed (confirmed on the `f7d49cf` trace build); flight time parked |
 

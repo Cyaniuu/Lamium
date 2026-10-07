@@ -12,6 +12,33 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-108, L-15 step 1 with L-73 step 13, L-93 map placements (2026-10-08)
+
+By the maintainer, deployed `178dc00`, DLL
+`cac728be730a4a0260aa1b8590ff5cb0aa05af42fcd5dc0ff50c15f5f2e1d751`,
+Minecraft 1.26.51.01, local world, all trace options off. Confirmed every
+checklist item:
+- L-108: moving from a short target card to one with many block states and
+  back, the text never leaves the card; animations on and off.
+- L-15 breaking (survival): Layer keeps the first block's height, rejected
+  blocks are silent and breaking resumes on allowed ones; releasing and
+  pressing again re-anchors; Height band 2 digs a walking tunnel and the row
+  count applies; Plane, Line and Column behave as specified; the faint faces
+  show only while held and skip the targeted block; Status shows mode and
+  anchor; creative is restricted the same way. World exit and dimension
+  change leave no stale region; the capture/reset rows are gone.
+- L-73 step 13: with the restriction on, Tool Switch picks the right tool
+  inside the region and mining continues after an inventory fetch; Tool
+  Protection stops or swaps a nearly broken tool.
+- L-93 map placements: outlines match the ghosts on the minimap, follow a
+  rotating map and stay inside a round one; the world map shows outlines and
+  names, the selected one white and hidden ones faint with "(hidden)"; far
+  zoom still shows a small square.
+Reported issues: the restriction faces z-fight with the blocks under them,
+as Shapes faces do (L-110); the restriction modes and keys need a rethink
+(L-15 reopened for Design); feature integration should be strengthened
+(L-111). Not checked: servers, other dimensions for the map outlines.
+
 ## L-107 Lamium HUD hides with F1 (2026-10-07)
 
 By the maintainer, deployed `18e2cc8`, DLL

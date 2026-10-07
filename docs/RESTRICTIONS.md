@@ -74,8 +74,10 @@ session steps. They do not prove Minecraft hook or placement behavior.
 The capture/reset design had local-world evidence for breaking and
 resume-after-rejection (L-36, rechecked 2026-09-30), with an occasional held
 attack that stopped breaking unexplained. The press-anchored design and the
-shared mining session (2026-10-07) build and pass the tests; they have not
-been seen in game yet. Placement enforcement remains unimplemented. Do not claim packet
+shared mining session (2026-10-07) passed the in-game checklist in a local
+world on 2026-10-08 (VALIDATION-LOG); servers are unchecked. The faces
+z-fight with the blocks under them (L-110). The mode set and keys are being
+rethought before placement (L-15). Placement enforcement remains unimplemented. Do not claim packet
 suppression or complete enforcement from the tests or partial local checks.
 
 ## Placement integration research (SDK 26.51.3)
