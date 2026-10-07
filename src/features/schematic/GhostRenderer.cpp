@@ -71,6 +71,7 @@
 #include <cmath>
 #include <map>
 #include <optional>
+#include <set>
 #include <tuple>
 #include <vector>
 
@@ -131,7 +132,9 @@ std::map<SectionKey, Section> sections;
 std::vector<Resolved> resolved;
 std::vector<std::string> builtKeys; // drawKey of each resolved placement
 // Created once per cell; a null result is remembered too.
-std::map<std::tuple<int, int, int>, std::optional<std::shared_ptr<BlockActor>>> actors;
+// Keyed by the block as well: two placements may want different block
+// entities in one cell.
+std::map<std::tuple<int, int, int, Block const*>, std::optional<std::shared_ptr<BlockActor>>> actors;
 std::vector<std::pair<BlockPos, Block const*>> watched; // Recently looked-at cells and what was there.
 // Entities are looked up this often, and only this close to the player: the
 // client does not know entities beyond its tracking range.
@@ -178,6 +181,9 @@ struct SaveJob {
     std::uint64_t done = 0;
     std::map<Block const*, PaletteBlock> palette;
     Clock::time_point lastProgress = Clock::now(), lastReminder{};
+    // Entities are taken per column when it is read: the client forgets
+    // the ones far behind a player walking along a large area.
+    std::set<std::int64_t> entitiesSeen;
 };
 std::mutex saveMutex;
 std::optional<SaveRequest> pendingSave;
@@ -349,7 +355,7 @@ bool ghostOpaqueAt(BlockSource& region, session::Shown const& shown, Resolved co
     auto local = toLocal(structure.size, placement.placement, n);
     if (!local || !layerShown(placement.layers, placed, {n.x - origin.x, n.y - origin.y, n.z - origin.z})) return false;
     auto index = structure.blocks[static_cast<size_t>(structure.cell(local->x, local->y, local->z))];
-    if (index == voidCell) return false;
+    if (index == voidCell || static_cast<size_t>(index) >= blocks.blocks.size()) return false;
     Block const* ghost = blocks.blocks[static_cast<size_t>(index)];
     return ghost && ghost->getBlockType().mIsOpaqueFullBlock && region.getBlock(BlockPos{n.x, n.y, n.z}).isAir();
 }
@@ -390,23 +396,27 @@ void cullAgainstGhosts(Tessellator& batch, size_t from, BlockSource& region, ses
     }
 }
 // The cells of one section inside a placement's box.
+// `halo` widens the section by that many cells on every side.
 template <class Visit>
-void eachCell(session::Shown const& shown, SectionKey key, Visit&& visit) {
+void eachCell(session::Shown const& shown, SectionKey key, int halo, Visit&& visit) {
     auto const& placement = shown.placement;
     Size placed = placedSize(shown.structure->size, placement.placement.rotation);
     Point const& origin = placement.placement.origin;
     auto [index, sx, sy, sz] = key;
-    Point low{sx * sectionSize, sy * sectionSize, sz * sectionSize};
-    for (int x = std::max(low.x, origin.x); x < std::min(low.x + sectionSize, origin.x + placed.x); ++x)
-        for (int y = std::max(low.y, origin.y); y < std::min(low.y + sectionSize, origin.y + placed.y); ++y)
-            for (int z = std::max(low.z, origin.z); z < std::min(low.z + sectionSize, origin.z + placed.z); ++z)
+    Point low{sx * sectionSize - halo, sy * sectionSize - halo, sz * sectionSize - halo};
+    int span = sectionSize + 2 * halo;
+    for (int x = std::max(low.x, origin.x - halo); x < std::min(low.x + span, origin.x + placed.x + halo); ++x)
+        for (int y = std::max(low.y, origin.y - halo); y < std::min(low.y + span, origin.y + placed.y + halo); ++y)
+            for (int z = std::max(low.z, origin.z - halo); z < std::min(low.z + span, origin.z + placed.z + halo); ++z)
                 visit(x, y, z);
 }
 // The world's blocks in a section's cells, hashed: equal values mean nothing
 // there changed and the built meshes still hold.
 std::uint64_t signatureOf(BlockSource& region, session::Shown const& shown, SectionKey key) {
     std::uint64_t hash = 1469598103934665603ull;
-    eachCell(shown, key, [&](int x, int y, int z) {
+    // One cell around the section too: its border ghosts' faces and
+    // enclosure depend on the neighbors there.
+    eachCell(shown, key, 1, [&](int x, int y, int z) {
         BlockPos pos{x, y, z};
         auto* chunk = region.getChunkAt(pos);
         auto value = chunk && chunk->mLoadState->load() >= ChunkState::Loaded ? reinterpret_cast<std::uintptr_t>(&region.getBlock(pos)) : 1;
@@ -447,7 +457,7 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
                 auto local = toLocal(structure.size, placement.placement, {x, y, z});
                 if (!local) continue;
                 auto paletteIndex = structure.blocks[static_cast<size_t>(structure.cell(local->x, local->y, local->z))];
-                if (paletteIndex == voidCell) continue;
+                if (paletteIndex == voidCell || static_cast<size_t>(paletteIndex) >= blocks.blocks.size()) continue;
                 Block const* expected = blocks.blocks[static_cast<size_t>(paletteIndex)];
                 bool expectsAir = structure.palette[static_cast<size_t>(paletteIndex)].isAir();
                 BlockPos pos{x, y, z};
@@ -630,7 +640,8 @@ void stepScan(BlockSource& region, session::Snapshot const& snapshot, int dimens
     }
     // A change to another placement, or to this one's name or visibility,
     // keeps the pass going.
-    auto key = drawKey(snapshot.placements[static_cast<size_t>(index)].placement);
+    auto key = drawKey(snapshot.placements[static_cast<size_t>(index)].placement)
+        + std::format("|{}", static_cast<void const*>(snapshot.placements[static_cast<size_t>(index)].structure.get()));
     if (scan.key != key) {
         scan = {};
         scan.key = key;
@@ -658,7 +669,7 @@ void stepScan(BlockSource& region, session::Snapshot const& snapshot, int dimens
         auto local = toLocal(structure.size, placement.placement, world);
         if (!local) continue;
         auto paletteIndex = structure.blocks[static_cast<size_t>(structure.cell(local->x, local->y, local->z))];
-        if (paletteIndex == voidCell) continue;
+        if (paletteIndex == voidCell || static_cast<size_t>(paletteIndex) >= blocks.blocks.size()) continue;
         auto const& entry = structure.palette[static_cast<size_t>(paletteIndex)];
         Block const* expected = blocks.blocks[static_cast<size_t>(paletteIndex)];
         bool visible = layerShown(placement.layers, placed, {ox, oy, oz});
@@ -787,6 +798,7 @@ void stepSave(BlockSource& region, LocalPlayer& player) {
         std::uint64_t cells = column.cells(height);
         if (read >= cells || !loaded(BlockPos{column.lowX, low.y, column.lowZ})) continue;
         int width = column.highX - column.lowX + 1, depth = column.highZ - column.lowZ + 1;
+        bool wasRead = false;
         for (; read < cells && budget; ++read, --budget) {
             // Within a column: z fastest, then x, then y.
             int z = column.lowZ + static_cast<int>(read % depth);
@@ -801,6 +813,26 @@ void stepSave(BlockSource& region, LocalPlayer& player) {
             Block const& extra = region.getExtraBlock(pos);
             if (!extra.isAir()) job.builder.setLiquid(cell, entry(extra));
             ++job.done;
+            wasRead = read + 1 >= cells;
+        }
+        if (wasRead && job.request.entities) {
+            AABB columnBox{Vec3{static_cast<float>(column.lowX), static_cast<float>(low.y), static_cast<float>(column.lowZ)},
+                           Vec3{static_cast<float>(column.highX + 1), static_cast<float>(low.y + height), static_cast<float>(column.highZ + 1)}};
+            for (Actor* actor : region.fetchEntities(&player, columnBox, false, false)) {
+                if (!actor || actor->mRemoved || actor->hasType(ActorType::Player) || structure.entities.size() >= maxEntities) continue;
+                if (!job.entitiesSeen.insert(actor->getOrCreateUniqueID().rawID).second) continue;
+                // What the client knows: type, position and facing.
+                auto feetAt = actor->getFeetPos();
+                auto rotation = actor->getRotation();
+                EntityRecord record{actor->getTypeName(), feetAt.x - low.x, feetAt.y - low.y, feetAt.z - low.z, {}};
+                record.data.set("identifier", {record.identifier});
+                nbt::List pos{nbt::Type::Float, {}}, turn{nbt::Type::Float, {}};
+                for (float v : {feetAt.x, feetAt.y, feetAt.z}) pos.items.push_back({v});
+                for (float v : {rotation.y, rotation.x}) turn.items.push_back({v});
+                record.data.set("Pos", {std::move(pos)});
+                record.data.set("Rotation", {std::move(turn)});
+                job.builder.addEntity(std::move(record));
+            }
         }
     }
     auto now = Clock::now();
@@ -831,25 +863,6 @@ void stepSave(BlockSource& region, LocalPlayer& player) {
                 static_cast<int>(std::lround(std::hypot(dx, dz))));
         }
         return;
-    }
-    if (job.request.entities) {
-        Size size = structure.size;
-        AABB area{Vec3{static_cast<float>(low.x), static_cast<float>(low.y), static_cast<float>(low.z)},
-                  Vec3{static_cast<float>(low.x + size.x), static_cast<float>(low.y + size.y), static_cast<float>(low.z + size.z)}};
-        for (Actor* actor : region.fetchEntities(&player, area, false, false)) {
-            if (!actor || actor->mRemoved || actor->hasType(ActorType::Player) || structure.entities.size() >= maxEntities) continue;
-            // What the client knows: type, position and facing.
-            auto feetAt = actor->getFeetPos();
-            auto rotation = actor->getRotation();
-            EntityRecord record{actor->getTypeName(), feetAt.x - low.x, feetAt.y - low.y, feetAt.z - low.z, {}};
-            record.data.set("identifier", {record.identifier});
-            nbt::List pos{nbt::Type::Float, {}}, turn{nbt::Type::Float, {}};
-            for (float v : {feetAt.x, feetAt.y, feetAt.z}) pos.items.push_back({v});
-            for (float v : {rotation.y, rotation.x}) turn.items.push_back({v});
-            record.data.set("Pos", {std::move(pos)});
-            record.data.set("Rotation", {std::move(turn)});
-            job.builder.addEntity(std::move(record));
-        }
     }
     try {
         std::filesystem::create_directories(job.request.path.parent_path());
@@ -1056,7 +1069,12 @@ void drawNameTags(ScreenContext& screen, IClientInstance& client, BlockSource& r
 void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, LocalPlayer& player) {
     auto snapshot = session::snapshot();
     int dimension = static_cast<int>(player.getDimensionId());
-    if (snapshot.revision != builtRevision || dimension != builtDimension) {
+    // A file replaced on disk loads as a new structure without a new
+    // revision; its placement must be resolved again (its palette changed).
+    bool replaced = resolved.size() != snapshot.placements.size();
+    for (size_t i = 0; !replaced && i < resolved.size(); ++i)
+        replaced = resolved[i].structure != snapshot.placements[i].structure.get();
+    if (replaced || snapshot.revision != builtRevision || dimension != builtDimension) {
         // Placements whose draw key is unchanged keep their resolved blocks
         // and built sections (moved to their new index); only changed ones
         // are rebuilt, so the others do not blink.
@@ -1148,10 +1166,14 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
         if (!shown.structure || !shown.placement.visible || shown.placement.dimension != dimension) continue;
         Size placed = placedSize(shown.structure->size, shown.placement.placement.rotation);
         Point const& o = shown.placement.placement.origin;
-        auto section = [](int v) { return static_cast<int>(std::floor(v / static_cast<double>(sectionSize))); };
-        for (int sx = section(o.x); sx <= section(o.x + placed.x - 1); ++sx)
-            for (int sy = section(o.y); sy <= section(o.y + placed.y - 1); ++sy)
-                for (int sz = section(o.z); sz <= section(o.z + placed.z - 1); ++sz) {
+        auto section = [](double v) { return static_cast<int>(std::floor(v / sectionSize)); };
+        // Only the sections of the box within the draw distance of the camera.
+        int fromX = std::max(section(o.x), section(camera.x - drawDistance)), toX = std::min(section(o.x + placed.x - 1), section(camera.x + drawDistance));
+        int fromY = std::max(section(o.y), section(camera.y - drawDistance)), toY = std::min(section(o.y + placed.y - 1), section(camera.y + drawDistance));
+        int fromZ = std::max(section(o.z), section(camera.z - drawDistance)), toZ = std::min(section(o.z + placed.z - 1), section(camera.z + drawDistance));
+        for (int sx = fromX; sx <= toX; ++sx)
+            for (int sy = fromY; sy <= toY; ++sy)
+                for (int sz = fromZ; sz <= toZ; ++sz) {
                     double cx = (sx + .5) * sectionSize - camera.x, cy = (sy + .5) * sectionSize - camera.y,
                            cz = (sz + .5) * sectionSize - camera.z;
                     double distance = std::sqrt(cx * cx + cy * cy + cz * cz);
@@ -1161,9 +1183,9 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
     std::sort(wanted.begin(), wanted.end(), [](auto const& a, auto const& b) {
         return a.seen != b.seen ? a.seen : a.distance < b.distance;
     });
-    std::erase_if(sections, [&](auto const& entry) {
-        return std::none_of(wanted.begin(), wanted.end(), [&](auto const& w) { return w.key == entry.first; });
-    });
+    std::set<SectionKey> keep;
+    for (auto const& w : wanted) keep.insert(w.key);
+    std::erase_if(sections, [&](auto const& entry) { return !keep.contains(entry.first); });
 
     // The block in the crosshair and the cell against its face are where a
     // block is broken or placed next: when either changes, rebuild its
@@ -1184,8 +1206,13 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
         if (&current == seen) continue;
         auto due = Clock::now() + (current.isAir() ? Clock::duration{} : std::chrono::duration_cast<Clock::duration>(lookedDelay));
         auto section = [](int v) { return static_cast<int>(std::floor(v / static_cast<double>(sectionSize))); };
+        // The cell's own section and any section across a face of it.
         for (auto& [key, built] : sections)
-            if (std::get<1>(key) == section(pos.x) && std::get<2>(key) == section(pos.y) && std::get<3>(key) == section(pos.z))
+            if (std::abs(std::get<1>(key) - section(pos.x)) <= 1 && std::abs(std::get<2>(key) - section(pos.y)) <= 1
+                && std::abs(std::get<3>(key) - section(pos.z)) <= 1
+                && section(pos.x - 1) <= std::get<1>(key) && std::get<1>(key) <= section(pos.x + 1)
+                && section(pos.y - 1) <= std::get<2>(key) && std::get<2>(key) <= section(pos.y + 1)
+                && section(pos.z - 1) <= std::get<3>(key) && std::get<3>(key) <= section(pos.z + 1))
                 if (!built.due || due < *built.due) built.due = due;
     }
     // Keep the previous positions one more frame: placing moves the crosshair.
@@ -1267,7 +1294,7 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
                     OffscreenCaptureDescription{}, nullptr);
         });
         for (auto const& [pos, block] : section.entities) {
-            auto& actor = actors[{pos.x, pos.y, pos.z}];
+            auto& actor = actors[{pos.x, pos.y, pos.z, block}];
             if (!actor) actor = VanillaBlockActorFactory::createBlockActor(pos, block->getBlockType());
             auto* component = *actor ? (*actor)->_getRenderComponent() : nullptr;
             if (!component) continue;
