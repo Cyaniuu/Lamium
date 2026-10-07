@@ -1131,40 +1131,35 @@ void drawEntities(ScreenContext& screen, session::Snapshot const& snapshot, int 
             double dx = at.x - camera.x, dy = at.y - camera.y, dz = at.z - camera.z, distance = dx * dx + dy * dy + dz * dz;
             if (distance > drawDistance * drawDistance) continue;
             frames.push_back(at);
-            // Every missing entity is named (maintainer, 2026-10-08: no limit).
-            named.push_back({{at.x, at.y + entityFrameHeight + .3, at.z}, r.entities[e].name});
+            if (named.size() < 64 && distance < 32 * 32) named.push_back({{at.x, at.y + entityFrameHeight + .3, at.z}, r.entities[e].name});
         }
     }
     labels = std::move(named);
     mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
     if (frames.empty() || !lineMaterial.mRenderMaterialInfoPtr) return;
-    // A light-blue box with faint faces, like the block ghosts (L-93 screen
-    // review): solid edges, not translucent models. One size: it does not
-    // claim the entity's real size, which the client cannot know without it.
-    constexpr float half = entityFrameWidth / 2;
+    // Each edge as dashes. The frame has one size: it does not claim the
+    // entity's real size, which the client cannot know without the entity.
+    constexpr float dash = .2f, gap = .15f, half = entityFrameWidth / 2;
     constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
-    constexpr int sides[6][4] = {{0,2,6,4},{1,5,7,3},{0,4,5,1},{2,3,7,6},{0,1,3,2},{4,6,7,5}};
-    mce::MaterialPtr faceMaterial(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"});
-    Tessellator lines(screen.tessellator.mBufferResourceService), faces(screen.tessellator.mBufferResourceService);
-    lines.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(frames.size() * 24), false);
-    faces.begin({}, mce::PrimitiveMode::QuadList, static_cast<int>(frames.size() * 48), false);
+    Tessellator lines(screen.tessellator.mBufferResourceService);
+    lines.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(frames.size() * 12 * 12), false);
     lines.color(.35f, .85f, 1.f, 1.f);
-    faces.color(.35f, .85f, 1.f, .22f);
     for (auto const& at : frames) {
         glm::vec3 base{static_cast<float>(at.x - camera.x), static_cast<float>(at.y - camera.y), static_cast<float>(at.z - camera.z)};
         glm::vec3 a = base + glm::vec3{-half, 0, -half}, b = base + glm::vec3{half, entityFrameHeight, half}, c[8];
         for (int k = 0; k < 8; ++k) c[k] = {k & 1 ? b.x : a.x, k & 2 ? b.y : a.y, k & 4 ? b.z : a.z};
-        for (auto [p, q] : edges) { lines.vertex(c[p].x, c[p].y, c[p].z); lines.vertex(c[q].x, c[q].y, c[q].z); }
-        // Both windings: the face material culls.
-        for (auto const& side : sides) {
-            for (int k = 0; k < 4; ++k) faces.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
-            for (int k = 3; k >= 0; --k) faces.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
+        for (auto [p, q] : edges) {
+            glm::vec3 from = c[p], to = c[q];
+            float length = glm::length(to - from);
+            glm::vec3 step = (to - from) / length;
+            for (float t = 0; t < length; t += dash + gap) {
+                glm::vec3 s0 = from + step * t, s1 = from + step * std::min(length, t + dash);
+                lines.vertex(s0.x, s0.y, s0.z);
+                lines.vertex(s1.x, s1.y, s1.z);
+            }
         }
     }
-    translated(screen, glm::vec3{0}, [&] {
-        if (faceMaterial.mRenderMaterialInfoPtr) MeshHelpers::renderMeshImmediately(screen, faces, faceMaterial, OffscreenCaptureDescription{});
-        MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
-    });
+    translated(screen, glm::vec3{0}, [&] { MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{}); });
 }
 
 // The names of missing entities like a named entity's tag: a dark plate with
