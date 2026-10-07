@@ -77,6 +77,33 @@ maintainer decided:
    and translucency is dropped; drawing their real models is research
    (L-115).
 
+Built 2026-10-08 (not yet checked in game):
+- World frames drawn after the ghosts, one line box per placement in the
+  dimension (hidden ones only when selected), alpha 1 for the selected one
+  and .35 for the others.
+- Progress: while the Placed list is on screen (`ghosts::wantProgress()`),
+  other placements are counted in the background, 8,192 cells a frame,
+  with the same cell classification the check uses (`classifyCell`); the
+  selected placement's numbers come from its check. Rows show "-" until a
+  pass has finished.
+- Files: `ui/SchematicFiles.h` (tested) builds the heading rows; size and
+  block count fill in one file per frame for files of at most 2 MB that are
+  not loaded yet; bigger ones show "-".
+- Check: the filters replace the list's column headings, each with its count
+  from the shown-layer tally; the filter row in the right pane is gone. The
+  right pane lists every differing state with the target card's names and
+  the drawn arrow (the mismatch now carries the expected block's id for
+  names that depend on it).
+- Materials: blocks first, then entities, with headings only when both
+  exist; the right pane has "only the shown layers" and "show on the
+  schematic HUD", the selected material's amount, the missing materials as
+  slots (one slot per stack, as many as fit) and "Open in
+  ResourceCalculator" with what is missing (`MaterialAmount.h`, tested; the
+  id corrections for the site are unconfirmed). Hovering the counts shows
+  the amount in chests of 27 stacks. The "How it counts" text is gone.
+- Entities: solid light-blue box with faint faces (both windings, the face
+  material culls); every missing entity within the draw distance is named.
+
 ## Technical entry points
 
 - `src/features/schematic/Nbt.*`, `Structure.*`: NBT and structure read/write.
