@@ -34,4 +34,7 @@ PlacementSet readPlacements(std::filesystem::path const&);
 void writePlacements(std::filesystem::path const&, PlacementSet const&);
 // A file name the placement may refer to: relative, no "..", no drive or root.
 bool safeSchematicPath(std::string_view relative);
+// What the ghosts and the check of a placement depend on: equal keys mean
+// its built sections and check can be kept. Name and visibility are not in it.
+std::string drawKey(SavedPlacement const&);
 }

@@ -2,6 +2,7 @@
 #include "app/AtomicFile.h"
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <format>
 #include <fstream>
 #include <limits>
 #include <stdexcept>
@@ -20,6 +21,12 @@ int integer(Json const& value, int fallback) {
 bool flag(Json const& value, bool fallback) { return value.is_boolean() ? value.get<bool>() : fallback; }
 }
 
+std::string drawKey(SavedPlacement const& p) {
+    auto const& o = p.placement.origin;
+    return std::format("{}|{}|{},{},{}|{}|{}|{},{},{}|{}{}", p.file, p.dimension, o.x, o.y, o.z, p.placement.rotation,
+        static_cast<int>(p.placement.mirror), static_cast<int>(p.layers.axis), static_cast<int>(p.layers.mode), p.layers.index,
+        p.countExtras ? 'x' : '-', p.entities ? 'e' : '-');
+}
 bool safeSchematicPath(std::string_view relative) {
     if (relative.empty() || relative.size() > maxFileBytes || relative.front() == '/' || relative.front() == '\\') return false;
     if (relative.find(':') != std::string_view::npos || relative.find('\\') != std::string_view::npos) return false;

@@ -325,6 +325,20 @@ void verifyRules() {
           && materials["minecraft:oak_stairs"].placed == 0, "materials count needed and correctly placed blocks, not air");
 }
 
+void drawKeys() {
+    SavedPlacement a;
+    a.name = "hut";
+    a.file = "hut.mcstructure";
+    a.placement.origin = {1, 2, 3};
+    auto renamed = a, hidden = a, moved = a, layered = a;
+    renamed.name = "other";
+    hidden.visible = false;
+    moved.placement.origin.x = 2;
+    layered.layers.index = 4;
+    check(drawKey(a) == drawKey(renamed) && drawKey(a) == drawKey(hidden), "renaming or hiding keeps a placement's ghosts");
+    check(drawKey(a) != drawKey(moved) && drawKey(a) != drawKey(layered), "moving or changing layers rebuilds a placement's ghosts");
+}
+
 void placementDocuments() {
     PlacementSet set;
     SavedPlacement hut;
@@ -373,6 +387,7 @@ void verificationOrder() {
 void schematicTests() {
     verificationOrder();
     placementDocuments();
+    drawKeys();
     placementTransforms();
     entityRules();
     saveRules();

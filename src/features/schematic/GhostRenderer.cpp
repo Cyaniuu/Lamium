@@ -78,8 +78,10 @@ namespace {
 using Clock = std::chrono::steady_clock;
 constexpr int sectionSize = 16;
 constexpr int sectionBudget = 3;      // Sections rebuilt per frame.
-// Re-check the world this often: quickly near the camera, where blocks are
-// being placed, slowly elsewhere.
+constexpr int checkBudget = 8;        // Sections whose blocks are compared per frame.
+// Look at the world this often: quickly near the camera, where blocks are
+// being placed, slowly elsewhere. A section is rebuilt only when its blocks
+// changed since it was built.
 constexpr std::chrono::milliseconds refreshNear{250}, refreshFar{2000};
 constexpr double nearDistance = 24;
 constexpr std::chrono::milliseconds lookedDelay{100};
@@ -93,8 +95,9 @@ struct Section {
     std::optional<mce::Mesh> faces, lines, marks;
     std::uint32_t faceVertices = 0, lineVertices = 0, markVertices = 0;
     std::vector<EntityCell> entities;
-    Clock::time_point built{};
+    Clock::time_point built{}, checked{};
     std::optional<Clock::time_point> due; // An early rebuild after a looked-at block changed.
+    std::uint64_t signature = 0;          // the world's blocks in the section when built
     bool complete = false; // false while some chunk was not loaded
 };
 using SectionKey = std::tuple<int, int, int, int>; // placement, section x, y, z
@@ -111,6 +114,7 @@ struct EntityGhost {
     Point offset;  // its cell inside the placed box, for layers
 };
 struct Resolved {
+    std::shared_ptr<Structure const> keep; // keeps `structure` alive across snapshots
     Structure const* structure = nullptr;
     int rotation = 0;
     Mirror mirror = Mirror::None;
@@ -124,6 +128,7 @@ struct Resolved {
 
 std::map<SectionKey, Section> sections;
 std::vector<Resolved> resolved;
+std::vector<std::string> builtKeys; // drawKey of each resolved placement
 // Created once per cell; a null result is remembered too.
 std::map<std::tuple<int, int, int>, std::optional<std::shared_ptr<BlockActor>>> actors;
 std::vector<std::pair<BlockPos, Block const*>> watched; // Recently looked-at cells and what was there.
@@ -144,6 +149,7 @@ std::vector<std::pair<Position, std::string>> labels;
 constexpr std::uint64_t scanBudget = 16384;
 struct Scan {
     std::uint64_t revision = 0;
+    std::string key; // drawKey of the placement being checked
     int placement = -1;
     std::uint64_t next = 0;
     Tally tally;
@@ -213,6 +219,7 @@ void log(std::string const& text) {
 void release() {
     sections.clear();
     resolved.clear();
+    builtKeys.clear();
     actors.clear();
     watched.clear();
     entitiesChecked = {};
@@ -269,7 +276,7 @@ ItemInfo itemFor(PaletteBlock const& entry, Block const* block) {
     return out;
 }
 Resolved resolve(Structure const& structure, SavedPlacement const& placement) {
-    Resolved out{&structure, placement.placement.rotation, placement.placement.mirror, {}};
+    Resolved out{nullptr, &structure, placement.placement.rotation, placement.placement.mirror, {}};
     out.blocks.reserve(structure.palette.size());
     unsigned missing = 0;
     for (auto const& entry : structure.palette) {
@@ -318,6 +325,54 @@ void finishColors(Tessellator& batch, float r, float g, float b) {
     for (auto& c : colors) c = scale(c, 0, r) | scale(c, 8, g) | scale(c, 16, b) | (c & 0xff000000u);
 }
 
+// A ghost with an opaque full block on all six sides cannot be seen: real
+// ones, or ghosts that will be drawn there (shown layers, nothing placed).
+bool enclosed(BlockSource& region, session::Shown const& shown, Resolved const& blocks, Point at) {
+    static constexpr int sides[6][3] = {{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}};
+    auto const& structure = *shown.structure;
+    auto const& placement = shown.placement;
+    Size placed = placedSize(structure.size, placement.placement.rotation);
+    Point const& origin = placement.placement.origin;
+    for (auto const& d : sides) {
+        Point n{at.x + d[0], at.y + d[1], at.z + d[2]};
+        Block const& there = region.getBlock(BlockPos{n.x, n.y, n.z});
+        if (there.getBlockType().mIsOpaqueFullBlock) continue;
+        if (!there.isAir()) return false;
+        auto local = toLocal(structure.size, placement.placement, n);
+        if (!local || !layerShown(placement.layers, placed, {n.x - origin.x, n.y - origin.y, n.z - origin.z})) return false;
+        auto index = structure.blocks[static_cast<size_t>(structure.cell(local->x, local->y, local->z))];
+        if (index == voidCell) return false;
+        Block const* ghost = blocks.blocks[static_cast<size_t>(index)];
+        if (!ghost || !ghost->getBlockType().mIsOpaqueFullBlock) return false;
+    }
+    return true;
+}
+// The cells of one section inside a placement's box.
+template <class Visit>
+void eachCell(session::Shown const& shown, SectionKey key, Visit&& visit) {
+    auto const& placement = shown.placement;
+    Size placed = placedSize(shown.structure->size, placement.placement.rotation);
+    Point const& origin = placement.placement.origin;
+    auto [index, sx, sy, sz] = key;
+    Point low{sx * sectionSize, sy * sectionSize, sz * sectionSize};
+    for (int x = std::max(low.x, origin.x); x < std::min(low.x + sectionSize, origin.x + placed.x); ++x)
+        for (int y = std::max(low.y, origin.y); y < std::min(low.y + sectionSize, origin.y + placed.y); ++y)
+            for (int z = std::max(low.z, origin.z); z < std::min(low.z + sectionSize, origin.z + placed.z); ++z)
+                visit(x, y, z);
+}
+// The world's blocks in a section's cells, hashed: equal values mean nothing
+// there changed and the built meshes still hold.
+std::uint64_t signatureOf(BlockSource& region, session::Shown const& shown, SectionKey key) {
+    std::uint64_t hash = 1469598103934665603ull;
+    eachCell(shown, key, [&](int x, int y, int z) {
+        BlockPos pos{x, y, z};
+        auto* chunk = region.getChunkAt(pos);
+        auto value = chunk && chunk->mLoadState->load() >= ChunkState::Loaded ? reinterpret_cast<std::uintptr_t>(&region.getBlock(pos)) : 1;
+        hash = (hash ^ static_cast<std::uint64_t>(value)) * 1099511628211ull;
+    });
+    return hash;
+}
+
 void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& own, session::Shown const& shown,
                   Resolved const& blocks, SectionKey key, Section& out) {
     auto const& structure = *shown.structure;
@@ -332,7 +387,8 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
     out.entities.clear();
     out.due.reset();
     out.origin = {static_cast<float>(low.x), static_cast<float>(low.y), static_cast<float>(low.z)};
-    out.built = Clock::now();
+    out.built = out.checked = Clock::now();
+    out.signature = signatureOf(region, shown, key);
     out.complete = true;
 
     Tessellator batch(screen.tessellator.mBufferResourceService);
@@ -381,6 +437,7 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
                     marks.push_back(mark);
                     continue;
                 }
+                if (enclosed(region, shown, blocks, {x, y, z})) continue;
                 size_t before = batch.mMeshData->mPositions->size();
                 own.tessellateInWorld(batch, *expected, pos, false);
                 auto& positions = batch.mMeshData->mPositions.get();
@@ -517,7 +574,7 @@ void stepScan(BlockSource& region, session::Snapshot const& snapshot, int dimens
         && snapshot.placements[static_cast<size_t>(index)].structure
         && snapshot.placements[static_cast<size_t>(index)].placement.dimension == dimension;
     if (!valid) {
-        if (scan.placement != -1 || scan.revision != snapshot.revision) {
+        if (scan.placement != -1) {
             scan = {};
             scan.revision = snapshot.revision;
             auto none = std::make_shared<Verification>();
@@ -526,11 +583,15 @@ void stepScan(BlockSource& region, session::Snapshot const& snapshot, int dimens
         }
         return;
     }
-    if (scan.revision != snapshot.revision || scan.placement != index) {
+    // A change to another placement, or to this one's name or visibility,
+    // keeps the pass going.
+    auto key = drawKey(snapshot.placements[static_cast<size_t>(index)].placement);
+    if (scan.key != key) {
         scan = {};
-        scan.revision = snapshot.revision;
-        scan.placement = index;
+        scan.key = key;
     }
+    scan.revision = snapshot.revision;
+    scan.placement = index;
     auto const& shown = snapshot.placements[static_cast<size_t>(index)];
     auto const& structure = *shown.structure;
     auto const& placement = shown.placement;
@@ -901,18 +962,69 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
     auto snapshot = session::snapshot();
     int dimension = static_cast<int>(player.getDimensionId());
     if (snapshot.revision != builtRevision || dimension != builtDimension) {
-        release();
+        // Placements whose draw key is unchanged keep their resolved blocks
+        // and built sections (moved to their new index); only changed ones
+        // are rebuilt, so the others do not blink.
+        if (dimension != builtDimension) release();
+        std::vector<Resolved> nextResolved;
+        std::vector<std::string> nextKeys;
+        std::map<SectionKey, Section> nextSections;
+        std::vector<bool> taken(resolved.size());
+        for (int i = 0; i < static_cast<int>(snapshot.placements.size()); ++i) {
+            auto const& shown = snapshot.placements[static_cast<size_t>(i)];
+            auto key = drawKey(shown.placement);
+            int old = -1;
+            for (int j = 0; j < static_cast<int>(builtKeys.size()); ++j)
+                if (!taken[static_cast<size_t>(j)] && builtKeys[static_cast<size_t>(j)] == key
+                    && resolved[static_cast<size_t>(j)].structure == shown.structure.get()) { old = j; break; }
+            if (old >= 0) {
+                taken[static_cast<size_t>(old)] = true;
+                nextResolved.push_back(std::move(resolved[static_cast<size_t>(old)]));
+                for (auto it = sections.begin(); it != sections.end();) {
+                    if (std::get<0>(it->first) != old) { ++it; continue; }
+                    auto node = sections.extract(it++);
+                    std::get<0>(node.key()) = i;
+                    nextSections.insert(std::move(node));
+                }
+            } else {
+                nextResolved.push_back(shown.structure ? resolve(*shown.structure, shown.placement) : Resolved{});
+                nextResolved.back().keep = shown.structure;
+            }
+            nextKeys.push_back(std::move(key));
+        }
+        resolved = std::move(nextResolved);
+        builtKeys = std::move(nextKeys);
+        sections = std::move(nextSections);
+        actors.clear();
         builtRevision = snapshot.revision;
         builtDimension = dimension;
-        for (auto const& shown : snapshot.placements)
-            resolved.push_back(shown.structure ? resolve(*shown.structure, shown.placement) : Resolved{});
     }
     ScreenContext& screen = context.mScreenContext;
     Vec3 const camera = context.mImpl->mCameraPosition;
     auto& region = player.getDimensionBlockSource();
 
+    // What the camera can see: a section entirely outside one side of the
+    // view is neither drawn nor built before the ones in view. Without the
+    // camera's matrices everything counts as in view.
+    std::optional<glm::mat4> clip;
+    if (!screen.camera.viewMatrixStack->stack->empty() && !screen.camera.projectionMatrixStack->stack->empty()
+        && !screen.camera.worldMatrixStack->stack->empty())
+        clip = *screen.camera.projectionMatrixStack->top()._m * *screen.camera.viewMatrixStack->top()._m
+            * *screen.camera.worldMatrixStack->top()._m;
+    auto inView = [&](int sx, int sy, int sz) {
+        if (!clip) return true;
+        glm::vec3 low{static_cast<float>(sx * sectionSize - camera.x), static_cast<float>(sy * sectionSize - camera.y),
+                      static_cast<float>(sz * sectionSize - camera.z)};
+        int outside[6]{};
+        for (int k = 0; k < 8; ++k) {
+            glm::vec4 c = *clip * glm::vec4(low + glm::vec3(k & 1 ? sectionSize : 0, k & 2 ? sectionSize : 0, k & 4 ? sectionSize : 0), 1.f);
+            outside[0] += c.x < -c.w; outside[1] += c.x > c.w; outside[2] += c.y < -c.w;
+            outside[3] += c.y > c.w; outside[4] += c.w <= 0; outside[5] += c.z > c.w;
+        }
+        return std::none_of(std::begin(outside), std::end(outside), [](int n) { return n == 8; });
+    };
     // Sections near the camera, for visible placements in this dimension.
-    struct Wanted { SectionKey key; double distance; };
+    struct Wanted { SectionKey key; double distance; bool seen; };
     std::vector<Wanted> wanted;
     for (int i = 0; i < static_cast<int>(snapshot.placements.size()); ++i) {
         auto const& shown = snapshot.placements[static_cast<size_t>(i)];
@@ -926,10 +1038,12 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
                     double cx = (sx + .5) * sectionSize - camera.x, cy = (sy + .5) * sectionSize - camera.y,
                            cz = (sz + .5) * sectionSize - camera.z;
                     double distance = std::sqrt(cx * cx + cy * cy + cz * cz);
-                    if (distance <= drawDistance) wanted.push_back({{i, sx, sy, sz}, distance});
+                    if (distance <= drawDistance) wanted.push_back({{i, sx, sy, sz}, distance, inView(sx, sy, sz)});
                 }
     }
-    std::sort(wanted.begin(), wanted.end(), [](auto const& a, auto const& b) { return a.distance < b.distance; });
+    std::sort(wanted.begin(), wanted.end(), [](auto const& a, auto const& b) {
+        return a.seen != b.seen ? a.seen : a.distance < b.distance;
+    });
     std::erase_if(sections, [&](auto const& entry) {
         return std::none_of(wanted.begin(), wanted.end(), [&](auto const& w) { return w.key == entry.first; });
     });
@@ -965,8 +1079,9 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
             next.push_back({pos, &region.getBlock(pos)});
     watched = std::move(next);
 
-    // Rebuild the nearest missing or stale sections within the budget.
-    int budget = sectionBudget;
+    // Build missing sections and rebuild changed ones, in view and nearest
+    // first, within the budgets.
+    int budget = sectionBudget, checks = checkBudget;
     std::unique_ptr<BlockTessellator> own;
     auto now = Clock::now();
     for (auto const& w : wanted) {
@@ -974,10 +1089,15 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
         auto found = sections.find(w.key);
         auto refreshAfter = w.distance <= nearDistance ? std::chrono::duration_cast<Clock::duration>(refreshNear)
             : std::chrono::duration_cast<Clock::duration>(refreshFar);
-        bool stale = found == sections.end() || !found->second.complete || now - found->second.built > refreshAfter
-            || (found->second.due && now >= *found->second.due)
+        bool stale = found == sections.end() || !found->second.complete || (found->second.due && now >= *found->second.due)
             || (found->second.faces && !found->second.faces->isValid()) || (found->second.lines && !found->second.lines->isValid())
             || (found->second.marks && !found->second.marks->isValid());
+        if (!stale && now - found->second.checked > refreshAfter && checks > 0) {
+            --checks;
+            auto const index = static_cast<size_t>(std::get<0>(w.key));
+            stale = signatureOf(region, snapshot.placements[index], w.key) != found->second.signature;
+            found->second.checked = now;
+        }
         if (!stale) continue;
         if (!own) {
             // A private tessellator, primed with one appended block: in-world
@@ -1010,6 +1130,7 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
     auto* lightTexture = client.getLightTexture();
     std::variant<std::monostate, mce::TexturePtr, mce::ClientTexture, mce::ServerTexture> texture{atlas};
     for (auto& [key, section] : sections) {
+        if (!inView(std::get<1>(key), std::get<2>(key), std::get<3>(key))) continue;
         glm::vec3 offset{static_cast<float>(section.origin.x - camera.x), static_cast<float>(section.origin.y - camera.y),
                          static_cast<float>(section.origin.z - camera.z)};
         translated(screen, offset, [&] {
