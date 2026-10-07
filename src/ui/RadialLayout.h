@@ -36,6 +36,16 @@ struct RadialLayout {
         l.cy = std::max(halfH, l.cy);
         return l;
     }
+    // Opening a level: items spread out from the center over `duration`
+    // seconds, fast first. 0 at the start, 1 when settled.
+    static constexpr float duration = .15f;
+    static float spread(float seconds) {
+        float t = std::clamp(seconds / duration, 0.f, 1.f);
+        return 1 - (1 - t) * (1 - t) * (1 - t);
+    }
+    // Where item i is while the ring opens: from 55% of its radius outward.
+    float itemX(int i, float progress) const { return cx + (itemX(i) - cx) * (.55f + .45f * progress); }
+    float itemY(int i, float progress) const { return cy + (itemY(i) - cy) * (.55f + .45f * progress); }
     float angle(int i) const { return static_cast<float>(i) * 2 * std::numbers::pi_v<float> / count - std::numbers::pi_v<float> / 2; }
     float itemX(int i) const { return cx + std::cos(angle(i)) * rx; }
     float itemY(int i) const { return cy + std::sin(angle(i)) * ry; }

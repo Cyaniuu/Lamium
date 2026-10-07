@@ -382,6 +382,9 @@ void menuRules() {
         }
     }
     check(clear, "no item overlaps its neighbor or the center, at any count");
+    check(RadialLayout::spread(0) == 0 && RadialLayout::spread(RadialLayout::duration) == 1 && RadialLayout::spread(1) == 1
+          && RadialLayout::spread(RadialLayout::duration / 2) > .5f && ring.itemX(2, 1) == ring.itemX(2) && ring.itemX(2, 0) < ring.itemX(2),
+          "opening spreads items out from the center, fast first, and settles on the ring");
     auto small = RadialLayout::at(640, 360, 8, sizes, true), fewer = RadialLayout::at(640, 360, 3, sizes, true);
     check(small.cx > ring.cx && small.cy > ring.cy && small.cx + small.rx + sizes.itemWidth / 2 <= 640
           && fewer.cx == small.cx && fewer.cy == small.cy, "the small menu sits in the lower right, inside the screen, and stays put");

@@ -209,11 +209,16 @@ std::mutex pointMutex;
 std::optional<Point> pointAt;
 Clock::time_point pointUntil{};
 std::uint64_t builtRevision = 0;
-// The cells the camera is in (eye and feet). Seen from inside, the ghosts
-// around them are walls: these cells are not drawn and count as open, so
-// the faces toward them are.
-std::array<std::optional<Point>, 2> carved;
-bool isCarved(Point p) { return std::any_of(carved.begin(), carved.end(), [&](auto const& c) { return c && *c == p; }); }
+// The cells the camera is in (eye and feet). Ghosts within one cell of
+// them are drawn whole: no face dropped, none skipped as enclosed. From
+// inside a schematic, or with the camera at a cell border, what is around
+// the player then shows as blocks instead of hollow space.
+std::array<std::optional<Point>, 2> cameraCells;
+bool nearCamera(Point p) {
+    return std::any_of(cameraCells.begin(), cameraCells.end(), [&](auto const& c) {
+        return c && std::abs(c->x - p.x) <= 1 && std::abs(c->y - p.y) <= 1 && std::abs(c->z - p.z) <= 1;
+    });
+}
 int builtDimension = -1;
 std::atomic<bool> releaseRequested{false};
 ll::event::ListenerPtr exitListener;
@@ -334,10 +339,8 @@ void finishColors(Tessellator& batch, float r, float g, float b) {
 // A ghost with an opaque full block on all six sides cannot be seen: real
 // ones, or ghosts that will be drawn there (shown layers, nothing placed).
 // An opaque full ghost will be drawn at `n`: nothing real is there, the
-// placement asks for an opaque full block in a shown layer, and the camera is
-// not in that cell.
+// placement asks for an opaque full block in a shown layer.
 bool ghostOpaqueAt(BlockSource& region, session::Shown const& shown, Resolved const& blocks, Point n) {
-    if (isCarved(n)) return false;
     auto const& structure = *shown.structure;
     auto const& placement = shown.placement;
     Size placed = placedSize(structure.size, placement.placement.rotation);
@@ -352,7 +355,6 @@ bool ghostOpaqueAt(BlockSource& region, session::Shown const& shown, Resolved co
 bool enclosed(BlockSource& region, session::Shown const& shown, Resolved const& blocks, Point at) {
     for (auto const& d : faces::offsets) {
         Point n{at.x + d[0], at.y + d[1], at.z + d[2]};
-        if (isCarved(n)) return false;
         if (region.getBlock(BlockPos{n.x, n.y, n.z}).getBlockType().mIsOpaqueFullBlock) continue;
         if (!ghostOpaqueAt(region, shown, blocks, n)) return false;
     }
@@ -468,10 +470,11 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
                     marks.push_back(mark);
                     continue;
                 }
-                if (isCarved({x, y, z}) || enclosed(region, shown, blocks, {x, y, z})) continue;
+                bool whole = nearCamera({x, y, z});
+                if (!whole && enclosed(region, shown, blocks, {x, y, z})) continue;
                 size_t before = batch.mMeshData->mPositions->size();
                 own.tessellateInWorld(batch, *expected, pos, false);
-                cullAgainstGhosts(batch, before, region, shown, blocks, {x, y, z});
+                if (!whole) cullAgainstGhosts(batch, before, region, shown, blocks, {x, y, z});
                 auto& positions = batch.mMeshData->mPositions.get();
                 if (positions.size() == before) {
                     // No block mesh: block entities draw through their renderer;
@@ -1085,24 +1088,24 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
     Vec3 const camera = context.mImpl->mCameraPosition;
     auto& region = player.getDimensionBlockSource();
     // When the camera moves to another cell, rebuild the sections around
-    // the old and the new cells (their faces toward the camera change).
+    // the old and the new cells (which ghosts are drawn whole changes).
     {
         auto cellAt = [](double x, double y, double z) {
             return Point{static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)), static_cast<int>(std::floor(z))};
         };
         std::array<std::optional<Point>, 2> now{cellAt(camera.x, camera.y, camera.z), cellAt(camera.x, camera.y - 1.62, camera.z)};
-        if (now != carved) {
+        if (now != cameraCells) {
             auto section = [](int v) { return static_cast<int>(std::floor(v / static_cast<double>(sectionSize))); };
             auto mark = [&](std::optional<Point> const& c) {
                 if (!c) return;
-                for (int dx = -1; dx <= 1; ++dx) for (int dy = -1; dy <= 1; ++dy) for (int dz = -1; dz <= 1; ++dz)
+                for (int dx = -2; dx <= 2; dx += 2) for (int dy = -2; dy <= 2; dy += 2) for (int dz = -2; dz <= 2; dz += 2)
                     for (auto& [key, built] : sections)
                         if (std::get<1>(key) == section(c->x + dx) && std::get<2>(key) == section(c->y + dy) && std::get<3>(key) == section(c->z + dz))
                             built.due = Clock::now();
             };
-            for (auto const& c : carved) mark(c);
+            for (auto const& c : cameraCells) mark(c);
             for (auto const& c : now) mark(c);
-            carved = now;
+            cameraCells = now;
         }
     }
 

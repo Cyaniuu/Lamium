@@ -192,7 +192,11 @@ struct SavePrompt {
 std::optional<SavePrompt> savePrompt;
 // The schematic menu (L-93): a ring of categories, then of their items, over
 // the world. Replaces the whole panel while open, like the prompts.
-struct SchematicMenu { int category = -1; int hover = -1; };
+struct SchematicMenu {
+    int category = -1, hover = -1;
+    std::chrono::steady_clock::time_point shown = std::chrono::steady_clock::now(); // when this level appeared
+    void show(int level) { category = level; hover = -1; shown = std::chrono::steady_clock::now(); }
+};
 std::optional<SchematicMenu> schematicMenu;
 int schematicMenuClosedAt = -1; // the level shown when it last closed
 // World map (L-60): replaces the whole panel; the add prompt opened from it
@@ -3254,8 +3258,7 @@ void runMenuItem(schematic::menu::Item const& item, int amount) {
     menu::Target target{};
     if (menu::choosesTarget(command, target)) {
         schematic::actions::setTarget(target);
-        schematicMenu->category = menu::moveCategory;
-        schematicMenu->hover = -1;
+        schematicMenu->show(menu::moveCategory);
         return;
     }
     auto toggle = [](char const* id, char const* name) {
@@ -3293,13 +3296,13 @@ void runMenuItem(schematic::menu::Item const& item, int amount) {
 void handleMenuClick(bool right) {
     if (!schematicMenu) return;
     if (right) {
-        if (schematicMenu->category >= 0) { schematicMenu->category = -1; schematicMenu->hover = -1; }
+        if (schematicMenu->category >= 0) schematicMenu->show(-1);
         else close();
         return;
     }
     int hover = schematicMenu->hover;
     if (hover < 0) return;
-    if (schematicMenu->category < 0) { schematicMenu->category = hover; schematicMenu->hover = -1; return; }
+    if (schematicMenu->category < 0) { schematicMenu->show(hover); return; }
     auto items = schematic::menu::categories[static_cast<size_t>(schematicMenu->category)].items;
     if (hover < static_cast<int>(items.size())) runMenuItem(items[static_cast<size_t>(hover)], 0);
 }
@@ -3357,6 +3360,7 @@ void renderSchematicMenu(MinecraftUIRenderContext& context, glm::vec2 size, glm:
     auto l = menuLayout(size);
     int hover = l.hit(pointer.x, pointer.y);
     bool list = schematicMenu->category < 0;
+    float opened = RadialLayout::spread(std::chrono::duration<float>(std::chrono::steady_clock::now() - schematicMenu->shown).count());
     auto const& category = list ? menu::categories[0] : menu::categories[static_cast<size_t>(schematicMenu->category)];
     menu::Item const* hovered = nullptr;
     float textInset = boxTextInset() * s;
@@ -3370,10 +3374,12 @@ void renderSchematicMenu(MinecraftUIRenderContext& context, glm::vec2 size, glm:
             if (i == hover) hovered = &item;
         }
         float h = value.empty() ? 16 * s : menuSizes.itemHeight;
-        float x = std::round(l.itemX(i) - widest / 2), y = std::round(l.itemY(i) - h / 2);
-        panel(context, x, y, widest, h, .86f);
-        frame(context, x, y, widest, h, palette::white, .14f);
-        rowBackground(context, x, y, widest, h, i == hover, false);
+        float x = std::round(l.itemX(i, opened) - widest / 2), y = std::round(l.itemY(i, opened) - h / 2);
+        panel(context, x, y, widest, h, .86f * opened);
+        frame(context, x, y, widest, h, palette::white, .14f * opened);
+        rowBackground(context, x, y, widest, h, i == hover && opened >= 1, false);
+        // Text once the plates are mostly in: it cannot fade with them.
+        if (opened < .4f) continue;
         labelScaled(context, x + 4, y + 3 * s + textInset, widest - 8, name, s, palette::text, Align::Center);
         if (!value.empty()) labelScaled(context, x + 4, y + 14 * s + textInset, widest - 8, value, s, palette::dim, Align::Center);
     }
@@ -3791,7 +3797,8 @@ void openSchematicMenu(IClientInstance& current) {
     open(current);
     if (!scene) return;
     auto const preferences = Runtime::instance().preferences();
-    schematicMenu = SchematicMenu{schematic::menu::openAt(preferences.schematic.menuReopen, schematicMenuClosedAt), -1};
+    schematicMenu = SchematicMenu{};
+    schematicMenu->show(schematic::menu::openAt(preferences.schematic.menuReopen, schematicMenuClosedAt));
 }
 void openWorldMap(IClientInstance& current) {
     std::lock_guard lock(mutex);
