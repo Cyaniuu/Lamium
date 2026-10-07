@@ -69,10 +69,12 @@ Keep this section short. It is only the ordering layer; task details and status
 live in the L-items below. If this summary ever disagrees with an L-item, the
 L-item wins. Every entry names what the task is, not only its number.
 
-1. **Current batch (chosen 2026-10-08):** checked in game except two L-109
-   fixes and its new restore scope setting, which wait for a recheck. The
-   L-111 integration proposal waits for the maintainer. No release before
-   the batch.
+1. **Schematic screen review — L-93 step 1** (decided 2026-10-08): placement
+   frames, Placed/Files/Check/Materials list changes, chest/stack amounts,
+   missing items and the ResourceCalculator button, entity ghosts as outline
+   and faces. Then the research items L-114 3D previews, L-115 entity models,
+   L-116 raw materials from the game's recipes. The L-111 integration
+   proposal waits for the maintainer.
 2. **Before the next release or 0.2.0 — L-111 integration between
    features:** the agent drafts a proposal in the current batch; the
    maintainer decides scope, risks and order.
@@ -572,9 +574,17 @@ Accepted follow-ups (2026-10-07; known gaps, not 0.1.7 blockers):
 - The translucent ghost look.
 - Entity name-tag distance and quantity.
 
-Screen review against the mockup (2026-10-08): answers and open points are in
-SCHEMATIC.md "Screen review against the mockup"; a new mockup comes before
-any of it is built.
+Screen review (decided 2026-10-08; SCHEMATIC.md "Screen review against the
+mockup", mock `docs/demos/schematic-screen.html`). Work order:
+1. Screen and world, Ready (strong model), one in-game check for the step:
+   placement frames in the world; the Placed list's selection bar and
+   progress column; Files folders and columns; Check filter counts and
+   differing states in the right pane; Materials sections, HUD switch,
+   chest/stack amounts, missing items as slots and the ResourceCalculator
+   button; entity ghosts as light-blue outline and faces, name tags without
+   limits.
+2. Research, after step 1 or alongside it: L-114 3D previews in the screen,
+   L-115 entity models as ghosts, L-116 raw materials from the game's recipes.
 
 Pick the next follow-up with the maintainer; the list is not an implementation
 order. Chosen 2026-10-07: placement markers on the minimap/world map,
@@ -664,6 +674,38 @@ trapdoor facing (`direction`), alongside the existing facing, open, half and
 hinge rows. Unknown states keep their internal name and value. The value
 mappings come from the game's documented state values; each new one is
 checked in game against the block's look before it counts as verified.
+
+### L-114 3D previews in the schematic screen
+Kind: Research **(strong model)**. Chosen 2026-10-08 (L-93 screen review).
+Status: open; after or alongside L-93 step 1.
+Goal: a rotatable 3D preview of a file in the Files tab and of the selected
+placement colored by verifier state in the Check tab (the selected row lit).
+Vanilla draws 3D inside UI (the structure block screen), so find that path
+first; the ghosts already tessellate schematic blocks into meshes. Stop and
+report after two runtime rounds without a working path.
+
+### L-115 Entity ghosts drawn as models
+Kind: Research **(strong model)**. Chosen 2026-10-08 (L-93 screen review).
+Status: open; L-93 step 1 replaces the dashed frames first.
+Draw missing schematic entities as their models with the light-blue outline
+and the block ghosts' face treatment, not translucent. Drawing an actor model
+normally needs a live actor; creating one on the client may touch the world
+or the network, so prefer drawing the model geometry directly (the radar
+faces already read resource-pack geometry, `SkinGeometry.h`). Stop and report
+if no path works without a live actor.
+
+### L-116 Raw materials from the game's recipes
+Kind: Research, then Design. Chosen 2026-10-08 (L-93 screen review).
+Status: open.
+Show the raw materials needed for a schematic's missing blocks (logs for
+planks, cobblestone for stone bricks) in the Materials tab, computed from the
+recipes the client holds (`Level::getRecipes()`: crafting, furnace,
+stonecutter), not from an outside calculator (ResourceCalculator's data is
+GPL-3.0; see SCHEMATIC.md). First find what the client actually holds and
+how ingredients with several choices (any log, tags) and multi-step chains
+(cobblestone, stone, stone bricks) appear; then decide with the maintainer
+which recipe to prefer when several make the same item. The calculation is
+pure logic with tests.
 
 ### L-111 Integration between features (before the next release or 0.2.0)
 Kind: Design. Raised by the maintainer 2026-10-08 after checking the

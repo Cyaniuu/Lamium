@@ -34,37 +34,48 @@ and honey blocks. Schematic neighbors, the translucent look, the Check tab's
 colored preview and the Files tab's rotatable 3D preview remain follow-ups.
 Local checks do not establish server, other-dimension or large-file coverage.
 
-## Screen review against the mockup (2026-10-08, in discussion)
+## Screen review against the mockup (decided 2026-10-08)
 
-The agent compared `docs/demos/schematic.html` with the screen code; the
-maintainer answered (screenshot at UI Profile 75% as the reference size):
-1. A frame around each placement in the world: yes, as a solid light-blue
-   line like the ghosts' outline (the mock's green/grey is dropped). Open:
-   every placement or only the selected one, and how the selected one
-   differs.
-2. A "◀ placement ▶" switcher on the Check and Materials tabs: rejected; it
-   does not scale to many placements. The Placed list stays the way to pick.
-3. Files grouped by folder with size and block columns: wanted (a small
-   convenience).
-4. Placed list: the selected one must stand out and progress should show,
-   within the width of the list; text such as "Selected" takes too much room.
-5. Check filters with their counts: wanted.
-6. A wrong-state row: a block can differ in several states, so the list keeps
-   the name and the differing states show in the right pane when the row is
-   selected.
-7. Materials: block and entity sections and the missing "show on the HUD"
-   switch, both wanted. Also wanted: amounts as stacks and chests ("3 chests
-   + 5 stacks + 12") on hover or selection, and a right pane used for
-   something better than the explanation text, for example the missing
-   materials drawn like inventory slots, or the raw materials needed to make
-   them (own calculation, or an external calculator site as the map does with
-   ChunkBase).
-8, 9. 3D previews in the screen: not a copy of the mock; vanilla draws 3D in
-   UI (the structure block), so a path likely exists. To research.
-Entities (maintainer, considering): no limit on name tags; draw entities as
-real models with the light-blue outline and the same face treatment as
-blocks, and drop translucency.
-A new mockup comes first; nothing here is built yet.
+The agent compared `docs/demos/schematic.html` with the screen code and drew
+`docs/demos/schematic-screen.html` (UI Profile 75% proportions); the
+maintainer decided:
+1. World frames: every placement in the dimension gets a frame of solid
+   light-blue lines like the ghost outline; the selected placement's frame
+   is full strength, the others faint. (Lines are one pixel wide, so the
+   difference is opacity, not thickness.)
+2. No "previous/next placement" switcher on the Check and Materials tabs: it
+   does not scale to many placements; the Placed list is where to pick.
+3. Files: grouped under folder headings, with size and block-count columns;
+   the size column goes first when the list is narrow.
+4. Placed list: the selected placement has the accent bar on its left edge
+   (the list's own cursor keeps its outline); progress is a right-hand
+   column with the percentage over a short bar (correct / total in the shown
+   layers). When the list is narrow, the name is cut with an ellipsis first,
+   then the coordinates shorten or drop (the detail pane always has them).
+5. Check: the four filters sit above the list with their counts. A
+   wrong-state row shows only the block name; selecting it shows every
+   differing state in the right pane as "<state> <now> -> <should be>", with
+   readable names (L-112) and the drawn arrow.
+6. Materials: block and entity sections, and a "show on the schematic HUD"
+   switch. Amounts convert as "1 chest + 4 stacks + 5" (number first; a
+   chest is 27 stacks; items with a smaller stack size use it) on hover over
+   the counts and in the right pane for the selected row. The right pane
+   shows the missing materials drawn like inventory slots, and a button that
+   opens ResourceCalculator with the remaining amounts in the URL
+   (`#oakplanks=64`; item names from the Bedrock ids with a correction
+   table), like the world map's ChunkBase link.
+7. Parsing ResourceCalculator's results is out: it computes in the browser
+   with no API, and its code and recipe data are GPL-3.0 (Lamium is
+   LGPL-3.0). Raw materials (the logs behind these planks) come from the
+   game's own recipes instead (`Level::getRecipes()`, sent by the server):
+   version-correct, no rights question, server recipes included (L-116).
+8. 3D previews in the Files and Check tabs: research how vanilla draws 3D in
+   UI (the structure block screen); the ghost mesh building already exists
+   (L-114).
+9. Entities: no limit on name tags. First, missing entities get the
+   light-blue outline and faces like block ghosts instead of dashed frames,
+   and translucency is dropped; drawing their real models is research
+   (L-115).
 
 ## Technical entry points
 
