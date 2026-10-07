@@ -1063,9 +1063,20 @@ second round):
   distinction anywhere.
 - The single-purpose keys stay as advanced shortcuts, unbound by default.
 - A held stick (or any item) as a tool is not built; only if users ask.
-Open: the menu's background dimming, position and whether it reopens at
-the category list or the last category (the mockup lets these be
-compared; likely settings); the default menu and adjust keys.
+- Menu settings (decided 2026-10-07): background dimming light by default
+  (none and dark selectable); shown centered at full size by default, or
+  as an option small in the lower right so the view stays free; it opens
+  at the category list by default, or as an option exactly where it was
+  closed (the level shown at closing; the list if the player had gone back
+  up with right click).
+- All keys stay unbound by default (schematics are experimental). The
+  settings lead to the right ones first: the menu key and the adjust key
+  sit right under the Schematics switch, marked as where to start and
+  recommended; the single-purpose keys move into a collapsed "Shortcuts
+  (advanced)" group. While the menu key is unbound, the Schematics
+  screen's footer suggests binding it with a link to the key settings;
+  while the adjust key is unbound, the menu's center says what it would
+  do. (Wording to be settled when built.)
 If there is room before 0.1.7 (maintainer's call, not required): the
 rotatable 3D preview in Files, neighbor-dependent shapes (fences, panes,
 stair corners, redstone) following the schematic's neighbors instead of the

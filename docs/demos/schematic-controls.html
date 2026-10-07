@@ -36,6 +36,10 @@ p{margin:0}
 .toast{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:rgba(var(--mc-panel),.72);padding:3px 8px;font-size:12px;white-space:nowrap}
 .focus{position:absolute;right:8px;bottom:8px;font-size:11px;color:var(--mc-faint)}
 .menu{position:absolute;inset:0}
+.menu.small .it{font-size:10px;line-height:12px;padding:2px 5px;min-width:44px}
+.menu.small .it .v{font-size:9.5px}
+.menu.small .center{width:118px;font-size:10px;line-height:13px;padding:4px 6px}
+.menu.small .center .t{font-size:11px}
 .menu .it{position:absolute;transform:translate(-50%,-50%);background:rgba(var(--mc-panel),.86);box-shadow:inset 0 0 0 1px var(--mc-key-edge);padding:3px 8px;font-size:12px;line-height:15px;white-space:nowrap;text-align:center;min-width:64px}
 .menu .it .v{display:block;color:var(--mc-dim);font-size:11px}
 .menu .it.cat{color:#fff}
@@ -95,8 +99,8 @@ th{color:var(--ink-2);font-weight:500}
       <div class="ctrl" style="margin-top:6px">
         <span>メニューの設定（案）:</span>
         <span>背景</span><button data-dim="0">なし</button><button data-dim="1" aria-pressed="true">薄く</button><button data-dim="2">暗く</button>
-        <span style="margin-left:6px">位置</span><button data-pos="-1">左</button><button data-pos="0" aria-pressed="true">中央</button><button data-pos="1">右</button>
-        <span style="margin-left:6px">開くとき</span><button data-reopen="top" aria-pressed="true">分類の一覧</button><button data-reopen="last">前回の分類</button>
+        <span style="margin-left:6px">表示</span><button data-pos="0" aria-pressed="true">中央（既定）</button><button data-pos="1">小さく右下</button>
+        <span style="margin-left:6px">開くとき</span><button data-reopen="top" aria-pressed="true">分類の一覧（既定）</button><button data-reopen="last">閉じたときの画面</button>
       </div>
     </div>
     <div class="side">
@@ -109,6 +113,25 @@ th{color:var(--ink-2);font-weight:500}
     <h2>設計図メニューの中身</h2>
     <p class="small" style="margin-bottom:8px">8 つの分類 → 項目。<b>クリック</b>で実行、<b>ホイール</b>で値を変える（「ステッパー」の項目）。右クリックで 1 つ戻る、メニューのキーか Esc で閉じる。名前の変更とファイル選び・削除の確認は今どおり画面で。</p>
     <div class="tablewrap"><table id="menutable"></table></div>
+  </section>
+
+  <section>
+    <h2>キーの割り当てを勧める見せ方（案）</h2>
+    <p class="small" style="margin-bottom:8px">既定は全部未割り当て。割り当てるなら、まずメニューキーと調整キーから、という順に自然に進むようにします。</p>
+    <div class="card" style="font:12.5px/1.6 var(--mc-font)">
+      <div style="color:var(--accent)">設定 › 設計図</div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:3px 12px;margin-top:6px;align-items:center">
+        <span>設計図（試験的）</span><span style="color:var(--mc-dim)">オン</span><kbd>未割り当て</kbd>
+        <span>設計図メニュー <span style="color:var(--accent);font-size:11px">まずはここ</span><br><span style="color:var(--mc-dim);font-size:11px">配置・範囲・層・照合のほとんどをこのキー 1 つで</span></span><span></span><kbd>未割り当て</kbd>
+        <span>調整を繰り返す <span style="color:var(--accent);font-size:11px">おすすめ</span><br><span style="color:var(--mc-dim);font-size:11px">押したままホイール: メニューで最後に使った調整（上下・層など）</span></span><span></span><kbd>未割り当て</kbd>
+        <span style="color:var(--mc-dim)">▸ ショートカット（上級者向け）: 配置の操作・表示する層・照合・範囲の保存</span><span></span><span></span>
+      </div>
+    </div>
+    <ul class="small" style="margin-top:8px">
+      <li>メニューキーと調整キーを、設計図の行のすぐ下に「まずはここ」「おすすめ」付きで置く。単機能キーは折りたたんだ「ショートカット（上級者向け）」へ。</li>
+      <li>設計図の画面のフッター：メニューキーが未割り当ての間だけ「設計図メニューのキーを割り当てると、ゲーム中に配置や範囲を操作できます［キーの設定］」と出す。</li>
+      <li>メニューの「画面 › キーの設定」と、調整キー未割り当ての間だけメニュー中心に出す一言「調整キーを割り当てると、この操作をホイールで繰り返せます」。</li>
+    </ul>
   </section>
 
   <section>
@@ -129,7 +152,8 @@ th{color:var(--ink-2);font-weight:500}
       <li><b>決定（2026-10-07）:</b> E と F の両方を入れる。F（メニュー＋調整キー）を勧め、機能ごとのキーは上級者向けのショートカットとして残す。メニュー中もゲームは止めずマウスだけ奪う。移動は「動かす対象」に効く。照合は「最寄りの間違い」だけ（次の間違いはなし）。</li>
       <li>メニューの分類と項目（下の表）に足りないもの・要らないものはないか。</li>
       <li>「移動」の対象は、範囲や配置の分類の「… を動かす →」で選んで移動に入る形でよいか（移動の中心に対象を色付きで表示）。</li>
-      <li>メニューの背景の暗さ・位置・「開くとき」を設定にする形でよいか。既定はどれにするか（推し: 背景は薄く、位置は中央、開くときは分類の一覧）。</li>
+      <li><b>決定:</b> 背景は既定で薄く（なし・暗くも選べる）。表示は既定で中央、オプションで「小さく右下」。開くときは既定で分類の一覧、オプションで「閉じたときの画面」。メニューキー・調整キーは既定で未割り当て（実験的な機能のため）。</li>
+      <li>キーが未割り当てのとき、設定の「設計図」でメニューキーと調整キーを最初に勧める見せ方（下の案）でよいか。</li>
     </ul>
   </section>
 </div>
@@ -152,7 +176,7 @@ const st = {
     {name:'farm', x:22,y:63,z:14, w:5,h:3,d:5, rot:0, mirror:0, visible:true, axis:0, mode:0, layer:0, extras:false, entities:true},
   ],
   selected:0, sel:{a:{x:3,y:64,z:3}, b:{x:7,y:67,z:7}}, target:0, hud:true, enabled:true,
-  menu:null, hover:-1, last:null, dim:1, pos:0, reopen:'top', lastCat:-1, adjustHeld:false, changed:new Set(), toast:'', toastAt:0, mouse:{x:0,y:0},
+  menu:null, hover:-1, last:null, dim:1, pos:0, reopen:'top', lastCat:-1, closedCat:-1, adjustHeld:false, changed:new Set(), toast:'', toastAt:0, mouse:{x:0,y:0},
 };
 const P = () => st.places[st.selected];
 const looked = () => { const d = DIRS[st.look]; return st.pitch ? {x:st.player.x+d[0], y:st.player.y-1, z:st.player.z+d[1]} : {x:st.player.x+d[0]*3, y:st.player.y, z:st.player.z+d[1]*3}; };
@@ -240,18 +264,21 @@ function target3(){ return st.target === 0 ? P() : st.target === 2 ? (st.sel.b |
 function turn(n){ const p = P(); for (let i = 0; i < (n+4)%4; ++i){ p.rot = (p.rot+1)%4; } mark('rot'); }
 function setAxis(n){ const p = P(); p.axis = (p.axis+n+6)%6; p.layer = Math.min(p.layer, layerCount(p)-1); mark('axis','layer'); }
 function setLayer(n){ const p = P(); if (!p.mode) p.mode = 1; p.layer = Math.max(0, Math.min(layerCount(p)-1, p.layer+n)); mark('layer','mode'); }
+// "Where it was closed": the level shown at closing, the list if the player went back up.
+function closeMenu(){ st.closedCat = st.menu.cat; st.menu = null; }
 // "… を動かす →": choose what the move ring acts on and go there.
 function moveRing(target){ st.target = target; mark('target'); st.menu.cat = 0; st.lastCat = 0; st.hover = -1; }
 const TARGET_COLORS = ['#6cc349','#ff8a80','#8cb0ff','#ffffff'];
 function nextPlace(n){ st.selected = (st.selected+n+st.places.length)%st.places.length; mark('place'); }
 
 function menuItems(){ const cats = categories(); return st.menu.cat < 0 ? cats.map(c => ({label:c.name, cat:true})) : cats[st.menu.cat].items; }
-const centerX = () => 320 + st.pos * 150;
-function positions(n){ const R = 140; return Array.from({length:n}, (_, i) => { const a = i*Math.PI*2/n - Math.PI/2; return [Math.cos(a)*R*.8, Math.sin(a)*R*.72]; }); }
+// Centered and full size, or small in the lower right where the view stays free.
+const centerX = () => st.pos ? 520 : 320, centerY = () => st.pos ? 365 : 240, ringScale = () => st.pos ? .6 : 1;
+function positions(n){ const R = 140 * ringScale(); return Array.from({length:n}, (_, i) => { const a = i*Math.PI*2/n - Math.PI/2; return [Math.cos(a)*R*.8, Math.sin(a)*R*.72]; }); }
 function hoverFromMouse(){
   const r = stage.getBoundingClientRect(), sx = 640 / r.width, sy = 480 / r.height;
-  const mx = (st.mouse.x * sx - centerX()) / .8, my = st.mouse.y * sy - 240;
-  if (Math.hypot(mx, my/0.72) < 70) return -1;
+  const mx = (st.mouse.x * sx - centerX()) / .8, my = st.mouse.y * sy - centerY();
+  if (Math.hypot(mx, my/0.72) < 70 * ringScale()) return -1;
   const n = menuItems().length;
   let a = Math.atan2(my/0.72, mx) + Math.PI/2; if (a < 0) a += Math.PI*2;
   return Math.round(a / (Math.PI*2/n)) % n;
@@ -266,8 +293,8 @@ function use(it, n){
 const MENU = 'm', ADJ = 'g';
 stage.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
-  if (k === MENU && !e.repeat){ e.preventDefault(); st.menu = st.menu ? null : {cat: st.reopen === 'last' ? st.lastCat : -1}; st.hover = -1; render(); return; }
-  if (k === 'escape' && st.menu){ st.menu = null; render(); return; }
+  if (k === MENU && !e.repeat){ e.preventDefault(); if (st.menu) closeMenu(); else st.menu = {cat: st.reopen === 'last' ? st.closedCat : -1}; st.hover = -1; render(); return; }
+  if (k === 'escape' && st.menu){ closeMenu(); render(); return; }
   if (st.opt === 'F' && k === ADJ && !e.repeat){ e.preventDefault(); st.adjustHeld = true; render(); return; }
   if (st.opt === 'E' && !st.menu && /^[1-8]$/.test(k)){
     const binds = [['移動','前後',1],['移動','前後',-1],['移動','上下',1],['移動','上下',-1],['向き','回転',1],['層','層',1],['層','層',-1],['範囲','角 1 をここに']];
@@ -293,7 +320,7 @@ stage.addEventListener('wheel', e => {
 stage.addEventListener('mousedown', e => {
   stage.focus();
   if (!st.menu) return;
-  if (e.button === 2){ if (st.menu.cat >= 0) st.menu.cat = -1; else st.menu = null; st.hover = -1; render(); return; }
+  if (e.button === 2){ if (st.menu.cat >= 0) st.menu.cat = -1; else closeMenu(); st.hover = -1; render(); return; }
   if (e.button !== 0 || st.hover < 0) return;
   if (st.menu.cat < 0){ st.menu.cat = st.hover; st.lastCat = st.hover; st.hover = -1; render(); return; }
   use(menuItems()[st.hover]); render();
@@ -376,8 +403,10 @@ function render(){
     const cx = centerX();
     // The move ring says what it moves, in that thing's color.
     const tg = st.menu.cat === 0 ? `<div class="tg" style="color:${TARGET_COLORS[st.target]}">対象: ${TARGETS[st.target]}</div>` : '';
-    menuEl.innerHTML = items.map((it, i) => `<div class="it ${it.cat ? 'cat' : ''} ${st.hover === i ? 'on' : ''}" style="left:${(cx + pos[i][0]) / 6.4}%;top:${(240 + pos[i][1]) / 4.8}%">${it.label}${!it.cat && it.value && it.value() !== '' ? `<span class="v">${it.value()}</span>` : ''}</div>`).join('')
-      + `<div class="center" style="left:${cx / 6.4}%"><div class="t">${cat}</div>${tg}<div class="d">${
+    menuEl.classList.toggle('small', !!st.pos);
+    const cy = centerY();
+    menuEl.innerHTML = items.map((it, i) => `<div class="it ${it.cat ? 'cat' : ''} ${st.hover === i ? 'on' : ''}" style="left:${(cx + pos[i][0]) / 6.4}%;top:${(cy + pos[i][1]) / 4.8}%">${it.label}${!it.cat && it.value && it.value() !== '' ? `<span class="v">${it.value()}</span>` : ''}</div>`).join('')
+      + `<div class="center" style="left:${cx / 6.4}%;top:${cy / 4.8}%"><div class="t">${cat}</div>${tg}<div class="d">${
         st.menu.cat < 0 ? 'クリック: 分類を開く<br>Esc / メニューのキー: 閉じる'
         : hovered ? (hovered.step ? 'ホイール: 値を変える<br>クリック: 1 つ進める' : 'クリック: 実行') + '<br>右クリック: 戻る'
         : '項目にマウスを向ける<br>右クリック: 戻る'}</div></div>`;
