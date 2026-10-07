@@ -243,7 +243,8 @@ and L-15). Step 9 concluded that no further camera split was useful: `Zoom`
 was renamed `CameraSessions` (file and class), with trace/probe code and
 detached-camera state already separated; the main file is 752 lines with 5
 `#if`. Step 10 (084b424) was checked in game. Steps 11 and 12 were dropped
-after review (see D). The only remaining step is 13 with L-15.
+after review (see D). The only remaining step is 13 with L-15: built 2026-10-07
+(`MiningSession.h/.cpp`), waiting for the in-game check of all combinations.
 
 Fix (can cause wrong behavior)
 - A. Breaking Restriction and Tool Switch read and write their
@@ -380,8 +381,9 @@ Kind: Design done (discussion with the maintainer, 2026-09-28); breaking is
 then Ready **(strong model)**, placement needs Research first. Replaces the
 current Breaking Restriction (capture/reset keys) and the unimplemented
 placement mode.
-Status: step 1 (breaking) started 2026-10-07 at the maintainer's go, with
-L-73 step 13. Placement (steps 2-3) still waits for the maintainer.
+Status: step 1 (breaking) built 2026-10-07 at the maintainer's go, with
+L-73 step 13; not yet checked in game (VALIDATION.md). Implementation notes:
+RESTRICTIONS.md. Placement (steps 2-3) still waits for the maintainer.
 Decided 2026-10-07: breaking keeps the existing Breaking Restriction toggle
 and Cycle Breaking Mode bindings (no new default keys); the saved breaking
 mode carries over unchanged and Height band is added to the list.

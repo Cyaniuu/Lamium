@@ -1,62 +1,81 @@
 # Placement and breaking restrictions
 
-This file describes the existing capture/reset implementation and placement
-research. The planned press-anchored redesign is specified in
-[BACKLOG.md](BACKLOG.md#l-15-breaking-and-placement-restrictions) (L-15), and
-has not started. Current runtime coverage is in [VALIDATION.md](VALIDATION.md).
-The redesign's spec takes precedence when implementing L-15; do not extend
-the old capture/reset flow as if it were the chosen future behavior.
+Breaking follows the press-anchored design of
+[BACKLOG.md](BACKLOG.md#l-15-breaking-and-placement-restrictions) (L-15,
+step 1, built 2026-10-07). Placement is not implemented; its research notes
+are below. Current runtime coverage is in [VALIDATION.md](VALIDATION.md).
 
-The shared region predicate defines the existing capture/reset modes:
+The shared region predicate (`RestrictionRegion.h`) defines the modes:
 
-- Plane: fixes the anchor coordinate on the selected face-normal axis.
+- Plane: fixes the anchor coordinate on the mined face's normal axis.
 - Line: fixes the other two coordinates, extending along that axis.
-- Column: fixes X/Z and extends vertically, independent of the selected face.
-- Layer: fixes Y and extends horizontally, independent of the selected face.
+- Column: fixes X/Z and extends vertically, independent of the face.
+- Layer: fixes Y and extends horizontally, independent of the face.
+- Height band (breaking only): the rows from the feet cell up, `breakingBand`
+  rows (default 2, 1-16). The feet row is read when the press anchors.
 
-The anchor is a block cell. Preview generation uses the same predicate as
-action enforcement. Preview radius is bounded to 0–16 cells; this bounds rendering
-work, not the allowed operation region. Integer coordinate edges retain the
-headroom required by block-face geometry. No Minecraft pointers are stored.
+Modes are saved by name (`heightBand` appended); placement offers the first
+four. Preview radius is bounded to 0-16 cells; this bounds rendering work, not
+the allowed region. No Minecraft pointers are stored.
 
-## Existing integration and placement boundary
+## Breaking: press-anchored lifetime
 
-The mode settings are exposed as independent named choices with immediate saving.
-Breaking now has a default-off toggle and initially unbound capture/reset actions.
-Enable it, then point at a block and invoke capture. With no anchor, breaking is
-blocked and the HUD prompts for an anchor. Toggling, changing mode, world exit,
-dimension transition and feature shutdown clear the session anchor. The world
-preview shows a radius-four sample of the region; its geometry is cached by value.
-Settings/input ownership gates capture actions through the shared action layer.
-The initially unbound next-mode action cycles the same named option used by the
-settings editor and clears the anchor through the same save path. The HUD shows
-mode, effective axis and anchor state. Column and Layer report Y regardless of
-the captured face. Placement enforcement and its anchor are not yet implemented.
+`PressAnchor` (pure, tested) holds the region for one attack press. The
+first block mined in a press anchors it (mode from the settings, axis from
+the mined face); a release or a new press ends it. The attack button state
+comes from vanilla's own button handlers through the Auto Attack/Use adapter
+(`periodic::attackButton()`), so Auto Attack's synthetic presses count too.
+A call made without a held press does not anchor and is allowed. Toggling,
+changing the mode, world exit and dimension change also clear the anchor.
+The capture and reset actions are retired: their ids stay in `enum Action`
+(saved bindings), but they are not listed or dispatched.
 
-Breaking hooks gate GameMode start/continue/destroy calls for the local client
-player. Rejected calls return false and clear the destroyed output parameter when
-present. Tool Switch also checks the predicate independently. The runtime call
-coverage, creative instant break and cancellation behavior remain unverified.
+While a press holds a region, the world overlay draws faint faces like a
+White shape over the allowed cells within four blocks of the anchor, leaving
+out the targeted block so the vanilla outline stays visible. The Status
+element shows the mode (and axis) whenever the restriction is on, and the
+anchor while a press holds one. A rejected block is silent.
+
+## Mining session (L-73 B)
+
+`MiningSession.cpp` owns the GameMode start/continue/stop hooks for the
+client's own player and asks Breaking Restriction, Tool Protection and Tool
+Switch in that order (`MiningSession.h`, pure and tested). The first answer
+other than Proceed is applied and later features are not asked:
+
+- End: a start returns false; a continue returns false, ending vanilla's
+  session (a held button never restarts it, L-36).
+- Pause: keep the session without progress; progress already made is aborted
+  through vanilla's stop, and the next allowed call restarts through vanilla's
+  start so the server gets a start action again.
+- Restart: Tool Switch fetched a tool; start afresh on this block.
+
+A restart the session makes is not a new press for Tool Protection, and the
+pause's own stop is not a stop for Tool Switch. The integrated server's
+player in a local world is left to vanilla. `destroyBlock` is still gated by
+Breaking Restriction directly (creative instant breaks go through it).
+
+## Placement boundary
+
 Placement must
 validate the actual destination cell; blindly adding a face offset is incorrect
 for replaceable blocks and special placements. Resolve that through vanilla
 placement semantics before connecting the placement gate. Do not cancel unrelated
 item use or container interaction merely because the hit block is out of range.
-
-World previews should use the existing block-grid geometry and explain the mode,
-anchor and axis. Rejected operations must not mutate player position, inventory,
-block state or send a placement/break packet. This is independent of fast placement.
+Rejected operations must not mutate player position, inventory, block state or
+send a placement/break packet.
 
 ## Evidence
 
 Pure tests cover all axes, negative coordinates, preview membership/counts,
-unbounded predicate behavior, vertical modes, opposite faces, preview work limits
-and integer-edge handling. They do not prove Minecraft hook or placement behavior.
-The breaking implementation builds and links, and catalog/settings/action tests
-pass. Breaking and resume-after-rejection have local-world evidence (L-36,
-rechecked 2026-09-30), with an occasional held attack that stops breaking still
-unexplained. Full modes/faces, lifecycle and feature-combination coverage is not
-established. Placement enforcement remains unimplemented. Do not claim packet
+unbounded predicate behavior, vertical modes, the height band, opposite faces,
+preview work limits, integer-edge handling, the press anchor and the mining
+session steps. They do not prove Minecraft hook or placement behavior.
+The capture/reset design had local-world evidence for breaking and
+resume-after-rejection (L-36, rechecked 2026-09-30), with an occasional held
+attack that stopped breaking unexplained. The press-anchored design and the
+shared mining session (2026-10-07) build and pass the tests; they have not
+been seen in game yet. Placement enforcement remains unimplemented. Do not claim packet
 suppression or complete enforcement from the tests or partial local checks.
 
 ## Placement integration research (SDK 26.51.3)

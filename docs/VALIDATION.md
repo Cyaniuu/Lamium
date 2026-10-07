@@ -38,7 +38,7 @@ game result.
 | Sorting | 2026-09-22, local (inventory, large chest) | Screen closed mid-sort, latency, more container kinds |
 | Inventory transfer gestures (L-41, L-103; inventory screen: Shift + left on a worn item equips it and the held drag continues, a drag begun elsewhere moves worn items, `037a151`) | 2026-09-27, local (overall); 2026-10-07, inventory screen main inventory/hotbar in survival (`bd30648`), creative and adventure (`97c44c6`); drag re-entry (trace `163bb96`) | Trace-disabled drag re-entry; individual edge cases, multiplayer |
 | Tool Switch, hotbar (L-31) | 2026-09-25, local | |
-| Tool Switch, fetch from inventory (L-69) | 2026-09-30, local; light BDS pass | Trace-disabled build, latency |
+| Tool Switch, fetch from inventory (L-69) | 2026-09-30, local; light BDS pass | Trace-disabled build, latency; recheck after the shared mining session (L-73 B, 2026-10-07) |
 | Weapon Switch (L-67) | 2026-10-02, local (`20e8cb5`, enchantments on `7b702da`) | Servers, trident/mace |
 | Hand Restock (L-66) | 2026-09-30, local and BDS (trace builds): blocks, food, eggs, stew and water bucket, held use, largest-first and hotbar sources; 2026-10-07, threshold setting and smallest/largest order (`bd30648`, local) | Trace-disabled build, latency, screens/focus/dimension change during observation, 16-stack throwables other than eggs |
 | Offhand totems (L-68) | 2026-09-30, local; light BDS pass | Trace-disabled build |
@@ -50,11 +50,12 @@ game result.
 
 | Feature | Last confirmed | Not yet checked |
 |---|---|---|
-| Breaking Restriction, resume after a forbidden block (L-36) | 2026-09-30, local (mostly; see L-73 entry) | A held attack occasionally stops breaking, cause unknown; redesign L-15 pending |
+| Breaking Restriction, resume after a forbidden block (L-36) | 2026-09-30, local (mostly; see L-73 entry), capture/reset design | Replaced by L-15; recheck under the press-anchored design |
+| Breaking Restriction, press-anchored modes and height band (L-15 step 1) | Not seen in game (built 2026-10-07) | Every mode in survival and creative, held target changes, release/new press, Tool Switch and Tool Protection together (shared mining session, L-73 B), faces overlay, Status line, world exit and dimension change |
 | Permanent Sneak, Permanent Sprint (L-43) | 2026-09-26, local | |
 | Edge Guard (L-40) | 2026-09-26, local | Servers |
 | Auto Attack / Auto Use (L-34) | 2026-09-30, local (build 221edcb) | Several clicks per update landing on servers |
-| Tool Protection (L-62) | 2026-09-30, local; light BDS pass: swap from inventory and hotbar, stop toast, strict child | Trace-disabled build, Unbreaking/Mending ordering, elytra replacement in flight |
+| Tool Protection (L-62) | 2026-09-30, local; light BDS pass: swap from inventory and hotbar, stop toast, strict child | Trace-disabled build, Unbreaking/Mending ordering, elytra replacement in flight; recheck after the shared mining session (L-73 B, 2026-10-07) |
 | Auto Elytra, experimental (L-70) | 2026-09-30, local; light BDS pass: key, firework jump, delayed chestplate, hand-worn elytra | Trace-disabled build; no automatic glide (L-71) |
 
 ## Information and overlays
