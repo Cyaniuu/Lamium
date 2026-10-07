@@ -562,7 +562,8 @@ Accepted follow-ups (2026-10-07; known gaps, not 0.1.7 blockers):
   wrong or extra block reads "Should be [icon] <block>"; each differing
   state is one row "<state>: <now> → <should be>" with readable names
   (L-112), and the block's own row for that state is not repeated.
-  Built 2026-10-08 (`SchematicTarget.h`, tested), not yet checked in game.
+  Built 2026-10-08 (`SchematicTarget.h`, tested) and checked in game the same
+  day, including the drawn change arrow in English and Japanese.
 - Beds sometimes drawing only one half or an outline; heads, doors and
   honey blocks still drawing as outlines.
 - The Check tab's verifier-colored preview and the Files tab's rotatable
@@ -647,8 +648,9 @@ enough to show as a time.
 
 ### L-112 Readable block state names in the target card
 Kind: Ready. Chosen 2026-10-08 with the L-93 target-card redesign.
-Status: built 2026-10-08 (`interpretBlockState`, tested), not yet checked in
-game. Text directions (cardinal, facing, block face) now show translated
+Status: built 2026-10-08 (`interpretBlockState`, tested) and checked in game
+the same day (stairs, trapdoors, slabs, logs, doors). Other blocks with
+directions stay raw until named. Text directions (cardinal, facing, block face) now show translated
 direction names instead of the raw English word.
 Show common block states by name instead of their internal keys and values,
 for the card's own state rows and the schematic differences: stairs facing

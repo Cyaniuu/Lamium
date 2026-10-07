@@ -12,6 +12,13 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## Change arrow height in Japanese (2026-10-08)
+
+By the maintainer, deployed `c32f276`, DLL
+`a45a000467aea6449f29836535b7386e47495e0a3c587433212a40fff4c0c414`,
+Minecraft 1.26.51.01, local world, Japanese locale. The arrow in a wrong
+stair's facing row sits level with the kanji.
+
 ## Drawn change arrow in the target card (2026-10-08)
 
 By the maintainer, deployed `3b70d73`, DLL
