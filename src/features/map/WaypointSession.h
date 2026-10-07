@@ -32,6 +32,8 @@ struct Place {
     std::optional<std::filesystem::path> mapFolder;
     // Schematic placements (L-93) live beside the waypoints, same rules.
     std::optional<std::filesystem::path> schematicFile;
+    // The death-time inventory layout (L-109), same rules.
+    std::optional<std::filesystem::path> deathLayoutFile;
 };
 Place place();
 }

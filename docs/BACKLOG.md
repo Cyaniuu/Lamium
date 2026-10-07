@@ -669,7 +669,17 @@ items.
 ### L-109 Restore the death-time hotbar and inventory layout on pickup
 Kind: Design decided 2026-10-08, then Ready **(strong model)**. Idea from the
 maintainer 2026-10-07; chosen for building 2026-10-08.
-Status: decided; implementation in the 2026-10-08 batch.
+Status: built 2026-10-08 (default off, Experimental), not yet checked in
+game. Planner `DeathLayout.h` (one move at a time: swap, or move part of a
+stack; equipment never emptied; tested, including 2000 random inventories
+for termination and conservation), document `DeathLayoutStore.cpp`
+(`death-layout.json` beside the waypoints), glue `DeathRestore.cpp`: the
+inventory is snapshotted every tick while alive and the last one becomes the
+layout on death; a pickup of a layout item arms a run that starts 1 s after
+the last pickup, moves every 250 ms in gameplay only, re-reads the inventory
+before each move, and stops after the same move three times or 100 moves
+until the next pickup. Known risk: with instant respawn the inventory may
+still read full at respawn and be taken for keepInventory.
 When the player picks up the items dropped at their death point, rearrange the
 inventory to be as close as possible to the layout at death: the same items
 back in the same hotbar, inventory, armor and offhand slots. When the feature

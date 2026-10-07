@@ -143,6 +143,7 @@ Json encode(Settings const& settings) {
                         {"foodValues", settings.inspection.foodValues}}},
         {"inventory", {{"sorting", settings.inventory.sorting}, {"sortContainers", settings.inventory.sortContainers},
                        {"offhandSwap", settings.inventory.offhandSwap},
+                       {"deathRestore", settings.inventory.deathRestore},
                        {"offhandSwapFireworks", settings.inventory.offhandSwapFireworks},
                        {"transfer", settings.inventory.transfer},
                        {"transferWheelOne", settings.inventory.transferWheelOne},
@@ -426,6 +427,7 @@ Settings decodeSettings(std::string_view text) {
     if (data.contains("inventory")) {
         value.inventory.sorting = data.at("inventory").value("sorting", value.inventory.sorting);
         value.inventory.offhandSwap = data.at("inventory").value("offhandSwap", value.inventory.offhandSwap);
+        value.inventory.deathRestore = data.at("inventory").value("deathRestore", value.inventory.deathRestore);
         value.inventory.offhandSwapFireworks = data.at("inventory").value("offhandSwapFireworks", value.inventory.offhandSwapFireworks);
         value.inventory.sortContainers = data.at("inventory").value("sortContainers", value.inventory.sortContainers);
         value.inventory.transfer = data.at("inventory").value("transfer", value.inventory.transfer);

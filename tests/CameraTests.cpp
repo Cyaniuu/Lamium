@@ -25,6 +25,8 @@ int main() try {
     freeCameraCullingTests();
     extern void restrictionRegionTests();
     restrictionRegionTests();
+    extern void deathLayoutTests();
+    deathLayoutTests();
     extern void frameRateTests();
     frameRateTests();
     extern void debugLinesTests();

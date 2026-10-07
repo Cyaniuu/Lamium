@@ -69,6 +69,7 @@ struct Settings {
     struct Inventory {
         bool sorting = true;
         bool offhandSwap = true; // The Swap with offhand key works (L-94)
+        bool deathRestore = false; // Put picked-up items back in their death-time slots (L-109, experimental)
         // Fireworks swap with Fake Offhand's slot, not the real offhand, while
         // Fake Offhand is on: it can launch them (maintainer 2026-10-07).
         bool offhandSwapFireworks = true;

@@ -9,6 +9,7 @@
 #include "features/interaction/EdgeGuard.h"
 #include "features/interaction/ToolGuard.h"
 #include "features/interaction/MiningSessionHooks.h"
+#include "features/inventory/DeathRestore.h"
 #include "features/interaction/ElytraSwap.h"
 #include "features/interaction/PeriodicInput.h"
 #include "features/interaction/AutomationTrace.h"
@@ -110,6 +111,7 @@ Feature const features[] = {
     {"Offhand visibility", started<visuals::start>, visuals::stop},
     {"Tool Switch", started<inventory::tools::start>, inventory::tools::stop},
     {"Weapon Switch", started<inventory::weapons::start>, inventory::weapons::stop},
+    {"Death layout", started<inventory::death::start>, inventory::death::stop},
     {"Fake offhand", started<inventory::fakeOffhand::start>, inventory::fakeOffhand::stop},
     {"Fake offhand diagnostics", started<inventory::fakeOffhand::startTrace>, inventory::fakeOffhand::stopTrace},
     {"Offhand use diagnostics", started<inventory::offhandUseTrace::start>, inventory::offhandUseTrace::stop},
