@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schematic Screen Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: dark;
+  --ground:#15181a; --ground-2:#1c2124; --line:#2c3337; --ink:#e6ebe8; --ink-2:#a6b0ab; --ink-3:#77827c;
+  --accent:#6cc349; --accent-deep:#3c8527;
+  --panel:rgba(16,17,19,.86); --edge:rgba(255,255,255,.14); --alt:rgba(255,255,255,.025); --hover:rgba(255,255,255,.07);
+  --sel:rgba(108,195,73,.16); --text:#fff; --dim:#b4b8b6; --faint:#7f8583;
+  --key:#2b2c2d; --key-edge:#5a5b5c; --warn:#ffc24a; --bad:#ff5a4e; --state:#ffcc40; --miss:#bfd9e6; --ghost:#59d9ff;
+  --font:"DotGothic16","MS Gothic",monospace;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font:15px/1.65 "Noto Sans JP",system-ui,sans-serif;margin:0}
+.wrap{max-width:1120px;margin:0 auto;padding:28px 16px 64px;display:grid;gap:22px}
+h1{font:700 24px/1.3 "Noto Sans JP",sans-serif;margin:0}
+h2{font:700 17px/1.4 "Noto Sans JP",sans-serif;margin:0 0 6px}
+p{margin:0}
+.lede{color:var(--ink-2);max-width:78ch;margin-top:8px}
+.eyebrow{font:500 12px/1 "Noto Sans JP",sans-serif;letter-spacing:.12em;color:var(--accent);margin-bottom:10px}
+.tabs,.grp{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.tabs button,.grp button{all:unset;cursor:pointer;background:var(--ground-2);color:var(--ink-2);border:1px solid var(--line);font-size:13px;padding:5px 11px}
+.tabs button[aria-selected=true],.grp button[aria-pressed=true]{background:var(--accent-deep);border-color:var(--accent);color:#fff}
+.ctrl{display:flex;gap:10px 18px;flex-wrap:wrap;font-size:13px;color:var(--ink-2)}
+.ctrl .grp button{font-size:12.5px;padding:3px 9px}
+
+/* The screen, at the proportions of UI Profile 75% on 1920x1080 (halved). */
+.stage-outer{border:1px solid var(--line);background:#0b0d0e}
+.fit{position:relative;width:100%;overflow:hidden}
+.stage{position:absolute;left:0;top:0;width:960px;height:540px;transform-origin:0 0;font-family:var(--font);color:var(--text);overflow:hidden;
+  background:linear-gradient(160deg,#2c4b3c 0%,#46523f 35%,#6b6450 60%,#3b4a57 100%)}
+.screen{position:absolute;left:13px;top:10px;width:934px;height:521px;background:var(--panel);border:1px solid var(--edge);display:grid;
+  grid-template-columns:166px 384px 1fr;grid-template-rows:28px 1fr 64px}
+.top{grid-column:1/4;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid var(--edge);font-size:12px}
+.top .sp{flex:1}
+.btn{border:1px solid var(--key-edge);background:var(--key);padding:0 8px;height:16px;line-height:15px;font-size:11px;color:var(--dim);white-space:nowrap}
+.btn.on{background:var(--accent-deep);border-color:var(--accent);color:#fff}
+.btn.del{border-color:#8a3b33;color:#ffb3ad;background:var(--key)}
+.side{border-right:1px solid var(--edge);padding:8px 0;font-size:12.5px}
+.side div{padding:3px 12px;display:flex;justify-content:space-between;color:var(--text)}
+.side div.cur{background:var(--sel);box-shadow:inset 3px 0 var(--accent)}
+.side .n{color:var(--dim)}
+.side hr{border:0;border-top:1px solid var(--edge);margin:8px 10px}
+.list{border-right:1px solid var(--edge);display:flex;flex-direction:column;min-height:0}
+.stabs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:4px 8px}
+.stabs .btn{text-align:center;cursor:pointer;font-size:12px;height:17px;line-height:16px}
+.thead{display:flex;gap:6px;font-size:11px;color:var(--faint);padding:2px 9px;border-top:1px solid var(--edge);border-bottom:1px solid var(--edge)}
+.rows{flex:1;overflow:hidden;font-size:12px}
+.row{display:flex;align-items:center;gap:6px;height:21px;padding:0 9px;position:relative;cursor:pointer;white-space:nowrap}
+.row:nth-child(even){background:var(--alt)}
+.row:hover{background:var(--hover)}
+.row.sel{background:var(--sel);outline:1px solid var(--accent);outline-offset:-1px}
+.row .nm{flex:1;overflow:hidden;text-overflow:ellipsis}
+.row .num{color:var(--dim);font-variant-numeric:tabular-nums;text-align:right}
+.row.other .nm,.row.other .num{color:var(--faint)}
+.sw{width:24px;height:11px;border:1px solid #5a5b5c;background:#48494a;position:relative;flex:none}
+.sw::after{content:"";position:absolute;top:1px;left:1px;width:9px;height:7px;background:#ddd}
+.sw.on{background:var(--accent-deep);border-color:var(--accent)}.sw.on::after{left:13px}
+.ic{width:12px;height:12px;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.45)}
+.folder{height:17px;padding:0 9px;font-size:11px;color:var(--faint);display:flex;align-items:end}
+.detail{padding:8px 12px;font-size:12px;display:flex;flex-direction:column;gap:3px;min-height:0;overflow:hidden}
+.detail .title{font-size:13px;margin-bottom:3px}
+.detail .d{color:var(--dim)} .detail .f{color:var(--faint)}
+.detail .sec{color:var(--faint);font-size:11px;margin-top:6px}
+.kv{display:flex;justify-content:space-between;gap:8px}
+.foot{grid-column:1/4;border-top:1px solid var(--edge);padding:5px 10px;font-size:12px;display:flex;flex-direction:column;gap:6px}
+.foot .h{color:var(--faint);font-size:11px}
+.square{width:7px;height:7px;flex:none}
+.arrow{display:inline-block;width:7px;height:5px;margin:0 4px;vertical-align:middle;position:relative}
+.arrow::before{content:"";position:absolute;left:0;top:2px;width:4px;height:1px;background:currentColor}
+.arrow::after{content:"";position:absolute;left:4px;top:0;border-left:3px solid currentColor;border-top:2.5px solid transparent;border-bottom:2.5px solid transparent}
+.chips{display:flex;gap:4px;padding:3px 8px 4px;flex-wrap:wrap}
+.chip{border:1px solid var(--key-edge);background:var(--key);height:16px;line-height:15px;padding:0 6px;font-size:11px;color:var(--dim);cursor:pointer;display:flex;gap:5px;align-items:center}
+.chip b{font-weight:400;color:var(--text)}
+.chip.on{background:var(--accent-deep);border-color:var(--accent);color:#fff}
+.bar{height:2px;background:rgba(255,255,255,.12);position:relative}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--accent)}
+.preview{flex:1;min-height:90px;border:1px solid var(--edge);background:rgba(0,0,0,.25);display:grid;place-items:center;color:var(--faint);font-size:11px;text-align:center;position:relative}
+.slots{display:grid;grid-template-columns:repeat(9,22px);gap:1px;background:#373737;padding:2px;width:max-content}
+.slot{width:22px;height:22px;background:#8b8b8b;box-shadow:inset 1px 1px #373737,inset -1px -1px #fff;position:relative}
+.slot i{position:absolute;inset:4px}
+.slot b{position:absolute;right:1px;bottom:-1px;font-weight:400;font-size:10px;color:#fff;text-shadow:1px 1px #3f3f3f}
+.slot.short b{color:var(--warn)}
+.tip{position:absolute;background:rgba(16,0,16,.94);border:1px solid #2a0a5c;padding:3px 6px;font-size:11.5px;white-space:nowrap;pointer-events:none;z-index:5}
+.tree{font-size:11.5px;display:flex;flex-direction:column;gap:2px}
+.tree div{display:flex;gap:6px;align-items:center}
+.tree .n{margin-left:auto;color:var(--dim)}
+.link{color:var(--accent);text-decoration:underline}
+.qa{border:1px solid var(--line);background:var(--ground-2);padding:14px 16px}
+.qa ol{margin:6px 0 0;padding-left:20px;color:var(--ink-2)} .qa li{margin:4px 0}
+.qa b{color:var(--ink)}
+.world{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.world figure{margin:0;border:1px solid var(--line);background:#20262a}
+.world figcaption{font-size:12.5px;color:var(--ink-2);padding:6px 10px}
+.world svg{display:block;width:100%;height:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="eyebrow">BACKLOG L-93 · 設計図の画面 · 見直しモック（2026-10-08）</div>
+  <h1>設計図の画面の見直し：モックとの差と、新しく欲しいもの</h1>
+  <p class="lede">今の画面（UI Profile 75%、1920×1080）と同じ割合で描いています。下の切り替えで、迷っている所の案を比べられます。行はクリックで選べ、資材の数にポインタを乗せるとスタック・チェスト換算が出ます。ブロックの色は仮のものです。</p>
+</header>
+
+<div class="tabs" role="tablist" id="tabs">
+  <button role="tab" data-t="files">ファイル</button>
+  <button role="tab" data-t="placed" aria-selected="true">配置</button>
+  <button role="tab" data-t="check">照合</button>
+  <button role="tab" data-t="mat">資材</button>
+</div>
+<div class="ctrl" id="ctrl"></div>
+
+<div class="stage-outer"><div class="fit" id="fit"><div class="stage" id="stage">
+  <div class="screen">
+    <div class="top"><span>Lamium</span><span style="color:var(--dim)">0.1.7</span><span class="sp"></span>
+      <span style="color:var(--dim)">すべて表示</span><span class="sw on"></span><span style="color:var(--accent);text-decoration:underline">キーの設定</span>
+      <span class="btn">右に寄せる</span><span class="btn">閉じる (Esc)</span></div>
+    <div class="side">
+      <div>すべて</div><div>カメラ・見た目<span class="n">2/3</span></div><div>情報・オーバーレイ<span class="n">7/11</span></div>
+      <div>マップ<span class="n">4/4</span></div><div>設計図<span class="n">1/2</span></div><div>インベントリ<span class="n">10/11</span></div>
+      <div>操作<span class="n">2/5</span></div><div>全般</div><hr>
+      <div>ホットキー</div><div>形状<span class="n">0</span></div><div>ウェイポイント<span class="n">0</span></div>
+      <div class="cur">設計図<span class="n">9</span></div><div>ワールドマップ</div><div>HUD レイアウト</div>
+    </div>
+    <div class="list">
+      <div class="stabs" id="stabs"></div>
+      <div id="listhead"></div>
+      <div class="rows" id="rows"></div>
+    </div>
+    <div class="detail" id="detail"></div>
+    <div class="foot"><span id="footText"></span><span class="h">クリック: 選択 | -/+・矢印: 変更 | Enter: 数値を入力 | Esc: 閉じる</span></div>
+  </div>
+  <div class="tip" id="tip" hidden></div>
+</div></div></div>
+
+<section>
+  <h2>ワールドの枠（1 番）</h2>
+  <p class="lede" style="margin:0 0 10px">ゴーストの輪郭と同じ水色の実線にする、は決定。どの配置に出すか・選択中をどう見分けるかを比べます。</p>
+  <div class="world" id="world"></div>
+</section>
+
+<section class="qa">
+  <h2>確認したいこと</h2>
+  <ol>
+    <li><b>ワールドの枠</b>：上の A（全部・選択中だけ太く）、B（選択中だけ）、C（全部同じ・選択中は角に印）のどれか。</li>
+    <li><b>配置の一覧</b>：選択中の示し方（左の帯／名前を緑）と、進み具合（行の下の細いバー／右端の % と短いバー）。どちらも文字を足さずに収まる案です。</li>
+    <li><b>ファイルの一覧</b>：フォルダの見出し行・大きさ・ブロック数の列。列が入りきらない幅では大きさを落とします。</li>
+    <li><b>照合</b>：絞り込みを一覧の上に件数付きで並べる。状態違いの行は名前だけにし、どの状態がどう違うかは右側に出す（ターゲットカードと同じ「向き 北 ▶ 東」）。</li>
+    <li><b>資材の数の換算</b>：ポインタを乗せたときと選んだとき。単位を「ラージチェスト・チェスト・スタック・個」と「シュルカーボックス・スタック・個」のどちらにするか。</li>
+    <li><b>資材タブの右側</b>：A 足りない物をインベントリのスロットで並べる／B 作るのに必要な元の素材（自前で計算）／C 外部の計算サイト（ResourceCalculator は <code>#oakplanks=64</code> のように URL で数を渡せることを確認済み）を開くボタン。A と C を両方、B は後回し、という組み合わせもできます。</li>
+    <li><b>3D プレビュー（8・9）</b>：別の調査として進めてよいか。バニラのストラクチャーブロックが画面の中で立体を描いているので、その経路を探します。</li>
+    <li><b>エンティティ</b>：名札の数・距離の制限はなくす。ゴーストをモデルそのままで描き、ブロックと同じ水色の輪郭と面の扱いにして半透明はやめる、で進めてよいか（描けるかは調査が要ります）。</li>
+  </ol>
+</section>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const state = { tab:'placed', selMark:'bar', progress:'under', place:0, file:1, check:1, filter:'all', mat:0, matPane:'slots', unit:'chest', world:'A' };
+const C = {oak:'#b88a4f', stairs:'#a9824d', cob:'#8d8d8d', glass:'#bfe6f0', dirt:'#866043', log:'#6b5233', lantern:'#e2b44c', brick:'#7c7c7c', stand:'#c9a26a', villager:'#a0765a', iron:'#d8d8d8'};
+
+// --- Data ---
+const placements = [
+  ['broken_village_house','broken_village_house','-82, 84, -50',.58,1],['mixture','mixture','-97, 84, -47',.12,1],
+  ['campfire','campfire','-95, 86, -32',1,0],['campfire2','campfire2','-90, 84, -31',.0,0],
+  ['campfire_w_armorstand_2','campfire_w_armorstand_2','-95, 84, -30',.4,0],['no_mesh','no_mesh','-99, 84, -35',.86,1],
+  ['terrain big','terrain','-123, 84, -19',.03,1],['desert village','desert_village','-452, 91, 242',.21,1],['nether gate','gate','ネザー',.5,1,true]];
+const files = [['',[['broken_village_house','12x9x14',812],['mixture','4x2x4',16],['no_mesh','3x3x3',19]]],
+  ['farms/',[['iron_farm','21x30x21',2214],['sugarcane','15x4x9',301]]],['village/',[['desert village','61x24x58',18342],['terrain','32x12x32',7031]]]];
+const mismatches = [
+  ['extra','余計','127, 85, -32',null,'空気','dirt','土',5],
+  ['state','状態','130, 86, -33','stairs','オークの階段',null,null,7,[['向き','北','東'],['上下逆さ','いいえ','はい']]],
+  ['state','状態','130, 86, -34','stairs','オークの階段',null,null,7,[['向き','北','西']]],
+  ['wrong','違う','130, 85, -38','oak','オークの板材','cob','丸石',9],
+  ['wrong','違う','130, 86, -35','glass','ガラス','oak','オークの板材',9],
+  ['miss','未設置','131, 84, -36','brick','石レンガ',null,null,10],
+  ['miss','未設置','131, 84, -37','brick','石レンガ',null,null,10]];
+const kindColor = {wrong:'var(--bad)', extra:'var(--bad)', state:'var(--state)', miss:'var(--miss)'};
+const materials = {blocks:[['oak','オークの板材',87,35,20],['stairs','オークの階段',14,0,9],['glass','ガラス',6,4,2],['log','オークの原木',12,11,0],
+  ['lantern','ランタン',1,0,1],['brick','石レンガ',2049,49,812]], entities:[['stand','アーマースタンド',1,0,1],['villager','村人',1,1,null]]};
+
+// --- Helpers ---
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ic = k => k ? `<i class="ic" style="background:${C[k]}"></i>` : `<i class="ic" style="visibility:hidden"></i>`;
+const arrow = c => `<span class="arrow" style="color:${c}"></span>`;
+function amount(n){
+  const st = Math.floor(n / 64), rest = n % 64, parts = [];
+  if (state.unit === 'chest') {
+    const big = Math.floor(st / 54), chest = Math.floor((st % 54) / 27), stacks = st % 27;
+    if (big) parts.push(`ラージチェスト ${big}`); if (chest) parts.push(`チェスト ${chest}`);
+    if (stacks) parts.push(`${stacks} スタック`);
+  } else {
+    const box = Math.floor(st / 27), stacks = st % 27;
+    if (box) parts.push(`シュルカーボックス ${box}`); if (stacks) parts.push(`${stacks} スタック`);
+  }
+  if (rest || !parts.length) parts.push(`${rest} 個`);
+  return parts.join(' + ');
+}
+
+// --- Controls per tab ---
+function controls(){
+  const groups = {
+    placed:[['選択中の示し方','selMark',[['bar','左の帯'],['name','名前を緑']]],['進み具合','progress',[['under','行の下のバー'],['column','右端の %']]]],
+    mat:[['換算の単位','unit',[['chest','チェスト'],['box','シュルカーボックス']]],['右側','matPane',[['slots','A 足りない物'],['raw','B 元の素材'],['site','C 外部サイト']]]],
+  }[state.tab] || [];
+  $('#ctrl').innerHTML = groups.map(([label,key,opts]) => `<span class="grp">${label}：${opts.map(([v,t]) =>
+    `<button data-k="${key}" data-v="${v}" aria-pressed="${state[key]===v}">${t}</button>`).join('')}</span>`).join('');
+}
+
+// --- Tabs ---
+function render(){
+  document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.t === state.tab));
+  $('#stabs').innerHTML = [['files','ファイル'],['placed','配置'],['check','照合'],['mat','資材']]
+    .map(([t,n]) => `<span class="btn ${state.tab===t?'on':''}" data-t="${t}">${n}</span>`).join('');
+  controls();
+  ({files:renderFiles, placed:renderPlaced, check:renderCheck, mat:renderMat})[state.tab]();
+}
+function head(cols){ $('#listhead').innerHTML = `<div class="thead">${cols}</div>`; }
+
+function renderFiles(){
+  head(`<span style="flex:1">名前</span><span style="width:70px;text-align:right">大きさ</span><span style="width:46px;text-align:right">ブロック</span>`);
+  let html = '', i = 0;
+  for (const [folder, list] of files) {
+    html += `<div class="folder">${folder || '（直下）'}</div>`;
+    for (const [n, size, blocks] of list) {
+      html += `<div class="row ${state.file===i?'sel':''}" data-file="${i}"><span class="nm">${esc(n)}</span>
+        <span class="num" style="width:70px">${size}</span><span class="num" style="width:46px">${blocks.toLocaleString()}</span></div>`;
+      i++;
+    }
+  }
+  $('#rows').innerHTML = html;
+  const all = files.flatMap(f => f[1].map(x => [f[0], ...x]));
+  const [folder, n, size, blocks] = all[state.file];
+  $('#detail').innerHTML = `<div class="title">${esc(n)}</div>
+    <div class="d">大きさ ${size} · ブロック ${blocks.toLocaleString()} · エンティティ 1</div><div class="f">${folder}${esc(n)}.mcstructure</div>
+    <div class="preview">3D プレビュー<br>（8 番：描画経路を調査してから）</div>
+    <div style="display:flex;justify-content:space-between;margin-top:4px"><span class="btn on">足元に配置</span><span class="btn">フォルダを開く</span></div>`;
+  $('#footText').textContent = 'フォルダごとに見出しを付け、大きさとブロック数を並べます。幅が足りないときは大きさの列から落とします。';
+}
+
+function renderPlaced(){
+  const col = state.progress === 'column';
+  head(`<span style="flex:1">名前</span>${col?'<span style="width:44px;text-align:right">進み</span>':''}<span style="width:24px">表示</span>`);
+  $('#rows').innerHTML = placements.map(([n, file, pos, p, shown, other], i) => {
+    const sel = state.place === i, mark = sel && state.selMark === 'bar' ? 'box-shadow:inset 3px 0 var(--accent);' : '';
+    const nameColor = sel && state.selMark === 'name' ? 'color:var(--accent)' : '';
+    const pct = Math.round(p * 100);
+    const progressCol = col ? `<span class="num" style="width:44px;display:flex;flex-direction:column;align-items:flex-end;gap:1px">
+        <span style="font-size:10.5px;line-height:10px">${pct}%</span><span class="bar" style="width:36px"><i style="width:${pct}%"></i></span></span>` : '';
+    const under = !col ? `<span class="bar" style="position:absolute;left:9px;right:9px;bottom:1px"><i style="width:${pct}%"></i></span>` : '';
+    return `<div class="row ${other?'other':''}" style="${mark}${sel?'background:var(--sel);':''}" data-place="${i}">
+      <span class="nm" style="${nameColor}">${esc(n)}</span><span class="num">${pos}</span>${progressCol}<span class="sw ${shown?'on':''}"></span>${under}</div>`;
+  }).join('');
+  const [n, file, pos, p] = placements[state.place];
+  $('#detail').innerHTML = `<div class="title">${esc(n)}</div>
+    <div class="d">${esc(file)}.mcstructure · 大きさ 4×2×4 · ブロック 16 · エンティティ 1</div>
+    <div class="d">進み具合 ${Math.round(p*100)}%（表示中の層）</div>
+    <div class="sec">位置と向き</div>
+    <div class="kv"><span class="d">X / Y / Z</span><span>${pos}</span></div><div class="kv"><span class="d">回転・反転</span><span>0° · なし</span></div>
+    <div class="sec">表示と照合</div>
+    <div class="kv"><span class="d">表示する</span><span class="sw on"></span></div><div class="kv"><span class="d">層</span><span>下から · この層だけ · 1/2</span></div>
+    <div class="kv"><span class="d">余計なブロック</span><span>赤で示す</span></div>
+    <div style="margin-top:auto;display:flex;justify-content:flex-end"><span class="btn del">削除</span></div>`;
+  $('#footText').textContent = '選択中は文字を足さずに示し、進み具合は表示中の層の「正しい ÷ 全体」です。右側は今と同じ項目（ここでは省略して見出しで分けた形）。';
+}
+
+function renderCheck(){
+  const counts = {all:mismatches.filter(m => m[0] !== 'miss').length, wrong:mismatches.filter(m => m[0]==='wrong'||m[0]==='extra').length,
+    state:mismatches.filter(m => m[0]==='state').length, miss:mismatches.filter(m => m[0]==='miss').length};
+  const chips = [['all','間違い'],['wrong','違う・余計'],['state','状態違い'],['miss','未設置']];
+  $('#listhead').innerHTML = `<div class="chips">${chips.map(([k,t]) => `<span class="chip ${state.filter===k?'on':''}" data-filter="${k}">${t}<b>${counts[k]}</b></span>`).join('')}</div>
+    <div class="thead"><span style="width:44px">種類</span><span style="width:84px">位置</span><span style="flex:1">設計図 ▶ 実際</span><span style="width:26px;text-align:right">距離</span></div>`;
+  const shown = mismatches.map((m,i) => [m,i]).filter(([m]) => state.filter==='all' ? m[0]!=='miss' : state.filter==='wrong' ? (m[0]==='wrong'||m[0]==='extra') : m[0]===state.filter);
+  if (!shown.some(([,i]) => i === state.check) && shown.length) state.check = shown[0][1];
+  $('#rows').innerHTML = shown.map(([m,i]) => {
+    const [k, kt, pos, ei, en, ai, an, d] = m;
+    const what = k === 'state' || k === 'miss' ? `${ic(ei)}<span>${en}</span>` : `${ic(ei)}<span>${en}</span>${arrow('var(--faint)')}${ic(ai)}<span style="color:var(--dim)">${an}</span>`;
+    return `<div class="row ${state.check===i?'sel':''}" data-check="${i}"><i class="square" style="background:${kindColor[k]}"></i>
+      <span style="width:34px;color:var(--dim)">${kt}</span><span class="num" style="width:84px;text-align:left">${pos}</span>
+      <span class="nm" style="display:flex;gap:4px;align-items:center">${what}</span><span class="num" style="width:26px">${d}m</span></div>`;
+  }).join('');
+  const m = mismatches[state.check];
+  const [k, kt, pos, ei, en, ai, an, d, diffs] = m;
+  let body = '';
+  if (k === 'state') body = `<div class="sec">違う状態</div>` + diffs.map(([s, want, now]) =>
+    `<div class="kv"><span class="d">${s}</span><span style="color:var(--state)">${now}${arrow('var(--state)')}${want}</span></div>`).join('');
+  else if (k === 'miss') body = `<div class="kv"><span class="d">置くもの</span><span style="display:flex;gap:4px;color:var(--miss)">${ic(ei)}${en}</span></div>`;
+  else body = `<div class="kv"><span class="d">正しくは</span><span style="display:flex;gap:4px;color:var(--bad)">${ic(ei)}${en}</span></div>
+    <div class="kv"><span class="d">今は</span><span style="display:flex;gap:4px">${ic(ai)}${an}</span></div>`;
+  $('#detail').innerHTML = `<div class="title">mixture</div>
+    <div class="d">表示中の層：正しい 100/171 · 未設置 ${counts.miss} · 違う・余計 ${counts.wrong} · 状態違い ${counts.state}</div>
+    <div class="sec">選んだ行</div><div class="kv"><span style="color:${kindColor[k]}">${kt}</span><span class="d">${pos} · ${d}m</span></div>${body}
+    <div class="preview" style="margin-top:6px">照合の色で塗ったプレビュー<br>（9 番：描画経路を調査してから）</div>
+    <div style="display:flex;justify-content:flex-end;margin-top:4px"><span class="btn on">ワールドで示す</span></div>`;
+  $('#footText').textContent = '絞り込みは一覧の上に件数付き。状態違いは一覧では名前だけ、どの状態がどう違うかは右側に「今 ▶ 正しい」で出します。';
+}
+
+function renderMat(){
+  head(`<span style="flex:1;padding-left:18px">資材</span><span style="width:40px;text-align:right">必要</span><span style="width:40px;text-align:right">済み</span><span style="width:40px;text-align:right">残り</span><span style="width:40px;text-align:right">手持ち</span>`);
+  const all = [...materials.blocks.map(x => [...x,'b']), ...materials.entities.map(x => [...x,'e'])];
+  let html = `<div class="folder">ブロック</div>`;
+  all.forEach(([k, n, need, done, have, kind], i) => {
+    if (kind === 'e' && all[i-1][5] === 'b') html += `<div class="folder">エンティティ</div>`;
+    const left = need - done, haveColor = have === null ? 'var(--faint)' : !left ? 'var(--faint)' : have >= left ? 'var(--accent)' : 'var(--warn)';
+    html += `<div class="row ${state.mat===i?'sel':''}" data-mat="${i}">${ic(k)}<span class="nm" style="${left?'':'color:var(--faint)'}">${n}</span>
+      <span class="num" style="width:40px">${need}</span><span class="num" style="width:40px">${done}</span>
+      <span class="num amt" style="width:40px;color:#fff" data-amount="${left}">${left}</span>
+      <span class="num" style="width:40px;color:${haveColor}">${have === null ? '-' : have}</span></div>`;
+  });
+  $('#rows').innerHTML = html;
+  const [k, n, need, done] = all[state.mat], left = need - done;
+  let pane = '';
+  if (state.matPane === 'slots') {
+    const short = all.filter(x => x[4] !== null && x[2] - x[3] > x[4]);
+    const slots = [];
+    for (const [sk, , sn, sd, sh] of short) { let rest = sn - sd - sh; while (rest > 0 && slots.length < 27) { slots.push([sk, Math.min(64, rest)]); rest -= 64; } }
+    while (slots.length < 27) slots.push(null);
+    pane = `<div class="sec">足りない物（${short.length} 種類）</div><div class="slots">${slots.map(s => s ? `<span class="slot short"><i style="background:${C[s[0]]}"></i><b>${s[1]}</b></span>` : '<span class="slot"></span>').join('')}</div>
+      <div class="f">インベントリと同じ見た目で、足りない分をスタックごとに並べます。</div>`;
+  } else if (state.matPane === 'raw') {
+    pane = `<div class="sec">作るのに必要な元の素材（手持ちを引いた分）</div><div class="tree">
+      <div>${ic('log')}オークの原木<span class="n">11 個</span></div>
+      <div style="padding-left:14px">${ic('oak')}オークの板材（足りない 32 + 階段用 12）▸ 原木 1 個で 4 枚<span class="n">44 枚</span></div>
+      <div style="padding-left:14px">${ic('stairs')}オークの階段（足りない 5）▸ 板材 6 枚で 4 個<span class="n">8 個分</span></div>
+      <div>${ic('cob')}丸石（石レンガ用の石を焼く前）<span class="n">${amount(1188)}</span></div>
+      <div>${ic('glass')}砂（ガラス用）<span class="n">0 個</span></div></div>
+      <div class="f">レシピは Lamium の中に持つ必要があります（量が多い・版ごとに変わる）。</div>`;
+  } else {
+    pane = `<div class="sec">外部の計算サイト</div><div class="d">残りの資材を ResourceCalculator に渡して開きます。元の素材やかまどの燃料まで向こうで計算できます。</div>
+      <div class="f" style="word-break:break-all">resourcecalculator.com/minecraft/#oakplanks=32&amp;oakstairs=5&amp;stonebricks=1188 …</div>
+      <div><span class="btn on">ブラウザで開く</span></div>
+      <div class="f">品目名は Bedrock の ID から作り、合わない物は対応表で直します。ワールドマップの「ChunkBase で開く」と同じ扱い。</div>`;
+  }
+  $('#detail').innerHTML = `<div class="title">mixture</div>
+    <div class="d">残り ${materials.blocks.reduce((a,x)=>a+x[2]-x[3],0)} 個 · 足りない物 ${all.filter(x => x[4] !== null && x[2] - x[3] > x[4]).length} 種類</div>
+    <div class="kv"><span class="d">表示中の層だけ</span><span class="sw"></span></div><div class="kv"><span class="d">設計図の HUD に表示</span><span class="sw on"></span></div>
+    <div class="sec">選んだ資材：${n}</div><div class="kv"><span class="d">残り</span><span>${left < 64 ? left + ' 個' : left + ' 個 = ' + amount(left)}</span></div>${pane}`;
+  $('#footText').textContent = 'ブロックとエンティティを見出しで分けます。残りの数にポインタを乗せる・行を選ぶと、チェストやスタックに換算した数が出ます。';
+}
+
+// --- World frame variants (1) ---
+function worldSvg(v){
+  const box = (x, y, w, h, d, stroke, width, corner) => {
+    const p = (a, b) => `${a},${b}`;
+    const top = [p(x,y), p(x+w,y), p(x+w+d,y-d*.6), p(x+d,y-d*.6)], face = [p(x,y), p(x+w,y), p(x+w,y+h), p(x,y+h)];
+    let s = `<polygon points="${face.join(' ')}" fill="rgba(89,217,255,.08)" stroke="${stroke}" stroke-width="${width}"/>
+      <polygon points="${top.join(' ')}" fill="none" stroke="${stroke}" stroke-width="${width}"/>
+      <polyline points="${p(x+w,y+h)} ${p(x+w+d,y+h-d*.6)} ${p(x+w+d,y-d*.6)}" fill="none" stroke="${stroke}" stroke-width="${width}"/>`;
+    if (corner) s += [[x,y],[x+w,y],[x,y+h],[x+w,y+h]].map(([cx,cy]) => `<rect x="${cx-3}" y="${cy-3}" width="6" height="6" fill="#fff"/>`).join('');
+    return s;
+  };
+  const ground = `<rect x="0" y="120" width="320" height="60" fill="#3f6b33"/><rect x="0" y="0" width="320" height="120" fill="#6fa6d8"/>`;
+  const sel = box(40, 50, 90, 70, 34, '#59d9ff', v === 'C' ? 1.5 : 3, v === 'C');
+  const other = v === 'B' ? '' : box(190, 70, 70, 50, 26, '#59d9ff', 1.5, false);
+  return `<svg viewBox="0 0 320 180">${ground}${other}${sel}
+    <text x="85" y="150" fill="#fff" font-size="11" text-anchor="middle" font-family="DotGothic16">選択中</text>
+    ${v==='B'?'':'<text x="225" y="150" fill="#fff" font-size="11" text-anchor="middle" font-family="DotGothic16">ほかの配置</text>'}</svg>`;
+}
+$('#world').innerHTML = [['A','A 全部に枠・選択中だけ太く'],['B','B 選択中だけに枠'],['C','C 全部同じ太さ・選択中は角に印']]
+  .map(([v,t]) => `<figure>${worldSvg(v)}<figcaption>${t}</figcaption></figure>`).join('');
+
+// --- Events ---
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-t]'); if (t) { state.tab = t.dataset.t; render(); return; }
+  const k = e.target.closest('[data-k]'); if (k) { state[k.dataset.k] = k.dataset.v; render(); return; }
+  const f = e.target.closest('[data-filter]'); if (f) { state.filter = f.dataset.filter; render(); return; }
+  for (const [attr, key] of [['place','place'],['file','file'],['check','check'],['mat','mat']]) {
+    const r = e.target.closest(`[data-${attr}]`); if (r) { state[key] = +r.dataset[attr]; render(); return; }
+  }
+});
+document.addEventListener('mousemove', e => {
+  const tip = $('#tip'), a = e.target.closest('[data-amount]');
+  if (!a) { tip.hidden = true; return; }
+  const stage = $('#stage'), r = stage.getBoundingClientRect(), scale = r.width / 960;
+  tip.textContent = amount(+a.dataset.amount);
+  tip.style.left = ((e.clientX - r.left) / scale + 10) + 'px';
+  tip.style.top = ((e.clientY - r.top) / scale + 12) + 'px';
+  tip.hidden = false;
+});
+function fit(){ const w = $('#fit').clientWidth, s = w / 960; $('#stage').style.transform = `scale(${s})`; $('#fit').style.height = (540 * s) + 'px'; }
+addEventListener('resize', fit);
+render(); fit();
+</script>
+</body>
+</html>
