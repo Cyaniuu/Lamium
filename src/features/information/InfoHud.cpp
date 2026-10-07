@@ -951,7 +951,10 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
         auto direction = player->getViewVector();
         return ViewRay{eye.x, eye.y, eye.z, direction.x, direction.y, direction.z, reach};
     };
-    if (settings.debug && !preview) {
+    // Vanilla Hide HUD (F1) hides every element; recording and death
+    // tracking below keep running (L-107).
+    bool hidden = !preview && context.mClient.getOptions().getHideHud();
+    if (settings.debug && !hidden && !preview) {
         // No player, no panel: invented values would read as real ones.
         if (auto values = collectDebugValues(context.mClient, viewRay(settings.targetDistance))) {
             auto style = settings.debugLabels == 1 ? DebugLabel::JavaF3 : DebugLabel::GameStandard;
@@ -967,6 +970,10 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
         map::markers::draw(context, width, height, runtime.map);
         if (auto message = schematic::ghosts::takeSaveMessage()) ui::showMessageToast(std::move(*message));
         if (runtime.schematic.enabled) schematic::actions::adjustFrame(context, width, height);
+    }
+    if (hidden) {
+        cardMorph = {};
+        return boxes;
     }
     // Drawn first so every other element sits on top of the map.
     if (preview || (runtime.map.minimap && !(settings.debug && runtime.map.debugHide)))
