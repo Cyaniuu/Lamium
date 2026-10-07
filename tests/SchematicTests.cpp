@@ -5,6 +5,7 @@
 #include "features/schematic/SaveArea.h"
 #include "ui/SavePromptLayout.h"
 #include "ui/RadialLayout.h"
+#include "ui/SchematicFiles.h"
 #include "features/schematic/MenuModel.h"
 #include "features/schematic/GhostFaces.h"
 #include <array>
@@ -170,6 +171,18 @@ void placementTransforms() {
     check(footprint(size, {{10, 64, -7}, 0, Mirror::None}) == Footprint{10, -7, 13, -2}
           && footprint(size, {{10, 64, -7}, 1, Mirror::X}) == Footprint{10, -7, 15, -4},
           "the footprint covers the placed box from above, turned");
+    {
+        using namespace lamium::ui::schematic_files;
+        std::vector<std::string> paths{"farms/sugarcane.mcstructure", "hut.mcstructure", "farms/iron.mcstructure",
+                                       "a/b/deep.mcstructure", "well.mcstructure"};
+        auto list = rows(paths);
+        check(list.size() == 8 && list[0].file == -1 && list[0].folder.empty() && list[1].file == 1 && list[2].file == 4
+              && list[3].folder == "a/b/" && list[4].file == 3 && list[5].folder == "farms/" && list[6].file == 2 && list[7].file == 0,
+              "files group under folder headings, the top level first");
+        auto flat = rows({"b.mcstructure", "a.mcstructure"});
+        check(flat.size() == 2 && flat[0].file == 1 && flat[1].file == 0, "without subfolders there are no headings");
+        check(rowOf(list, 3) == 4 && rowOf(list, 9) == -1, "a file's row is found");
+    }
     {
         std::map<std::string, std::string> expected{{"direction", "2"}, {"half", "top"}, {"open", "0"}};
         std::map<std::string, std::string> actual{{"direction", "1"}, {"open", "0"}, {"powered", "1"}};

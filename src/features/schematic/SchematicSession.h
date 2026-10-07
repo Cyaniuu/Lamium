@@ -30,6 +30,8 @@ bool openFolder();
 inline constexpr std::uintmax_t largeFileBytes = 2ull * 1024 * 1024;
 // Loaded once per file and modification time; null with `error` set on failure.
 std::shared_ptr<Structure const> structure(std::string const& relative, std::string* error = nullptr);
+// Only what is already loaded; never reads the disk.
+std::shared_ptr<Structure const> loaded(std::string const& relative);
 
 PlacementSet current();
 // Applies a change to a copy, saves it and publishes it. False when the

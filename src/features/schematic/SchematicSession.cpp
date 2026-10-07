@@ -128,6 +128,12 @@ std::shared_ptr<Structure const> structure(std::string const& relative, std::str
     return load(relative, error);
 }
 
+std::shared_ptr<Structure const> loaded(std::string const& relative) {
+    std::lock_guard lock(mutex);
+    auto found = cache.find(relative);
+    return found == cache.end() ? nullptr : found->second.structure;
+}
+
 PlacementSet current() {
     std::lock_guard lock(mutex);
     follow();

@@ -13,6 +13,7 @@
 #include "features/map/WaypointSession.h"
 #include "features/schematic/SchematicSession.h"
 #include "features/schematic/GhostRenderer.h"
+#include "ui/SchematicFiles.h"
 #include "features/schematic/SchematicItems.h"
 #include "features/schematic/Selection.h"
 #include "features/schematic/SchematicActions.h"
@@ -183,6 +184,18 @@ SchematicPick schematicPick = SchematicPick::None;
 int schematicIndex = -1; // into the placements or the files
 schematic::PlacementSet schematicSet;
 std::vector<schematic::session::FileEntry> schematicFiles;
+std::vector<schematic_files::Row> schematicFileRows; // the Files list: folder headings and files
+// Blocks other than air and structure void, counted once per loaded structure.
+std::map<schematic::Structure const*, std::uint64_t> schematicBlockCounts;
+std::uint64_t blockCount(schematic::Structure const& structure) {
+    auto [found, fresh] = schematicBlockCounts.try_emplace(&structure, 0);
+    if (fresh) {
+        if (schematicBlockCounts.size() > 256) { schematicBlockCounts.clear(); return blockCount(structure); }
+        for (auto index : structure.blocks)
+            if (index != schematic::voidCell && !structure.palette[static_cast<size_t>(index)].isAir()) ++found->second;
+    }
+    return found->second;
+}
 std::chrono::steady_clock::time_point schematicFilesScanned{};
 std::string largeSchematicConfirmed; // a large file the player chose to load
 ShapesLayout schematicsDisplayed;
@@ -2414,6 +2427,9 @@ void refreshSchematics(bool files) {
     if (files) {
         schematicFiles = schematic::session::files();
         schematicFilesScanned = now;
+        std::vector<std::string> paths;
+        for (auto const& f : schematicFiles) paths.push_back(f.relative);
+        schematicFileRows = schematic_files::rows(paths);
     }
     int placements = static_cast<int>(schematicSet.placements.size()), fileCount = static_cast<int>(schematicFiles.size());
     if ((schematicPick == SchematicPick::Placement && schematicIndex >= placements)
@@ -2430,7 +2446,7 @@ void refreshSchematics(bool files) {
 int schematicRowCount() {
     switch (schematicTab) {
     case SchematicTab::Placements: return static_cast<int>(schematicSet.placements.size());
-    case SchematicTab::Files: return static_cast<int>(schematicFiles.size());
+    case SchematicTab::Files: return static_cast<int>(schematicFileRows.size());
     case SchematicTab::Verify: return static_cast<int>(verifyRows.size());
     default: return static_cast<int>(materialRows.size());
     }
@@ -2685,7 +2701,12 @@ void handleSchematicClick(float x, float y, bool right) {
             }
             if (schematicPick != SchematicPick::Placement || row != schematicIndex) pickSchematic(SchematicPick::Placement, row);
             return;
-        case SchematicTab::Files: if (schematicPick != SchematicPick::File || row != schematicIndex) pickSchematic(SchematicPick::File, row); return;
+        case SchematicTab::Files: {
+            if (row < 0 || row >= static_cast<int>(schematicFileRows.size())) return;
+            int file = schematicFileRows[static_cast<size_t>(row)].file;
+            if (file >= 0 && (schematicPick != SchematicPick::File || file != schematicIndex)) pickSchematic(SchematicPick::File, file);
+            return;
+        }
         case SchematicTab::Verify: verifySelected = row; return;
         default: return;
         }
@@ -2731,7 +2752,15 @@ void handleSchematicKey(int key) {
         int current = schematicTab == SchematicTab::Verify ? verifySelected
             : (schematicTab == SchematicTab::Placements && schematicPick == SchematicPick::Placement)
                 || (schematicTab == SchematicTab::Files && schematicPick == SchematicPick::File) ? schematicIndex : -1;
-        int row = std::clamp(current + (key == 0x22 ? 1 : -1), 0, count - 1);
+        int step = key == 0x22 ? 1 : -1;
+        if (schematicTab == SchematicTab::Files) {
+            // Rows and files differ: step over folder headings.
+            int at = current >= 0 ? schematic_files::rowOf(schematicFileRows, current) : (step > 0 ? -1 : count);
+            for (int r = at + step; r >= 0 && r < count; r += step)
+                if (int file = schematicFileRows[static_cast<size_t>(r)].file; file >= 0) { pickSchematic(SchematicPick::File, file); break; }
+            break;
+        }
+        int row = std::clamp(current + step, 0, count - 1);
         if (schematicTab == SchematicTab::Verify) verifySelected = row;
         else if (schematicTab == SchematicTab::Placements) pickSchematic(SchematicPick::Placement, row);
         else if (schematicTab == SchematicTab::Files) pickSchematic(SchematicPick::File, row);
@@ -2855,6 +2884,16 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
     // Column positions for the Verify and Materials lists.
     // A narrow list (a large UI) drops the columns it can do without, so the
     // names keep their room: the position in Check, "placed" in Materials.
+    // Files: size and block count on the right; size goes first when narrow.
+    float blocksW = 40, blocksX = listRight - ShapesLayout::pad - blocksW, sizeW = 54, sizeX = blocksX - 4 - sizeW;
+    bool showSize = sizeX - left >= 80;
+    bool loadedOne = false; // At most one file is read per frame to fill the columns.
+    // Placed: progress left of the switch; coordinates only while the name
+    // keeps room (the detail pane always shows them).
+    float progressW = 26, progressX = shownX - 6 - progressW;
+    float coordsW = 66, coordsX = progressX - 4 - coordsW;
+    bool showCoords = coordsX - left >= 70;
+    if (schematicTab == SchematicTab::Placements) schematic::ghosts::wantProgress();
     float kindW = 38, distW = 28, posW = listRight - left - kindW - distW - ShapesLayout::pad - 78 >= 90 ? 78.f : 0.f;
     float numW = 34, carriedX = listRight - ShapesLayout::pad - numW, leftX = carriedX - numW - 2;
     bool showPlaced = leftX - 2 * (numW + 2) - left - 16 >= 70;
@@ -2862,9 +2901,14 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
     switch (schematicTab) {
     case SchematicTab::Placements:
         heading(left, shownX - left - 74, "shape.columnName");
+        heading(progressX - 2, progressW + 4, "schematic.column.progress", Align::Right);
         heading(shownX - 6, switchWidth + 12, "shape.columnShown", Align::Center);
         break;
-    case SchematicTab::Files: heading(left, l.listWidth - 2 * ShapesLayout::pad, "shape.columnName"); break;
+    case SchematicTab::Files:
+        heading(left, blocksX - left - 4, "shape.columnName");
+        if (showSize) heading(sizeX, sizeW, "schematic.column.size", Align::Right);
+        heading(blocksX, blocksW, "schematic.column.blockCount", Align::Right);
+        break;
     case SchematicTab::Verify:
         heading(left, kindW, "schematic.column.kind");
         if (posW > 0) heading(left + kindW, posW, "schematic.column.position");
@@ -2897,22 +2941,54 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         if (i % 2) fill(context,l.listLeft+1,y,l.listWidth-2,ShapesLayout::rowHeight,palette::white,.025f);
         bool chosen = schematicTab == SchematicTab::Verify ? i == verifySelected
             : schematicTab == SchematicTab::Placements ? schematicPick == SchematicPick::Placement && i == schematicIndex
-            : schematicTab == SchematicTab::Files ? schematicPick == SchematicPick::File && i == schematicIndex : false;
-        rowBackground(context,l.listLeft+1,y,l.listWidth-2,ShapesLayout::rowHeight,chosen,over(ShapeZone::ListRow,i));
+            : schematicTab == SchematicTab::Files ? schematicPick == SchematicPick::File
+                && schematicFileRows[static_cast<size_t>(i)].file == schematicIndex : false;
+        bool heading = schematicTab == SchematicTab::Files && schematicFileRows[static_cast<size_t>(i)].file < 0;
+        if (!heading) rowBackground(context,l.listLeft+1,y,l.listWidth-2,ShapesLayout::rowHeight,chosen,over(ShapeZone::ListRow,i));
         switch (schematicTab) {
         case SchematicTab::Placements: {
             auto const& p = schematicSet.placements[static_cast<size_t>(i)];
             bool here = p.dimension == playerDimension();
-            float infoX = shownX - 70;
-            label(context,left,y+3,infoX-left-4,(i == schematicSet.selected ? "> " : "") + p.name,here ? palette::text : palette::faint);
-            label(context,infoX,y+3,66,here ? std::format("{}, {}, {}", p.placement.origin.x, p.placement.origin.y, p.placement.origin.z)
-                : dimensionName(p.dimension),palette::dim,Align::Right);
+            // The selected placement: the accent bar, like the sidebar's current entry.
+            if (i == schematicSet.selected) fill(context,l.listLeft+1,y,2,ShapesLayout::rowHeight,palette::accent);
+            float nameEnd = showCoords ? coordsX - 4 : progressX - 4;
+            label(context,left,y+3,nameEnd-left,p.name,here ? palette::text : palette::faint);
+            if (showCoords)
+                label(context,coordsX,y+3,coordsW,here ? std::format("{}, {}, {}", p.placement.origin.x, p.placement.origin.y, p.placement.origin.z)
+                    : dimensionName(p.dimension),palette::dim,Align::Right);
+            if (auto tally = schematic::ghosts::progress(p); tally && tally->total()) {
+                float fraction = static_cast<float>(tally->correct) / static_cast<float>(tally->total());
+                label(context,progressX,y+1,progressW,std::format("{}%", static_cast<int>(fraction * 100)),
+                    here ? palette::text : palette::faint,Align::Right);
+                fill(context,progressX,y+11,progressW,1,palette::white,.12f);
+                fill(context,progressX,y+11,progressW*fraction,1,palette::accent,here ? 1.f : .5f);
+            } else label(context,progressX,y+3,progressW,"-",palette::faint,Align::Right);
             toggleSwitch(context,shownX,y+(ShapesLayout::rowHeight-switchHeight)/2,p.visible);
             break;
         }
-        case SchematicTab::Files:
-            label(context,left,y+3,l.listWidth-2*ShapesLayout::pad,schematicFiles[static_cast<size_t>(i)].relative,palette::text);
+        case SchematicTab::Files: {
+            auto const& row = schematicFileRows[static_cast<size_t>(i)];
+            if (row.file < 0) {
+                label(context,left,y+5,l.listWidth-2*ShapesLayout::pad,row.folder.empty() ? translated("schematic.topFolder") : row.folder,
+                      palette::faint);
+                break;
+            }
+            auto const& f = schematicFiles[static_cast<size_t>(row.file)];
+            bool grouped = !schematicFileRows.empty() && schematicFileRows.front().file < 0;
+            label(context,left+(grouped ? 6.f : 0.f),y+3,
+                  blocksX-left-10,fileTitle(f.relative),palette::text);
+            auto structure = schematic::session::loaded(f.relative);
+            if (!structure && !loadedOne && f.bytes <= schematic::session::largeFileBytes) {
+                loadedOne = true;
+                structure = schematic::session::structure(f.relative);
+            }
+            if (structure) {
+                if (showSize) label(context,sizeX,y+3,sizeW,std::format("{}x{}x{}", structure->size.x, structure->size.y, structure->size.z),
+                    palette::dim,Align::Right);
+                label(context,blocksX,y+3,blocksW,std::to_string(blockCount(*structure)),palette::dim,Align::Right);
+            } else label(context,blocksX,y+3,blocksW,"-",palette::faint,Align::Right);
             break;
+        }
         case SchematicTab::Verify: {
             auto const& m = *verifyRows[static_cast<size_t>(i)];
             fill(context,left,y+4,6,6,mismatchColor(m.state));
@@ -2976,9 +3052,7 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         std::string problem;
         auto structure = schematic::session::structure(relative, &problem);
         if (!structure) { paragraph(context,dx,y,dw,translated("schematic.notLoaded", problem),3,palette::warning); return; }
-        std::uint64_t blocks = 0;
-        for (auto index : structure->blocks)
-            if (index != schematic::voidCell && !structure->palette[static_cast<size_t>(index)].isAir()) ++blocks;
+        std::uint64_t blocks = blockCount(*structure);
         label(context,dx,y,dw,translated("schematic.size", structure->size.x, structure->size.y, structure->size.z),palette::dim);
         label(context,dx,y+11,dw,translated("schematic.blocks", blocks),palette::dim);
         label(context,dx,y+22,dw,translated("schematic.entities", structure->entities.size()),palette::dim);
@@ -2997,6 +3071,9 @@ void drawSchematicsBody(MinecraftUIRenderContext& context, ShapesLayout const& l
         if (auto const* p = selectedPlacement()) {
             label(context,dx,l.nameY+1+boxTextInset(),dw,p->name);
             info(p->file, l.previewY);
+            if (auto tally = schematic::ghosts::progress(*p); tally && tally->total())
+                label(context,dx,l.previewY+44,dw,translated("schematic.progress",
+                    static_cast<int>(100.0 * static_cast<double>(tally->correct) / static_cast<double>(tally->total()))),palette::dim);
             for (int i = l.fieldFirst; i < l.fieldFirst + l.fieldVisible && i < static_cast<int>(schematicFields.size()); ++i) {
                 float y = l.fieldY(i);
                 auto field = schematicFields[static_cast<size_t>(i)];
