@@ -12,6 +12,18 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 menu notes, adjust toast, dense mistakes (2026-10-07)
+
+By the maintainer, local world, `7535a0d` (DLL `f234a873...e2b67`), with
+screenshots. The note under the menu and the combined adjust toast work,
+but the combined toast shifted left and right as its tail changed; wanted
+as a second line. In Japanese, digits and parentheses in the toast and the
+menu sat a little higher than the kana. Drawing is much lighter, but an
+area dense with wrong or extra blocks is still fairly heavy. Changed in the
+next build (not yet checked): two-line toasts, full-width parentheses from
+a translation, touching mistake marks without the faces and outlines
+between them.
+
 ## L-93 remaining 0.1.7 items checked; external review (2026-10-07)
 
 By the maintainer, local world, `e09334d`: the items listed as unseen in
