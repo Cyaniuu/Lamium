@@ -12,6 +12,19 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 screen review refinements (2026-10-08)
+
+By the maintainer, deployed `4b0f531`, DLL
+`aaf161572fbd2c9453f8438d72fbabdd58846d5a1ad8b5c56d3e94be60844f1a`,
+Minecraft 1.26.51.01, local world. Passed: selected frame solid and others
+dashed; Files headings as paths; Check filters as outlined pills apart from
+the tabs; the Check pane split into the whole placement and the selected
+position; the calculator button readable; per-column amount tips without
+overlap; no entity tag under the Entities heading and no heading overlap.
+Found: in Japanese the filter text overlapped the pill outline; with a
+placement whose file is missing, Check and Materials showed "counting" for
+ever while Placed showed "file not found". Both fixed after this check.
+
 ## L-93 screen review step 1 (2026-10-08)
 
 By the maintainer, deployed `fb0500f`, DLL
