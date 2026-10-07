@@ -1035,6 +1035,37 @@ keys; a key to clear the selection), drawing cost of large schematics
 visibility (walls, distance, many entities), showing unloaded parts of a
 running save, and the small fixes (prompt line spacing, caret height,
 honey block and door fallback, the large-file warning not seen).
+Controls decided 2026-10-07 (mockup [demos/schematic-controls.html](demos/schematic-controls.html),
+second round):
+- A schematic menu on one key: a two-level radial menu (categories, then
+  their items) drawn by Lamium. Clicking an item runs it; the wheel over a
+  stepper item changes its value; right click goes back one level; the
+  menu key or Esc closes it. The game keeps running while it is open; the
+  menu only takes the mouse, like Lamium's screens.
+- It reaches most of what the screen does for placements and the save
+  area. Categories (to be finalized with the mockup): Move (forward/back,
+  left/right, up/down relative to the view, to feet; acts on the "move
+  target"), Turn (rotate, mirror, reset), Layers (axis, mode, layer, the
+  layer you stand in, show all), Show (this placement, extra blocks,
+  entities, Schematic HUD, the feature), Area (corner 1/2 at the looked-at
+  block, "move corner 1 / corner 2 / the whole area ->", save, clear),
+  Placement (selected placement, "move the placement ->", look-at select,
+  place from a file, delete via the screen), Check (nearest mistake only,
+  as decided 2026-10-03; Check and Materials tabs), Screen (tabs, key
+  settings). Names, file picking and delete confirmation stay on the
+  screen. Absolute X/Y/Z are not in the menu (Y duplicated up/down).
+- The move target is one of: selected placement, corner 1, corner 2, the
+  whole area. It is chosen by the "... ->" items, which open Move; Move
+  shows the target in its color (green, red, blue, white) in its center.
+- An adjust key (recommended): held with the wheel, it repeats the stepper
+  item used last in the menu (for example up/down or the layer), with a
+  hint under the crosshair saying what it repeats. No tap/hold
+  distinction anywhere.
+- The single-purpose keys stay as advanced shortcuts, unbound by default.
+- A held stick (or any item) as a tool is not built; only if users ask.
+Open: the menu's background dimming, position and whether it reopens at
+the category list or the last category (the mockup lets these be
+compared; likely settings); the default menu and adjust keys.
 If there is room before 0.1.7 (maintainer's call, not required): the
 rotatable 3D preview in Files, neighbor-dependent shapes (fences, panes,
 stair corners, redstone) following the schematic's neighbors instead of the

@@ -35,14 +35,14 @@ p{margin:0}
 .hint .k{color:var(--accent)} .hint .d{color:var(--mc-dim);font-size:11px}
 .toast{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:rgba(var(--mc-panel),.72);padding:3px 8px;font-size:12px;white-space:nowrap}
 .focus{position:absolute;right:8px;bottom:8px;font-size:11px;color:var(--mc-faint)}
-.menu{position:absolute;inset:0;background:rgba(0,0,0,.25)}
+.menu{position:absolute;inset:0}
 .menu .it{position:absolute;transform:translate(-50%,-50%);background:rgba(var(--mc-panel),.86);box-shadow:inset 0 0 0 1px var(--mc-key-edge);padding:3px 8px;font-size:12px;line-height:15px;white-space:nowrap;text-align:center;min-width:64px}
 .menu .it .v{display:block;color:var(--mc-dim);font-size:11px}
 .menu .it.cat{color:#fff}
 .menu .it.on{background:#3c8527;box-shadow:inset 0 0 0 1px #6cc349}
 .menu .it.on .v{color:#e8ffe0}
 .menu .center{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:170px;text-align:center;background:rgba(var(--mc-panel),.86);box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);padding:6px 8px;font-size:12px;line-height:16px}
-.menu .center .t{font-size:13px} .menu .center .d{color:var(--mc-dim);font-size:11px}
+.menu .center .t{font-size:13px} .menu .center .tg{font-size:12px;margin-top:2px} .menu .center .d{color:var(--mc-dim);font-size:11px}
 .side{display:grid;gap:12px}
 .card{background:var(--ground-2);border:1px solid var(--line);padding:12px 14px}
 .card h3{font:700 14.5px/1.4 "Noto Sans JP",sans-serif;margin:0 0 6px}
@@ -92,6 +92,12 @@ th{color:var(--ink-2);font-weight:500}
         <span style="margin-left:6px">視線:</span>
         <button data-pitch="0">水平</button><button data-pitch="1">見下ろす</button>
       </div>
+      <div class="ctrl" style="margin-top:6px">
+        <span>メニューの設定（案）:</span>
+        <span>背景</span><button data-dim="0">なし</button><button data-dim="1" aria-pressed="true">薄く</button><button data-dim="2">暗く</button>
+        <span style="margin-left:6px">位置</span><button data-pos="-1">左</button><button data-pos="0" aria-pressed="true">中央</button><button data-pos="1">右</button>
+        <span style="margin-left:6px">開くとき</span><button data-reopen="top" aria-pressed="true">分類の一覧</button><button data-reopen="last">前回の分類</button>
+      </div>
     </div>
     <div class="side">
       <div id="explain"></div>
@@ -120,10 +126,10 @@ th{color:var(--ink-2);font-weight:500}
   <section class="box">
     <h2>確認したいこと</h2>
     <ul>
-      <li>E と F のどちらが良いか（両方入れて、個別キーも調整キーも任意にする手もある）。</li>
+      <li><b>決定（2026-10-07）:</b> E と F の両方を入れる。F（メニュー＋調整キー）を勧め、機能ごとのキーは上級者向けのショートカットとして残す。メニュー中もゲームは止めずマウスだけ奪う。移動は「動かす対象」に効く。照合は「最寄りの間違い」だけ（次の間違いはなし）。</li>
       <li>メニューの分類と項目（下の表）に足りないもの・要らないものはないか。</li>
-      <li>「移動」は<b>動かす対象</b>（選択中の配置 / 角 1 / 角 2 / 範囲全体）に効く形でよいか。</li>
-      <li>メニューを開いている間はゲームが止まらない（今の Lamium の画面と同じくマウスを奪うだけ）想定でよいか。</li>
+      <li>「移動」の対象は、範囲や配置の分類の「… を動かす →」で選んで移動に入る形でよいか（移動の中心に対象を色付きで表示）。</li>
+      <li>メニューの背景の暗さ・位置・「開くとき」を設定にする形でよいか。既定はどれにするか（推し: 背景は薄く、位置は中央、開くときは分類の一覧）。</li>
     </ul>
   </section>
 </div>
@@ -146,7 +152,7 @@ const st = {
     {name:'farm', x:22,y:63,z:14, w:5,h:3,d:5, rot:0, mirror:0, visible:true, axis:0, mode:0, layer:0, extras:false, entities:true},
   ],
   selected:0, sel:{a:{x:3,y:64,z:3}, b:{x:7,y:67,z:7}}, target:0, hud:true, enabled:true,
-  menu:null, hover:-1, last:null, adjustHeld:false, changed:new Set(), toast:'', toastAt:0, mouse:{x:0,y:0},
+  menu:null, hover:-1, last:null, dim:1, pos:0, reopen:'top', lastCat:-1, adjustHeld:false, changed:new Set(), toast:'', toastAt:0, mouse:{x:0,y:0},
 };
 const P = () => st.places[st.selected];
 const looked = () => { const d = DIRS[st.look]; return st.pitch ? {x:st.player.x+d[0], y:st.player.y-1, z:st.player.z+d[1]} : {x:st.player.x+d[0]*3, y:st.player.y, z:st.player.z+d[1]*3}; };
@@ -179,9 +185,6 @@ function categories(){
       item('左右', () => '右 / 左', () => along('lr', 1), n => along('lr', n)),
       item('上下', () => '上 / 下', () => along('ud', 1), n => along('ud', n)),
       item('足元へ', () => '', () => { const t = st.player; if (st.target === 0){ Object.assign(p,{x:t.x,y:t.y,z:t.z}); mark('X','Y','Z'); } else { const o = st.target===2 ? st.sel.b : st.sel.a; if (o){ Object.assign(o,{x:t.x,y:t.y,z:t.z}); mark(st.target===2?'b':'a'); } } }),
-      item('X', () => target3().x, () => shift(1,0,0), n => shift(n,0,0)),
-      item('Y', () => target3().y, () => shift(0,1,0), n => shift(0,n,0)),
-      item('Z', () => target3().z, () => shift(0,0,1), n => shift(0,0,n)),
       item('動かす対象', () => TARGETS[st.target], () => { st.target = (st.target+1)%4; mark('target'); }, n => { st.target = (st.target+n+4)%4; mark('target'); }),
     ]},
     {name:'向き', items:[
@@ -206,21 +209,21 @@ function categories(){
     {name:'範囲', items:[
       item('角 1 をここに', () => '見ているブロック', () => { st.sel.a = looked(); mark('a'); }),
       item('角 2 をここに', () => '見ているブロック', () => { st.sel.b = looked(); mark('b'); }),
-      item('角 1 を足元に', () => '', () => { st.sel.a = {...st.player}; mark('a'); }),
-      item('角 2 を足元に', () => '', () => { st.sel.b = {...st.player}; mark('b'); }),
-      item('動かす対象', () => TARGETS[st.target], () => { st.target = (st.target+1)%4; mark('target'); }, n => { st.target = (st.target+n+4)%4; mark('target'); }),
+      item('角 1 を動かす →', () => '移動へ', () => moveRing(1)),
+      item('角 2 を動かす →', () => '移動へ', () => moveRing(2)),
+      item('範囲全体を動かす →', () => '移動へ', () => moveRing(3)),
       item('範囲を保存…', () => '保存の画面', () => toast('保存の画面を開く（名前・エンティティ）')),
       item('範囲を消す', () => '', () => { st.sel.a = st.sel.b = null; mark('a','b'); }),
     ]},
     {name:'配置', items:[
       item('選択中の配置', () => P().name, () => nextPlace(1), n => nextPlace(n)),
+      item('配置を動かす →', () => '移動へ', () => moveRing(0)),
       item('見ている配置', () => '視線の先', () => toast('視線の先の配置を選択')),
       item('ファイルから置く…', () => '画面のファイル', () => toast('設計図の画面をファイルタブで開く')),
       item('配置を消す…', () => '画面で確認', () => toast('配置タブで削除の確認')),
     ]},
     {name:'照合', items:[
       item('最寄りの間違い', () => '箱と光の柱', () => toast('最寄りの間違い: 違う 4 m 先')),
-      item('次の間違い', () => '', () => toast('次の間違い: 状態違い 7 m 先')),
       item('照合タブ', () => '画面', () => toast('設計図の画面を照合タブで開く')),
       item('資材タブ', () => '画面', () => toast('設計図の画面を資材タブで開く')),
     ]},
@@ -237,13 +240,17 @@ function target3(){ return st.target === 0 ? P() : st.target === 2 ? (st.sel.b |
 function turn(n){ const p = P(); for (let i = 0; i < (n+4)%4; ++i){ p.rot = (p.rot+1)%4; } mark('rot'); }
 function setAxis(n){ const p = P(); p.axis = (p.axis+n+6)%6; p.layer = Math.min(p.layer, layerCount(p)-1); mark('axis','layer'); }
 function setLayer(n){ const p = P(); if (!p.mode) p.mode = 1; p.layer = Math.max(0, Math.min(layerCount(p)-1, p.layer+n)); mark('layer','mode'); }
+// "… を動かす →": choose what the move ring acts on and go there.
+function moveRing(target){ st.target = target; mark('target'); st.menu.cat = 0; st.lastCat = 0; st.hover = -1; }
+const TARGET_COLORS = ['#6cc349','#ff8a80','#8cb0ff','#ffffff'];
 function nextPlace(n){ st.selected = (st.selected+n+st.places.length)%st.places.length; mark('place'); }
 
 function menuItems(){ const cats = categories(); return st.menu.cat < 0 ? cats.map(c => ({label:c.name, cat:true})) : cats[st.menu.cat].items; }
-function positions(n){ const R = 150; return Array.from({length:n}, (_, i) => { const a = i*Math.PI*2/n - Math.PI/2; return [Math.cos(a)*R, Math.sin(a)*R*.72]; }); }
+const centerX = () => 320 + st.pos * 150;
+function positions(n){ const R = 140; return Array.from({length:n}, (_, i) => { const a = i*Math.PI*2/n - Math.PI/2; return [Math.cos(a)*R*.8, Math.sin(a)*R*.72]; }); }
 function hoverFromMouse(){
   const r = stage.getBoundingClientRect(), sx = 640 / r.width, sy = 480 / r.height;
-  const mx = st.mouse.x * sx - 320, my = st.mouse.y * sy - 240;
+  const mx = (st.mouse.x * sx - centerX()) / .8, my = st.mouse.y * sy - 240;
   if (Math.hypot(mx, my/0.72) < 70) return -1;
   const n = menuItems().length;
   let a = Math.atan2(my/0.72, mx) + Math.PI/2; if (a < 0) a += Math.PI*2;
@@ -259,7 +266,7 @@ function use(it, n){
 const MENU = 'm', ADJ = 'g';
 stage.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
-  if (k === MENU && !e.repeat){ e.preventDefault(); st.menu = st.menu ? null : {cat:-1}; st.hover = -1; render(); return; }
+  if (k === MENU && !e.repeat){ e.preventDefault(); st.menu = st.menu ? null : {cat: st.reopen === 'last' ? st.lastCat : -1}; st.hover = -1; render(); return; }
   if (k === 'escape' && st.menu){ st.menu = null; render(); return; }
   if (st.opt === 'F' && k === ADJ && !e.repeat){ e.preventDefault(); st.adjustHeld = true; render(); return; }
   if (st.opt === 'E' && !st.menu && /^[1-8]$/.test(k)){
@@ -288,7 +295,7 @@ stage.addEventListener('mousedown', e => {
   if (!st.menu) return;
   if (e.button === 2){ if (st.menu.cat >= 0) st.menu.cat = -1; else st.menu = null; st.hover = -1; render(); return; }
   if (e.button !== 0 || st.hover < 0) return;
-  if (st.menu.cat < 0){ st.menu.cat = st.hover; st.hover = -1; render(); return; }
+  if (st.menu.cat < 0){ st.menu.cat = st.hover; st.lastCat = st.hover; st.hover = -1; render(); return; }
   use(menuItems()[st.hover]); render();
 });
 stage.addEventListener('contextmenu', e => e.preventDefault());
@@ -299,6 +306,9 @@ stage.addEventListener('mousemove', e => {
 stage.addEventListener('focus', () => { focusEl.hidden = true; });
 stage.addEventListener('blur', () => { focusEl.hidden = false; st.adjustHeld = false; render(); });
 document.querySelectorAll('[data-look]').forEach(b => b.addEventListener('click', () => { st.look = +b.dataset.look; render(); stage.focus(); }));
+const pick = (attr, apply) => document.querySelectorAll(`[${attr}]`).forEach(b => b.addEventListener('click', () => {
+  apply(b.getAttribute(attr)); document.querySelectorAll(`[${attr}]`).forEach(x => x.setAttribute('aria-pressed', x === b)); render(); stage.focus(); }));
+pick('data-dim', v => st.dim = +v); pick('data-pos', v => st.pos = +v); pick('data-reopen', v => st.reopen = v);
 document.querySelectorAll('[data-pitch]').forEach(b => b.addEventListener('click', () => { st.pitch = +b.dataset.pitch; render(); stage.focus(); }));
 document.querySelectorAll('[role=tab]').forEach(b => b.addEventListener('click', () => {
   st.opt = b.dataset.opt; st.menu = null; st.adjustHeld = false;
@@ -362,8 +372,12 @@ function render(){
     const items = menuItems(), pos = positions(items.length);
     const hovered = st.hover >= 0 ? items[st.hover] : null;
     const cat = st.menu.cat >= 0 ? categories()[st.menu.cat].name : '設計図';
-    menuEl.innerHTML = items.map((it, i) => `<div class="it ${it.cat ? 'cat' : ''} ${st.hover === i ? 'on' : ''}" style="left:${(320 + pos[i][0]) / 6.4}%;top:${(240 + pos[i][1]) / 4.8}%">${it.label}${!it.cat && it.value && it.value() !== '' ? `<span class="v">${it.value()}</span>` : ''}</div>`).join('')
-      + `<div class="center"><div class="t">${cat}</div><div class="d">${
+    menuEl.style.background = `rgba(0,0,0,${[0,.12,.35][st.dim]})`;
+    const cx = centerX();
+    // The move ring says what it moves, in that thing's color.
+    const tg = st.menu.cat === 0 ? `<div class="tg" style="color:${TARGET_COLORS[st.target]}">対象: ${TARGETS[st.target]}</div>` : '';
+    menuEl.innerHTML = items.map((it, i) => `<div class="it ${it.cat ? 'cat' : ''} ${st.hover === i ? 'on' : ''}" style="left:${(cx + pos[i][0]) / 6.4}%;top:${(240 + pos[i][1]) / 4.8}%">${it.label}${!it.cat && it.value && it.value() !== '' ? `<span class="v">${it.value()}</span>` : ''}</div>`).join('')
+      + `<div class="center" style="left:${cx / 6.4}%"><div class="t">${cat}</div>${tg}<div class="d">${
         st.menu.cat < 0 ? 'クリック: 分類を開く<br>Esc / メニューのキー: 閉じる'
         : hovered ? (hovered.step ? 'ホイール: 値を変える<br>クリック: 1 つ進める' : 'クリック: 実行') + '<br>右クリック: 戻る'
         : '項目にマウスを向ける<br>右クリック: 戻る'}</div></div>`;
