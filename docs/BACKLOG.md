@@ -1098,6 +1098,19 @@ game yet):
   the HUD frame. Settings rows: "Schematic menu (start here)" with the
   three menu options right under Schematics, "Repeat the last adjustment
   (recommended)", and the single-purpose groups renamed "Shortcuts: ...".
+Changed after the first look (`4e413ed`, 2026-10-07, not yet checked):
+the menu drawn with Lamium's panel, selection frame and labels, its center
+fixed on every level and the ring fitted to narrow screens; "Move target"
+in Move; the adjust key reports through toasts (no crosshair hint); a
+layer direction turned to the opposite side keeps the same layer
+(`withAxis`); skipping enclosed ghosts became the option "Lighter drawing
+for large schematics" (off), suggested by a toast when a file over 256k
+cells is placed; a waiting save names a direction and distance and frames
+the columns it waits for in yellow; key labels without "start here" /
+"recommended" and the footer tip in faint text.
+Open (maintainer, 2026-10-07): drawing that is both light and true to the
+view (per-face culling against the schematic's own neighbors rather than
+whole cells), and placements on the minimap and world map.
 To check before 0.1.7: see "Pre-release checks".
 - Menu settings (decided 2026-10-07): background dimming light by default
   (none and dark selectable); shown centered at full size by default, or

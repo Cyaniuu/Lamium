@@ -12,6 +12,25 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 menu, adjust key and drawing, first look (2026-10-07)
+
+By the maintainer, local world, `b80f4dc` (DLL `ff622d33...db200be`), with
+screenshots, including saving and placing `terrain big` (122 x 39 x 203).
+Drawing is much lighter, but skipping enclosed ghosts does not depend on
+the view and can show what is not there; not acceptable as the default.
+The menu works overall, but: Move had no way to change its target; the
+small lower-right menu moved its center between levels; Japanese text
+touched item borders; the look did not match Lamium's other screens. The
+adjust key works, but its hint under the crosshair duplicated the toasts.
+The key guidance felt too pushy. Wanted: turning the layer direction to
+the opposite side should keep the same layer; a waiting save should make
+the chunks it waits for easier to find; placements visible on the map.
+Changed in `4e413ed` (not yet checked): the menu redrawn with Lamium's
+parts and a fixed center, a Move target item, the adjust key reporting
+through toasts, the layer rule, skipping as an option (off) suggested for
+large files, a compass direction and yellow frames for waiting columns,
+quieter key guidance.
+
 ## L-93 third save and entity check (2026-10-07)
 
 By the maintainer, local world, `1c5a676` (DLL `d4e9c333...846e9f`), with
