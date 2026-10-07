@@ -41,6 +41,30 @@ inline CellState classify(PaletteBlock const* expected, std::string_view expecte
     return world->key == expectedKey ? CellState::Correct : CellState::State;
 }
 
+// For a block of the right kind in the wrong state: which states differ, in
+// key order, at most `limit` of them. A state only one side has shows "-".
+struct StateDifference {
+    std::string key, expected, actual;
+    bool operator==(StateDifference const&) const = default;
+};
+inline std::vector<StateDifference> stateDifferences(std::map<std::string, std::string> const& expected,
+                                                     std::map<std::string, std::string> const& actual,
+                                                     size_t limit = 3) {
+    std::vector<StateDifference> result;
+    auto e = expected.begin(), a = actual.begin();
+    while ((e != expected.end() || a != actual.end()) && result.size() < limit) {
+        if (a == actual.end() || (e != expected.end() && e->first < a->first)) {
+            result.push_back({e->first, e->second, "-"}); ++e;
+        } else if (e == expected.end() || a->first < e->first) {
+            result.push_back({a->first, "-", a->second}); ++a;
+        } else {
+            if (e->second != a->second) result.push_back({e->first, e->second, a->second});
+            ++e; ++a;
+        }
+    }
+    return result;
+}
+
 struct Tally {
     std::uint64_t correct = 0, missing = 0, wrong = 0, state = 0, extra = 0, unknown = 0;
     // Blocks the schematic asks for (air excluded): what "correct / total" counts.

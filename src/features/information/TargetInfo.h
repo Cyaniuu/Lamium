@@ -7,7 +7,9 @@
 #include <vector>
 class IClientInstance;
 namespace lamium::information {
-enum class DetailKind { Other, Health, Armor, Growth };
+// Schematic: the selected placement's block here when it differs (L-93),
+// shown whether or not other details are.
+enum class DetailKind { Other, Health, Armor, Growth, Schematic };
 // What the card draws beside the name. Item is a real item stack (block items
 // and spawn eggs); Texture is the target's own texture for blocks that have no
 // item, with the region of the source image to draw (one animation frame).
@@ -30,6 +32,8 @@ struct TargetInfo {
         std::optional<float> progress; // 0-1 for ranged values; empty otherwise.
         DetailKind kind = DetailKind::Other;
         int current = 0, maximum = 0; // Health points, for hearts in absolute units.
+        std::string icon;             // An item icon before the value (binary NBT), if any.
+        bool labelIsKey = true;
     };
     std::vector<DetailRow> details;
     struct BlockPosition { int x, y, z; };

@@ -564,7 +564,8 @@ Requirements, technical notes and the retained decision/build/research record:
 [SCHEMATIC.md](SCHEMATIC.md).
 Accepted follow-ups (2026-10-07; known gaps, not 0.1.7 blockers):
 - Placement markers on the minimap/world map.
-- A richer target-card line: expected block icon and differing state values.
+- A richer target-card line: expected block icon and differing state values
+  (built 2026-10-08, not yet checked in game).
 - Beds sometimes drawing only one half or an outline; heads, doors and
   honey blocks still drawing as outlines.
 - The Check tab's verifier-colored preview and the Files tab's rotatable

@@ -26,6 +26,7 @@ struct CardRow {
     std::optional<float> progress;
     Meter meter = Meter::Number;
     int current = 0, maximum = 0; // Health points for Hearts
+    std::string icon;             // Item icon before the value (binary NBT)
 };
 // One heart is 2 HP and the slots follow the maximum (L-88), ten per line.
 // Past five lines the hearts can no longer be read, so the row becomes a bar.
@@ -56,6 +57,12 @@ inline std::vector<CardRow> cardRows(TargetInfo const& target, CardOptions const
             add({detail.label, detail.value, true, detail.valueIsKey, detail.progress,
                  detail.progress ? options.growth : Meter::Number});
     }
+    for (auto const& detail : target.details)
+        if (detail.kind == DetailKind::Schematic) {
+            CardRow row{detail.label, detail.value, detail.labelIsKey, detail.valueIsKey};
+            row.icon = detail.icon;
+            add(std::move(row));
+        }
     if (options.coordinates && target.blockPosition) {
         auto const& p = *target.blockPosition;
         add({"target.position", std::to_string(p.x) + ", " + std::to_string(p.y) + ", " + std::to_string(p.z)});

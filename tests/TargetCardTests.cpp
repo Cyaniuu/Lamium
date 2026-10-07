@@ -102,6 +102,21 @@ void targetCardTests() {
     check(plain.u0 == .5f && plain.u1 == .75f, "a uv set that already matches its file is unchanged");
     check(morphProgress(0) == 0 && morphProgress(morphSeconds) == 1 && morphProgress(1) == 1
           && morphProgress(morphSeconds / 2) > .5f, "the card eases out and settles");
+    {
+        TargetInfo block{"Oak Stairs", "minecraft:oak_stairs"};
+        TargetInfo::DetailRow line{"target.schematic", "Oak Stairs (Wrong state)"};
+        line.kind = DetailKind::Schematic;
+        line.icon = "icon";
+        TargetInfo::DetailRow state{"weirdo_direction", "2 (now 1)"};
+        state.kind = DetailKind::Schematic;
+        state.labelIsKey = false;
+        block.details = {line, state};
+        block.states = {"weirdo_direction: 1"};
+        CardOptions plain;
+        auto shown = cardRows(block, plain);
+        check(shown.size() == 2 && shown[0].icon == "icon" && shown[1].label == "weirdo_direction" && !shown[1].labelIsKey,
+              "schematic rows show without details, the first with the expected block's icon");
+    }
     check(cardContentFits(0, 0, 100, 50, 0, 0, 100, 50) && cardContentFits(-10, -5, 120, 60, 0, 0, 100, 50),
           "the card content shows when the background covers its box");
     check(!cardContentFits(0, 0, 80, 50, 0, 0, 100, 50) && !cardContentFits(0, 0, 100, 30, 0, 0, 100, 50)

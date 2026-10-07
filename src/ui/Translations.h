@@ -543,6 +543,7 @@ inline constexpr auto entries = std::to_array<Entry>({
     {"schematic.matchLayer", "Layer here", "今いる層"},
     {"schematic.matchLayerButton", "Match where I stand", "今いる位置に合わせる"},
     {"schematic.air", "Air", "空気"},
+    {"schematic.stateNow", "{} (now {})", "{}（今は {}）"},
     {"schematic.materials.kinds", "{} materials", "資材 {} 種類"},
     {"schematic.materials.left", "Left: {} of {}", "残り: {} / {}"},
     {"schematic.materials.short", "Short: {} kinds", "足りない: {} 種類"},

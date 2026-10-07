@@ -37,7 +37,7 @@ void translationTests() {
             else if (entry.key == "mouseButton") rendered = std::vformat(pattern, std::make_format_args(remaining));
             else if (entry.key == "autoInterval" || entry.key == "autoClicks")
                 rendered = std::vformat(pattern, std::make_format_args(number, number));
-            else if (entry.key == "hudEditor.anchorReadout") rendered = std::vformat(pattern, std::make_format_args(key, key));
+            else if (entry.key == "hudEditor.anchorReadout" || entry.key == "schematic.stateNow") rendered = std::vformat(pattern, std::make_format_args(key, key));
             else if (entry.key == "worldMap.layer" || entry.key == "schematic.layerValue" || entry.key == "schematic.summary.correct"
                 || entry.key == "schematic.materials.left")
                 rendered = std::vformat(pattern, std::make_format_args(remaining, remaining));

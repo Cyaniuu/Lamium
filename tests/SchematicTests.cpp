@@ -170,6 +170,16 @@ void placementTransforms() {
     check(footprint(size, {{10, 64, -7}, 0, Mirror::None}) == Footprint{10, -7, 13, -2}
           && footprint(size, {{10, 64, -7}, 1, Mirror::X}) == Footprint{10, -7, 15, -4},
           "the footprint covers the placed box from above, turned");
+    {
+        std::map<std::string, std::string> expected{{"direction", "2"}, {"half", "top"}, {"open", "0"}};
+        std::map<std::string, std::string> actual{{"direction", "1"}, {"open", "0"}, {"powered", "1"}};
+        auto diff = stateDifferences(expected, actual);
+        check(diff.size() == 3 && diff[0] == StateDifference{"direction", "2", "1"}
+              && diff[1] == StateDifference{"half", "top", "-"} && diff[2] == StateDifference{"powered", "-", "1"},
+              "differing states in key order, one-sided ones with a dash, equal ones left out");
+        check(stateDifferences(expected, actual, 1).size() == 1 && stateDifferences(expected, expected).empty(),
+              "state differences respect the limit and are empty for equal states");
+    }
     Placement turned{{0, 0, 0}, 1, Mirror::None};
     // A box 3 wide (x) and 5 deep (z): after one clockwise turn it is 5 wide and 3 deep,
     // and its north-east corner moves to the south-east.

@@ -235,6 +235,12 @@ To check before 0.1.7: see [Pre-release checks](BACKLOG.md#pre-release-checks).
   round one; the world map also shows hidden ones faintly with "(hidden)"
   and the name under the footprint. A footprint is never drawn smaller than
   a few pixels. No click action on the map yet.
+- Richer target-card line (built 2026-10-08, not yet checked): the
+  "Schematic: <block> (<kind>)" row shows whether or not the card's other
+  details are on, with the expected block's item icon before the text. For a
+  wrong state, up to three rows follow naming each differing state as
+  "<state>: <expected> (now <actual>)", in key order, with raw values
+  (`stateDifferences`, tested).
 - Menu settings (decided 2026-10-07): background dimming light by default
   (none and dark selectable); shown centered at full size by default, or
   as an option small in the lower right so the view stays free; it opens

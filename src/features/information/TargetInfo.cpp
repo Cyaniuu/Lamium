@@ -315,7 +315,17 @@ std::optional<TargetInfo> collectTargetInfo(IClientInstance& client, bool includ
             : m.state == schematic::CellState::Extra ? "schematic.kind.extra"
             : m.state == schematic::CellState::State ? "schematic.kind.state" : "schematic.kind.missing";
         std::string expected = m.state == schematic::CellState::Extra ? ui::translated("schematic.air") : m.expectedName;
-        result.details.push_back({"target.schematic", expected + " (" + ui::translated(kind) + ")"});
+        TargetInfo::DetailRow row{"target.schematic", expected + " (" + ui::translated(kind) + ")"};
+        row.kind = DetailKind::Schematic;
+        row.icon = m.expected;
+        result.details.push_back(std::move(row));
+        // Which states to change, as "facing: north (now east)".
+        for (auto const& d : m.states) {
+            TargetInfo::DetailRow state{d.key, ui::translated("schematic.stateNow", d.expected, d.actual)};
+            state.kind = DetailKind::Schematic;
+            state.labelIsKey = false;
+            result.details.push_back(std::move(state));
+        }
         break;
     }
     return result;

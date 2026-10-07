@@ -275,6 +275,21 @@ bool flagged(nbt::Compound const& states, char const* name) {
     auto const* tag = states.find(name);
     return tag && tag->integer(value) && value != 0;
 }
+// A block's states as text, for naming what differs (the target card).
+std::map<std::string, std::string> blockStates(Block const& block) {
+    std::map<std::string, std::string> out;
+    auto const& tags = block.mSerializationId->mTags;
+    auto found = tags.find("states");
+    if (found == tags.end()) return out;
+    auto* states = std::get_if<CompoundTag>(&found->second.mTagStorage);
+    if (!states) return out;
+    for (auto const& [key, value] : states->mTags) {
+        if (auto* v = std::get_if<ByteTag>(&value.mTagStorage)) out[key] = std::to_string(v->data);
+        else if (auto* v = std::get_if<IntTag>(&value.mTagStorage)) out[key] = std::to_string(v->data);
+        else if (auto* v = std::get_if<StringTag>(&value.mTagStorage)) out[key] = *v;
+    }
+    return out;
+}
 ItemInfo describe(Block const& block, std::string_view fallback) {
     ItemInfo out;
     auto item = block.getBlockType().asItemInstance(block, nullptr);
@@ -731,6 +746,7 @@ void stepScan(BlockSource& region, session::Snapshot const& snapshot, int dimens
             auto info = describe(*actual, actual->getTypeName());
             m.actual = info.icon;
             m.actualName = info.name;
+            if (state == CellState::State && expected) m.states = stateDifferences(blockStates(*expected), blockStates(*actual));
         }
         scan.mismatches.push_back(std::move(m));
     }

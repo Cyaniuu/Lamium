@@ -15,6 +15,7 @@ struct Mismatch {
     std::string expected, actual; // item icons as binary NBT ("" when there is none)
     std::string expectedName, actualName; // display names
     bool entity = false; // a missing entity rather than a block
+    std::vector<StateDifference> states; // CellState::State: what differs
 };
 struct MaterialLine {
     std::string item;      // item name, e.g. minecraft:oak_stairs; empty when the block has no item

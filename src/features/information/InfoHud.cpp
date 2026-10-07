@@ -465,6 +465,11 @@ std::optional<ui::hud_editor::Box> drawTargetCard(MinecraftUIRenderContext& cont
     auto heartsWidth = [&](CardRow const& row) {
         return (std::min(heartSlots(row.maximum), heartsPerLine) * 8 + 1 + 4) * z;
     };
+    // A row's item icon (the schematic's expected block), as tall as the text.
+    float rowIcon = 10 * z;
+    auto rowStack = [](CardRow const& row) {
+        return row.icon.empty() ? nullptr : schematic::items::iconStack(row.icon);
+    };
     // Measure.
     std::vector<std::string> labels, values;
     float labelW = 0, valuesW = 0;
@@ -477,6 +482,7 @@ std::optional<ui::hud_editor::Box> drawTargetCard(MinecraftUIRenderContext& cont
         if (row.progress && row.meter == Meter::Bar) valueW += (barUnits + 4) * z;
         if (row.progress && row.meter == Meter::Hearts) valueW += heartsWidth(row);
         if (row.progress && row.meter == Meter::Icons) valueW += (10 * 8 + 1 + 4) * z;
+        if (rowStack(row)) valueW += rowIcon + 2 * z;
         valuesW = std::max(valuesW, valueW);
     }
     float nameW = ui::textWidthScaled(context, target.name, z);
@@ -551,6 +557,15 @@ std::optional<ui::hud_editor::Box> drawTargetCard(MinecraftUIRenderContext& cont
         } else if (row.progress && row.meter == Meter::Icons) {
             armorRow(context, x, y + 1 * z, z, hearts(*row.progress));
             x += (10 * 8 + 1 + 4) * z;
+        }
+        if (auto const* stack = rowStack(row)) {
+            if (auto* renderer = context.mClient.getItemRenderer()) {
+                BaseActorRenderContext renderContext(context.mScreenContext, context.mClient,
+                                                     context.mClient.getMinecraftGame_DEPRECATED());
+                renderer->renderGuiItemNew(renderContext, *stack, 0, std::round(x), std::round(y), false, 1.f, 1.f,
+                                           rowIcon / 16, 17);
+            }
+            x += rowIcon + 2 * z;
         }
         ui::labelScaled(context, x, y, left + contentW - x + 2, values[i], z, ui::palette::text, ui::Align::Left,
                         element.shadow);
