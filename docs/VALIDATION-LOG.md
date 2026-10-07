@@ -12,6 +12,16 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-93 list scrolling and pane fit fine; follow-ups (2026-10-07)
+
+By the maintainer, local world, `f4e402d` (DLL `314a043e...098f3a`), with
+screenshots: list scrolling under the pointer and scrollbar dragging,
+narrow-list columns, the warning and button fit and the HUD rule spacing
+are fine. Seen but not blockers (after 0.1.7): the target card could say
+more (the expected block's icon, which states differ); a bed drew only one
+half, and another bed cell showed only the light-blue outline with its
+name. The Verify tab's colored preview also waits until after 0.1.7.
+
 ## L-93 toasts, parentheses, dense mistakes fine; list scrolling (2026-10-07)
 
 By the maintainer, local world, `5103ee5` (DLL `d28d352b...0c0818`), with

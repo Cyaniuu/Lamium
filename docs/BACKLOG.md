@@ -99,10 +99,12 @@ L-item wins. Every entry names what the task is, not only its number.
    optimization).
 6. **L-73 architecture review:** agreed 2026-09-30, in progress step by
    step (order in the L-item); step 13 goes with L-15 breaking.
-7. **Before a release:** the pre-release checks below. 0.1.7 waits until
-   Schematic (L-93) is in a usable shape; it is on main half-finished
-   (maintainer, 2026-10-07). Server checks of the 2026-10-06/07 work come
-   later, before that release.
+7. **Before a release:** the pre-release checks below. 0.1.7: Schematic
+   (L-93) is in a usable shape and its pre-release items were checked
+   locally (maintainer, 2026-10-07); README updated. Left: the version bump,
+   the release ZIP and its smoke test, then the tag. Server checks of the
+   2026-10-06/07 work stay listed below as known gaps (Release policy does
+   not require a full regression).
 
 Ideas that are not yet chosen (for example more inventory transfer gestures,
 an arrow-count HUD line, a fall-rescue elytra, Mass Craft) stay
@@ -1145,8 +1147,14 @@ windows (`SettingsTable::navStep`, tested), found at UI Profile 100%
 pair of touching faces where either cell is within one of the camera's
 cells keeps only the camera-facing face (`faces::beyond`, tested), ghosts
 within two cells are never skipped, no inset (not yet checked).
-After 0.1.7 (maintainer, 2026-10-07): placements on the minimap and world
-map. (The menu animation was moved before 0.1.7 the same day.)
+After 0.1.7 (maintainer, 2026-10-07; not blockers, known issues): placements
+on the minimap and world map; a more detailed target-card line (the
+expected block's icon, and for a wrong state which states differ); beds
+sometimes drawing only one half, and a bed cell showing the outline alone;
+the Verify tab's colored preview; the rotatable 3D preview in Files; shapes
+that depend on neighbors following the schematic; the translucent look;
+drawing heads, doors and honey blocks; how far and how many entity name
+tags show. (The menu animation was moved before 0.1.7 the same day.)
 To check before 0.1.7: see "Pre-release checks".
 - Menu settings (decided 2026-10-07): background dimming light by default
   (none and dark selectable); shown centered at full size by default, or

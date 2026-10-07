@@ -90,11 +90,14 @@ to the defaults.
 - **Inventory/inspection:** Shulker and Bundle previews, durability and
   food values (hunger and saturation as hunger-bar icons) inside the game's
   item tooltip, inventory sorting, experimental drag and wheel transfer between
-  your inventory and storage, Tool Switch and Weapon Switch (optionally
-  fetching a tool or weapon from the inventory), experimental Fake Offhand (temporarily selects a hotbar block for
-  placement) and experimental Hand Restock (tops up consumed items in the same
-  hand slot from the inventory or hotbar, swaps container remainders, and
-  refills an offhand totem after it saves you).
+  your inventory and storage (also from the inventory screen), Tool Switch and
+  Weapon Switch (optionally fetching a tool or weapon from the inventory, into
+  the selected slot or a fixed one), an offhand swap key (`F`, as in Java),
+  experimental Fake Offhand (uses a hotbar block or item as if it were in the
+  offhand) and experimental Hand Restock (tops up consumed items in the same
+  hand slot from the inventory or hotbar, with a threshold and a source order,
+  swaps container remainders, and refills an offhand totem after it saves
+  you).
 - **Interaction:** Permanent Sneak, Permanent Sprint, experimental Edge Guard
   (stops at block edges without sneaking), experimental Tool Protection (on by
   default: at 1 durability a tool or worn elytra is swapped for a spare, or
@@ -110,6 +113,14 @@ to the defaults.
   the world, edited in a Waypoints screen; and a world map (`M`) of the
   areas you have visited, recorded per world, with a waypoint side panel and
   a link that opens the same place in ChunkBase's seed map.
+- **Schematics (experimental, off by default):** place `.mcstructure` files
+  from `mods/Lamium/schematics/` as ghost blocks (move, turn, mirror, show
+  layers along any axis), see what is missing, wrong or in the wrong state
+  in the world, the target card, a Check list and a HUD, count the
+  materials left against what you carry (Shulker Boxes included), save an
+  area of the world as a schematic (also larger than the render distance,
+  by walking along it), and work with all of it during play from a radial
+  schematic menu and a key that repeats the last adjustment with the wheel.
 
 Lamium owns its key bindings; they do not appear in Minecraft's keyboard
 settings. Bindings are edited under each feature or in the Hotkeys view.
@@ -150,6 +161,14 @@ Minecraft's "copy coordinates" while Lamium is installed unless you rebind it.
   as unfair. A few mob faces are not right yet (silverfish and tadpoles stay
   dots; camel and hoglin faces may look off), and skins with custom head
   models are untested.
+
+- Schematics are experimental and checked in local worlds only; servers and
+  other dimensions are not verified. Heads, doors and honey blocks show as an
+  outline instead of a ghost block, and some beds draw only one half.
+  Entities show as a dashed frame of one size and are checked by type near
+  their spot. Saving an area keeps blocks and their states but no block data
+  (container contents, sign text), and entities only by type, position and
+  facing.
 
 Reports, questions and translation fixes are welcome as GitHub issues; see
 [Contributing](CONTRIBUTING.md) for what helps in a report and how pull
