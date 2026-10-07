@@ -212,6 +212,20 @@ unmet gates for versions already published:
 
 ## Bugs
 
+### L-106 In-world waypoint markers remain visible with F1
+Kind: Bug. Reported and behavior decided by the maintainer 2026-10-07.
+Status: built; awaits in-game validation.
+Vanilla Hide HUD (F1) hides the HUD but Lamium's in-world waypoint markers
+remain visible, interfering with screenshots. Hide all of those markers,
+including death points, names and distances, while vanilla HUD is hidden.
+Restoring the HUD resumes the existing Always / While held / Off behavior
+without changing saved waypoint visibility or map recording.
+Implementation: `WaypointMarkers.cpp::draw` checks the owning client's
+`IOptionRegistry::getHideHud()` before drawing. No key interception or new
+setting. Check F1 hide/restore with normal and death markers, including the
+While held mode and FreeCamera. Files: `src/features/map/WaypointMarkers.cpp`,
+docs/MAP.md and docs/VALIDATION.md.
+
 ### L-73 Architecture review
 Kind: Refactor (strong model). Review done 2026-09-30 on main 4d1790b
 (read-only); classification and order agreed with the maintainer the same

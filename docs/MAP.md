@@ -25,6 +25,12 @@ Waypoints and map regions are stored per local world or server address/port
 and dimension. Unsupported connection identities remain session-only.
 Waypoint server storage and the L-104 server paths still need runtime checks.
 
+In-world waypoint markers follow vanilla Hide HUD (F1), including the death
+point, names and distances (decided 2026-10-07, L-106). The marker draw checks
+`IOptionRegistry::getHideHud()` each frame; restoring the HUD resumes the
+configured Always / While held / Off behavior. This does not change waypoint
+storage or recording. Implementation is built; F1 hide/restore awaits a game check.
+
 ## Technical entry points
 
 - `src/features/map/Minimap.cpp`: bounded scanning, terrain colors, cave

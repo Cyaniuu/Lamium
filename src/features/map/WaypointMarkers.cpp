@@ -7,6 +7,7 @@
 #include "ll/api/memory/Hook.h"
 #include "mc/client/game/IClientInstance.h"
 #include "mc/client/gui/GuiData.h"
+#include "mc/client/options/IOptionRegistry.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/client/renderer/game/LevelRendererPlayer.h"
 #include "mc/client/renderer/BaseActorRenderContext.h"
@@ -115,6 +116,7 @@ std::optional<CameraView> lastCamera() {
 }
 void draw(MinecraftUIRenderContext& context, float width, float height, Settings::Map const& settings) {
     if (!settings.waypoints || !worldMarkersShown(settings.waypointsWorld, held.load())) return;
+    if (context.mClient.getOptions().getHideHud()) return;
     auto* player = context.mClient.getLocalPlayer();
     if (!player) return;
     auto view = lastCamera();
