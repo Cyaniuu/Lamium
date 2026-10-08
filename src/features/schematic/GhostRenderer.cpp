@@ -860,14 +860,18 @@ void translated(ScreenContext& screen, glm::vec3 offset, Draw&& draw) {
     auto ref = screen.camera.worldMatrixStack->push(false);
     ref.stack->_isDirty = true;
     ref.mat->_m = glm::scale(glm::translate(ref.mat->_m.get(), offset * towardEye), glm::vec3{towardEye});
-    draw();
-    // Pop manually, as the world overlay does for this stack.
-    ref.stack->_isDirty = true;
-    if (ref.stack->sortOrigin->has_value() && (ref.stack->stack->size() - 1) <= ref.stack->sortOrigin->value())
-        ref.stack->sortOrigin->reset();
-    ref.stack->stack->pop_back();
-    ref.mat = nullptr;
-    ref.stack = nullptr;
+    // Pop manually, as the world overlay does for this stack, also when the
+    // draw throws: a pushed matrix left behind would shift the whole world.
+    auto pop = [&] {
+        ref.stack->_isDirty = true;
+        if (ref.stack->sortOrigin->has_value() && (ref.stack->stack->size() - 1) <= ref.stack->sortOrigin->value())
+            ref.stack->sortOrigin->reset();
+        ref.stack->stack->pop_back();
+        ref.mat = nullptr;
+        ref.stack = nullptr;
+    };
+    try { draw(); } catch (...) { pop(); throw; }
+    pop();
 }
 
 // The palette entry of a game block: its serialized name, states and version.
@@ -1228,8 +1232,7 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
             {
                 using Texture = std::variant<std::monostate, mce::TexturePtr, mce::ClientTexture, mce::ServerTexture>;
                 Texture texture{static_cast<mce::TexturePtr const&>(renderer->mDefaultSkin)};
-                std::function<void(ScreenContext const&, mce::Mesh const&, mce::MaterialPtr const&, Texture const&)> none;
-                MeshHelpers::renderMeshImmediately(screen, faces, material, texture, none);
+                MeshHelpers::renderMeshImmediately(screen, faces, material, texture, OffscreenCaptureDescription{});
             }
             if (lineMaterial.mRenderMaterialInfoPtr) MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
         });
