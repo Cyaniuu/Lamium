@@ -1232,6 +1232,8 @@ std::map<std::string, Pose> poses;
 // Shared candidates per entity; only bones the model has are used.
 std::map<std::string, Pose> sharedPose;
 std::set<std::string> loggedBounds;
+std::map<std::string, long long> liveLogAt;
+int liveLogs = 0;
 Pose const& restPose(IClientInstance& client, std::string const& id, DataDrivenGeometry const& geometry) {
     if (auto found = poses.find(id); found != poses.end()) return found->second;
     Pose& pose = poses[id];
@@ -1322,24 +1324,34 @@ Vec3 restRotation(DataDrivenGeometry const& geometry, ModelPart const& part) {
     if (index < 0 || index >= static_cast<int>(bones.size())) return {};
     return reinterpret_cast<Vec3 const*>(&bones[index].mDefaultTransform->mData)[1];
 }
-// Outlines each cube along the compiled faces. A cube's stored corners are
-// y-up model pixels; compileCubes emits them relative to the part's pivot in
-// the y-down space: (-x - p.x, 24 - y - p.y, z - p.z), p being the pivot
-// (the sum of the positions down from the root).
+// Outlines worked out apart from the game's compile path, in the y-up space
+// the cubes are stored in, so where they differ from the faces one of the
+// two is wrong. Each part turns about its bone's pivot (absolute, y-up);
+// the y-down rotations the model uses turn the other way about x and y here.
 struct ModelOutline {
     Tessellator* lines = nullptr;
     bool log = false; // also log each part's bounds in y-up model pixels
 };
-void outlinePart(ModelOutline const& outline, ModelPart const& part, Vec3 const& pos, Matrix const& m, Matrix const& model) {
+glm::mat4 upRotation(glm::mat4 m, Vec3 degrees) {
+    m = glm::rotate(m, glm::radians(degrees.z), glm::vec3{0, 0, 1});
+    m = glm::rotate(m, glm::radians(-degrees.y), glm::vec3{0, 1, 0});
+    return glm::rotate(m, glm::radians(-degrees.x), glm::vec3{1, 0, 0});
+}
+void outlinePart(ModelOutline const& outline, ModelPart const& part, glm::mat4 const& world, glm::mat4 const& model) {
     constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
     glm::vec3 low{1e9f}, high{-1e9f};
     for (auto const& cube : *part.mCubes) {
-        auto o = *cube.mOrigin, z = *cube.mSize;
+        auto o = *cube.mOrigin, z = *cube.mSize, turn = *cube.mRotation, pivot = *cube.mCubePivot;
+        glm::mat4 local{1.f};
+        if (turn.x || turn.y || turn.z) {
+            glm::vec3 p{pivot.x, pivot.y, pivot.z};
+            local = glm::translate(upRotation(glm::translate(local, p), Vec3{glm::degrees(turn.x), glm::degrees(turn.y), glm::degrees(turn.z)}), -p);
+        }
         glm::vec3 c[8];
         for (int k = 0; k < 8; ++k) {
-            glm::vec4 v{-(k & 1 ? o.x + z.x : o.x) - pos.x, 24 - (k & 2 ? o.y + z.y : o.y) - pos.y, (k & 4 ? o.z + z.z : o.z) - pos.z, 1.f};
-            c[k] = glm::vec3(m._m.get() * v);
-            auto w = glm::vec3(model._m.get() * v);
+            glm::vec4 v = local * glm::vec4{k & 1 ? o.x + z.x : o.x, k & 2 ? o.y + z.y : o.y, k & 4 ? o.z + z.z : o.z, 1.f};
+            c[k] = glm::vec3(world * v);
+            auto w = glm::vec3(model * v);
             low = glm::min(low, w); high = glm::max(high, w);
         }
         if (outline.lines) for (auto [a, b] : edges) { outline.lines->vertex(c[a].x, c[a].y, c[a].z); outline.lines->vertex(c[b].x, c[b].y, c[b].z); }
@@ -1348,27 +1360,35 @@ void outlinePart(ModelOutline const& outline, ModelPart const& part, Vec3 const&
         modelLog(std::format("  bounds {}: x {:.1f}..{:.1f} y {:.1f}..{:.1f} z {:.1f}..{:.1f}", part.mName->getString(), low.x, high.x, low.y, high.y, low.z, high.z));
 }
 void compilePart(Tessellator& batch, ModelOutline const& outline, DataDrivenGeometry const& geometry, Pose const& pose, Pose const& shared, ModelPart& part,
-                 Matrix const& parent, Matrix const& parentModel, Vec3 const& parentPivot, int depth) {
+                 Matrix const& parent, glm::mat4 const& parentWorld, glm::mat4 const& parentModel, int depth) {
     if (depth > 16 || part.mNeverRender) return;
-    Vec3 pivot = parentPivot + *part.mPos;
-    Matrix m = parent, model = parentModel;
+    Matrix m = parent;
     part.translateTo(m, 1.f);
-    part.translateTo(model, 1.f);
     // Same sign as the part's own rotation: a bone's -3 degrees is mRot
     // -0.052 (witch hat), which translateTo applies in this y-down space.
     auto rest = restRotation(geometry, part);
     if (auto found = pose.find(part.mName->getString()); found != pose.end()) rest = rest + found->second;
     else if (auto other = shared.find(part.mName->getString()); other != shared.end()) rest = rest + other->second;
-    for (Matrix* t : {&m, &model}) {
-        if (rest.z != 0) t->rotate(rest.z, 0.f, 0.f, 1.f);
-        if (rest.y != 0) t->rotate(rest.y, 0.f, 1.f, 0.f);
-        if (rest.x != 0) t->rotate(rest.x, 1.f, 0.f, 0.f);
-    }
+    if (rest.z != 0) m.rotate(rest.z, 0.f, 0.f, 1.f);
+    if (rest.y != 0) m.rotate(rest.y, 0.f, 1.f, 0.f);
+    if (rest.x != 0) m.rotate(rest.x, 1.f, 0.f, 0.f);
     static_cast<bool&>(batch.mApplyTransform) = true;
     static_cast<glm::mat4x4&>(batch.mTransformMatrix) = m._m;
     part.compileCubes(batch);
-    outlinePart(outline, part, pivot, m, model);
-    for (auto* child : *part.mChildren) if (child) compilePart(batch, outline, geometry, pose, shared, *child, m, model, pivot, depth + 1);
+    // The outline's own chain: the part's rest rotation plus its mRot
+    // (radians), about the bone pivot.
+    auto const& bones = *geometry.mDefaultBoneOrientations;
+    int index = part.mBoneOrientationIndex;
+    glm::mat4 turn{1.f};
+    if (index >= 0 && index < static_cast<int>(bones.size())) {
+        auto pv = *bones[index].mPivot;
+        auto own = *part.mRot;
+        glm::vec3 p{pv.x, pv.y, pv.z};
+        turn = glm::translate(upRotation(glm::translate(turn, p), rest + Vec3{glm::degrees(own.x), glm::degrees(own.y), glm::degrees(own.z)}), -p);
+    }
+    glm::mat4 world = parentWorld * turn, model = parentModel * turn;
+    outlinePart(outline, part, world, model);
+    for (auto* child : *part.mChildren) if (child) compilePart(batch, outline, geometry, pose, shared, *child, m, world, model, depth + 1);
 }
 void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& camera) {
     auto dispatcher = client.getEntityRenderDispatcher();
@@ -1389,12 +1409,26 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         if (!geometry) continue;
         auto& parts = *geometry->mModelParts;
         auto const& pose = restPose(client, id, *geometry);
+        // Whether the shared model keeps the pose of the last live entity
+        // drawn with it: log its parts now and then.
+        if (auto& next = liveLogAt[id]; liveLogs < 12 && steadyMs() >= next) {
+            next = steadyMs() + 15000;
+            ++liveLogs;
+            std::string values;
+            for (auto const& part : parts) {
+                auto r = *part.mRot, q = *part.mPos;
+                values += std::format(" {}:rot {:.0f},{:.0f},{:.0f} pos {:.1f},{:.1f},{:.1f}", part.mName->getString(),
+                    glm::degrees(r.x), glm::degrees(r.y), glm::degrees(r.z), q.x, q.y, q.z);
+            }
+            modelLog(std::format("  live {}:{}", id, values));
+        }
         // Camera-relative, turned to the saved facing, model pixels to
         // blocks. Compiled cubes come out y-down with the feet at 24 pixels.
         Matrix base = Matrix::IDENTITY();
         base.translate(static_cast<float>(at.x - camera.x), static_cast<float>(at.y - camera.y), static_cast<float>(at.z - camera.z));
         base.rotate(180.f - yaw, 0.f, 1.f, 0.f);
         base.scale(1.f / 16);
+        glm::mat4 upBase = base._m.get();
         base.scale(-1.f, -1.f, 1.f);
         base.translate(0.f, -24.f, 0.f);
         int cubes = 0;
@@ -1403,12 +1437,9 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         faces.begin({}, mce::PrimitiveMode::QuadList, cubes * 24, false);
         lines.begin({}, mce::PrimitiveMode::LineList, cubes * 24, false);
         lines.color(.35f, .85f, 1.f, 1.f);
-        Matrix modelSpace = Matrix::IDENTITY();
-        modelSpace.scale(-1.f, -1.f, 1.f);
-        modelSpace.translate(0.f, -24.f, 0.f);
         ModelOutline outline{&lines, loggedBounds.insert(id).second};
         for (auto root : *geometry->mRootModelParts)
-            if (root < parts.size()) compilePart(faces, outline, *geometry, pose, sharedPose[id], parts[root], base, modelSpace, Vec3{}, 0);
+            if (root < parts.size()) compilePart(faces, outline, *geometry, pose, sharedPose[id], parts[root], base, upBase, glm::mat4{1.f}, 0);
         translated(screen, glm::vec3{0}, [&] {
             auto const& material = static_cast<mce::MaterialPtr const&>(renderer->mEntityAlphatestMaterial);
             if (!material.mRenderMaterialInfoPtr) return;
