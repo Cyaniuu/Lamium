@@ -76,6 +76,7 @@
 #include "mc/client/renderer/actor/DataDrivenRenderer.h"
 #include "mc/client/model/models/Model.h"
 #include "mc/client/model/models/DataDrivenGeometry.h"
+#include "mc/deps/minecraft_renderer/renderer/MeshData.h"
 #include "mc/world/actor/animation/BoneOrientation.h"
 #include "mc/util/molang/ExpressionNode.h"
 #include "features/schematic/RestPose.h"
@@ -1329,6 +1330,7 @@ Vec3 restRotation(DataDrivenGeometry const& geometry, ModelPart const& part) {
 // two is wrong. Each part turns about its bone's pivot (absolute, y-up);
 // the y-down rotations the model uses turn the other way about x and y here.
 struct ModelOutline {
+    ScreenContext* screen = nullptr;
     Tessellator* lines = nullptr;
     bool log = false; // also log each part's bounds in y-up model pixels
 };
@@ -1359,6 +1361,45 @@ void outlinePart(ModelOutline const& outline, ModelPart const& part, glm::mat4 c
     if (outline.log && !part.mCubes->empty())
         modelLog(std::format("  bounds {}: x {:.1f}..{:.1f} y {:.1f}..{:.1f} z {:.1f}..{:.1f}", part.mName->getString(), low.x, high.x, low.y, high.y, low.z, high.z));
 }
+// The cube corners of a part in y-up model pixels, cube rotations applied.
+glm::vec3 storedLow(ModelPart const& part) {
+    glm::vec3 low{1e9f};
+    for (auto const& cube : *part.mCubes) {
+        auto o = *cube.mOrigin, z = *cube.mSize, turn = *cube.mRotation, pivot = *cube.mCubePivot;
+        glm::mat4 local{1.f};
+        if (turn.x || turn.y || turn.z) {
+            glm::vec3 p{pivot.x, pivot.y, pivot.z};
+            local = glm::translate(upRotation(glm::translate(local, p), Vec3{glm::degrees(turn.x), glm::degrees(turn.y), glm::degrees(turn.z)}), -p);
+        }
+        for (int k = 0; k < 8; ++k) {
+            // Mirrored into the y-down space the game compiles in.
+            auto v = glm::vec3(local * glm::vec4{k & 1 ? o.x + z.x : o.x, k & 2 ? o.y + z.y : o.y, k & 4 ? o.z + z.z : o.z, 1.f});
+            low = glm::min(low, glm::vec3{-v.x, -v.y, v.z});
+        }
+    }
+    return low;
+}
+// What compileCubes emits is the mirrored cube plus an offset of its own;
+// learn the offset once per part from an untransformed compile, so the
+// faces can be placed by the same y-up chain as the outlines instead of by
+// translateTo (whose x handling put the armor stand's arms off).
+std::map<ModelPart const*, std::optional<glm::vec3>> compiledOffsets;
+std::optional<glm::vec3> compiledOffset(ScreenContext& screen, ModelPart& part) {
+    if (auto found = compiledOffsets.find(&part); found != compiledOffsets.end()) return found->second;
+    auto& offset = compiledOffsets[&part];
+    if (part.mCubes->empty()) return offset;
+    Tessellator scratch(screen.tessellator.mBufferResourceService);
+    scratch.begin({}, mce::PrimitiveMode::QuadList, static_cast<int>(part.mCubes->size()) * 24, false);
+    static_cast<bool&>(scratch.mApplyTransform) = false;
+    part.compileCubes(scratch);
+    auto const& positions = *static_cast<mce::MeshData&>(scratch.mMeshData).mPositions;
+    if (positions.empty()) { modelLog(std::format("  compiled {}: no vertices", part.mName->getString())); return offset; }
+    glm::vec3 low{1e9f};
+    for (auto const& v : positions) low = glm::min(low, v);
+    offset = low - storedLow(part);
+    modelLog(std::format("  compiled {}: {} vertices, offset {:.2f},{:.2f},{:.2f}", part.mName->getString(), positions.size(), offset->x, offset->y, offset->z));
+    return offset;
+}
 void compilePart(Tessellator& batch, ModelOutline const& outline, DataDrivenGeometry const& geometry, Pose const& pose, Pose const& shared, ModelPart& part,
                  Matrix const& parent, glm::mat4 const& parentWorld, glm::mat4 const& parentModel, int depth) {
     if (depth > 16 || part.mNeverRender) return;
@@ -1372,9 +1413,6 @@ void compilePart(Tessellator& batch, ModelOutline const& outline, DataDrivenGeom
     if (rest.z != 0) m.rotate(rest.z, 0.f, 0.f, 1.f);
     if (rest.y != 0) m.rotate(rest.y, 0.f, 1.f, 0.f);
     if (rest.x != 0) m.rotate(rest.x, 1.f, 0.f, 0.f);
-    static_cast<bool&>(batch.mApplyTransform) = true;
-    static_cast<glm::mat4x4&>(batch.mTransformMatrix) = m._m;
-    part.compileCubes(batch);
     // The outline's own chain: the part's rest rotation plus its mRot
     // (radians), about the bone pivot.
     auto const& bones = *geometry.mDefaultBoneOrientations;
@@ -1387,6 +1425,14 @@ void compilePart(Tessellator& batch, ModelOutline const& outline, DataDrivenGeom
         turn = glm::translate(upRotation(glm::translate(turn, p), rest + Vec3{glm::degrees(own.x), glm::degrees(own.y), glm::degrees(own.z)}), -p);
     }
     glm::mat4 world = parentWorld * turn, model = parentModel * turn;
+    // Faces: compiled vertex v is mirror(stored) + offset, so stored =
+    // mirror(v - offset) and the y-up chain places it.
+    if (auto offset = compiledOffset(*outline.screen, part)) {
+        glm::mat4 faces = glm::translate(glm::scale(world, glm::vec3{-1, -1, 1}), -*offset);
+        static_cast<bool&>(batch.mApplyTransform) = true;
+        static_cast<glm::mat4x4&>(batch.mTransformMatrix) = faces;
+        part.compileCubes(batch);
+    }
     outlinePart(outline, part, world, model);
     for (auto* child : *part.mChildren) if (child) compilePart(batch, outline, geometry, pose, shared, *child, m, world, model, depth + 1);
 }
@@ -1437,7 +1483,7 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         faces.begin({}, mce::PrimitiveMode::QuadList, cubes * 24, false);
         lines.begin({}, mce::PrimitiveMode::LineList, cubes * 24, false);
         lines.color(.35f, .85f, 1.f, 1.f);
-        ModelOutline outline{&lines, loggedBounds.insert(id).second};
+        ModelOutline outline{&screen, &lines, loggedBounds.insert(id).second};
         for (auto root : *geometry->mRootModelParts)
             if (root < parts.size()) compilePart(faces, outline, *geometry, pose, sharedPose[id], parts[root], base, upBase, glm::mat4{1.f}, 0);
         translated(screen, glm::vec3{0}, [&] {
