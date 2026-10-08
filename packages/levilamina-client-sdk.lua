@@ -6,17 +6,17 @@ package("levilamina-client-sdk")
     set_description("LeviLamina client headers and release import library")
     set_license("LGPL-3.0")
     add_urls("https://github.com/LiteLDev/LeviLamina/archive/refs/tags/v$(version).zip")
-    add_versions("26.51.5", "f1869b522e9d55cb367bbc799cc68f44e05be0e26c11bc3152525680035fa67d")
-    add_resources("26.51.5", "runtime",
-        "https://github.com/LiteLDev/LeviLamina/releases/download/v26.51.5/levilamina-v26.51.5-client-release-windows-x64.zip",
-        "c88649827a33a81ab3e154a6fdd7ee5bc38d23e78730fc34798bfa57cdca0a5c")
+    add_versions("26.20.7", "dd2688604cf85bd9bff467a3671607b03c3a6f18b44ae6aa9ff3a947a643e5bd")
+    add_resources("26.20.7", "runtime",
+        "https://github.com/LiteLDev/LeviLamina/releases/download/v26.20.7/levilamina-v26.20.7-client-release-windows-x64.zip",
+        "f3605c9c2699a2ce7bd008b82a8abdd2ded51e8611daba24edab5db0a1523a6c")
     add_defines("LL_PLAT_C", "ENTT_PACKED_PAGE=128", "ENTT_SPARSE_PAGE=2048", "ENTT_NO_MIXIN")
     add_links("LeviLamina")
-    add_deps("entt v4.0.0", "expected-lite v0.8.0", "fmt 11.2.0", "gsl v4.2.0",
+    add_deps("entt v3.15.0", "expected-lite v0.8.0", "fmt 11.2.0", "gsl v4.2.0",
         "glm 1.0.1", "leveldb 1.23", "magic_enum v0.9.7", "nlohmann_json v3.12.0",
         "rapidjson 2025.02.05", "type_safe v0.2.4", "pcg_cpp v1.0.0", "pfr 2.1.1",
-        "symbolprovider v1.3.0", "parallel-hashmap v1.3.12", "concurrentqueue v1.0.4",
-        "stb 2025.03.14", "bedrockdata v26.51.1-client.6")
+        "symbolprovider v1.3.0", "parallel-hashmap v2.0.0", "concurrentqueue v1.0.4",
+        "stb 2025.03.14", "bedrockdata v26.20.4-client.7")
 
     on_fetch(function(package, opt)
         if opt.system then return false end

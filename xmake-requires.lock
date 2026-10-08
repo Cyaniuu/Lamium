@@ -3,12 +3,12 @@
         version = "1.0"
     },
     ["windows|x64"] = {
-        ["bedrockdata v26.51.1-client.6#f56260b5"] = {
+        ["bedrockdata v26.20.4-client.7#f56260b5"] = {
             repo = {
-                commit = "a48ba86e7500ad7cff7f4ec87d27be5ad8446218",
+                commit = "b6ec821de77e710590329fa7c9dff3d4c952fb94",
                 url = "https://github.com/LiteLDev/xmake-repo.git"
             },
-            version = "v26.51.1-client.6"
+            version = "v26.20.4-client.7"
         },
         ["cmake#f56260b5"] = {
             repo = {
@@ -16,12 +16,12 @@
                 commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
-            version = "4.3.4"
+            version = "3.31.6-msvc6"
         },
         ["concurrentqueue v1.0.4#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
+                commit = "338acadc5bc3fb208e931c921b0e614ed9989f2f",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
             version = "v1.0.4"
@@ -29,22 +29,22 @@
         ["debug_assert#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
+                commit = "338acadc5bc3fb208e931c921b0e614ed9989f2f",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
             version = "v1.3.4"
         },
-        ["entt v4.0.0#f56260b5"] = {
+        ["entt v3.15.0#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
-                url = "https://github.com/xmake-io/xmake-repo.git"
+                commit = "42f4d9c62b2e372a249cea1c6a3a33eacf035687",
+                url = "https://gitee.com/tboox/xmake-repo.git"
             },
-            version = "v4.0.0"
+            version = "v3.15.0"
         },
         ["expected-lite v0.8.0#f56260b5"] = {
             repo = {
-                commit = "a48ba86e7500ad7cff7f4ec87d27be5ad8446218",
+                commit = "87b2604ba58defdafe62fbc48ffe7560f3851c46",
                 url = "https://github.com/LiteLDev/xmake-repo.git"
             },
             version = "v0.8.0"
@@ -52,15 +52,15 @@
         ["fmt 11.2.0#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
-                url = "https://github.com/xmake-io/xmake-repo.git"
+                commit = "0d0863ad0a551ffed85e731d3239aa294d1d22ee",
+                url = "https://gitee.com/tboox/xmake-repo.git"
             },
             version = "11.2.0"
         },
         ["glm 1.0.1#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
+                commit = "338acadc5bc3fb208e931c921b0e614ed9989f2f",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
             version = "1.0.1"
@@ -68,7 +68,7 @@
         ["gsl v4.2.0#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
+                commit = "42f4d9c62b2e372a249cea1c6a3a33eacf035687",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
             version = "v4.2.0"
@@ -76,25 +76,25 @@
         ["leveldb 1.23#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
+                commit = "338acadc5bc3fb208e931c921b0e614ed9989f2f",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
             version = "1.23"
         },
         ["levibuildscript#f56260b5"] = {
             repo = {
-                commit = "a48ba86e7500ad7cff7f4ec87d27be5ad8446218",
+                commit = "b6ec821de77e710590329fa7c9dff3d4c952fb94",
                 url = "https://github.com/LiteLDev/xmake-repo.git"
             },
             version = "0.6.1"
         },
-        ["levilamina-client-sdk 26.51.5#16fb575b"] = {
-            version = "26.51.5"
+        ["levilamina-client-sdk 26.20.7#16fb575b"] = {
+            version = "26.20.7"
         },
         ["magic_enum v0.9.7#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
+                commit = "338acadc5bc3fb208e931c921b0e614ed9989f2f",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
             version = "v0.9.7"
@@ -105,49 +105,49 @@
                 commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
-            version = "v1.13.2"
+            version = "1.12.1"
         },
         ["nlohmann_json v3.12.0#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
+                commit = "42f4d9c62b2e372a249cea1c6a3a33eacf035687",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
             version = "v3.12.0"
         },
-        ["parallel-hashmap v1.3.12#f56260b5"] = {
+        ["parallel-hashmap v2.0.0#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
-                url = "https://github.com/xmake-io/xmake-repo.git"
+                commit = "0d0863ad0a551ffed85e731d3239aa294d1d22ee",
+                url = "https://gitee.com/tboox/xmake-repo.git"
             },
-            version = "v1.3.12"
+            version = "v2.0.0"
         },
         ["pcg_cpp v1.0.0#f56260b5"] = {
             repo = {
-                commit = "a48ba86e7500ad7cff7f4ec87d27be5ad8446218",
+                commit = "87b2604ba58defdafe62fbc48ffe7560f3851c46",
                 url = "https://github.com/LiteLDev/xmake-repo.git"
             },
             version = "v1.0.0"
         },
         ["pfr 2.1.1#f56260b5"] = {
             repo = {
-                commit = "a48ba86e7500ad7cff7f4ec87d27be5ad8446218",
+                commit = "87b2604ba58defdafe62fbc48ffe7560f3851c46",
                 url = "https://github.com/LiteLDev/xmake-repo.git"
             },
             version = "2.1.1"
         },
-        ["prelink v0.8.6#f56260b5"] = {
+        ["prelink v0.7.1#f56260b5"] = {
             repo = {
-                commit = "a48ba86e7500ad7cff7f4ec87d27be5ad8446218",
+                commit = "b6ec821de77e710590329fa7c9dff3d4c952fb94",
                 url = "https://github.com/LiteLDev/xmake-repo.git"
             },
-            version = "v0.8.6"
+            version = "v0.7.1"
         },
         ["rapidjson 2025.02.05#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
+                commit = "42f4d9c62b2e372a249cea1c6a3a33eacf035687",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
             version = "2025.02.05"
@@ -155,7 +155,7 @@
         ["snappy#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
+                commit = "338acadc5bc3fb208e931c921b0e614ed9989f2f",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
             version = "1.2.2"
@@ -163,14 +163,14 @@
         ["stb 2025.03.14#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
+                commit = "42f4d9c62b2e372a249cea1c6a3a33eacf035687",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
             version = "2025.03.14"
         },
         ["symbolprovider v1.3.0#f56260b5"] = {
             repo = {
-                commit = "a48ba86e7500ad7cff7f4ec87d27be5ad8446218",
+                commit = "b6ec821de77e710590329fa7c9dff3d4c952fb94",
                 url = "https://github.com/LiteLDev/xmake-repo.git"
             },
             version = "v1.3.0"
@@ -178,7 +178,7 @@
         ["type_safe v0.2.4#f56260b5"] = {
             repo = {
                 branch = "master",
-                commit = "7e595f3d0db8964cbcfab0882233be1a8b0d5d79",
+                commit = "338acadc5bc3fb208e931c921b0e614ed9989f2f",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
             version = "v0.2.4"
