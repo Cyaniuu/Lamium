@@ -76,6 +76,7 @@
 #include "mc/client/renderer/actor/DataDrivenRenderer.h"
 #include "mc/client/model/models/Model.h"
 #include "mc/client/model/models/DataDrivenGeometry.h"
+#include "mc/world/actor/animation/BoneOrientation.h"
 #include "mc/client/model/geom/ModelPart.h"
 #include "mc/client/model/geom/Cube.h"
 #include "mc/deps/core/math/Matrix.h"
@@ -1159,15 +1160,18 @@ void modelLog(std::string const& text) {
 }
 // A model holds several geometries (adult, baby, variants); the one a live
 // entity uses is picked by its render controller, which needs the entity.
-// Take the first that is not a baby.
+// Take "default", else the first that is not a baby or a charged layer.
 DataDrivenGeometry* plainGeometry(Model& model) {
     DataDrivenGeometry* first = nullptr;
+    DataDrivenGeometry* plain = nullptr;
     for (auto const& geometry : *model.mGeometries) {
         if (!geometry) continue;
+        auto name = geometry->mGeoName->getString();
+        if (name == "default") return geometry.get();
         if (!first) first = geometry.get();
-        if (geometry->mGeoName->getString().find("baby") == std::string::npos) return geometry.get();
+        if (!plain && name.find("baby") == std::string::npos && name.find("charged") == std::string::npos) plain = geometry.get();
     }
-    return first;
+    return plain ? plain : first;
 }
 void describeModel(std::string const& id, DataDrivenRenderer* renderer) {
     if (!renderer) { modelLog(std::format("{}: no data-driven renderer", id)); return; }
@@ -1185,15 +1189,41 @@ void describeModel(std::string const& id, DataDrivenRenderer* renderer) {
     for (auto const& part : *chosen->mModelParts)
         parts += std::format(" {}{}{}", part.mName->getString(), part.mVisible ? "" : "(hidden)", part.mNeverRender ? "(never)" : "");
     modelLog(std::format("  parts{}", parts));
+    // Rest-pose bones: geometry rotations (a wolf's body lies along it)
+    // live here, not in the part.
+    auto const& bones = *chosen->mDefaultBoneOrientations;
+    for (auto const& part : *chosen->mModelParts) {
+        int index = part.mBoneOrientationIndex;
+        if (index < 0 || index >= static_cast<int>(bones.size())) { modelLog(std::format("  bone of {}: index {}", part.mName->getString(), index)); continue; }
+        auto const& bone = bones[index];
+        auto const* t = reinterpret_cast<Vec3 const*>(&bone.mDefaultTransform->mData);
+        auto const* pre = static_cast<std::unique_ptr<Matrix> const&>(bone.mLocalPreTransformMatrix).get();
+        auto pivot = *bone.mPivot;
+        modelLog(std::format("  bone of {}: {} default {:.1f},{:.1f},{:.1f} / {:.1f},{:.1f},{:.1f} / {:.1f},{:.1f},{:.1f} pivot {:.1f},{:.1f},{:.1f}{}",
+            part.mName->getString(), bone.mName->getString(), t[0].x, t[0].y, t[0].z, t[1].x, t[1].y, t[1].z, t[2].x, t[2].y, t[2].z,
+            pivot.x, pivot.y, pivot.z, pre ? " pre-transform" : ""));
+    }
 }
-void compilePart(Tessellator& batch, ModelPart& part, Matrix const& parent, int depth) {
+// The rest-pose rotation of a part's bone, degrees.
+Vec3 restRotation(DataDrivenGeometry const& geometry, ModelPart const& part) {
+    auto const& bones = *geometry.mDefaultBoneOrientations;
+    int index = part.mBoneOrientationIndex;
+    if (index < 0 || index >= static_cast<int>(bones.size())) return {};
+    return reinterpret_cast<Vec3 const*>(&bones[index].mDefaultTransform->mData)[1];
+}
+void compilePart(Tessellator& batch, DataDrivenGeometry const& geometry, ModelPart& part, Matrix const& parent, int depth) {
     if (depth > 16 || part.mNeverRender) return;
     Matrix m = parent;
     part.translateTo(m, 1.f);
+    // In the y-down model space x and y rotations turn the other way.
+    auto rest = restRotation(geometry, part);
+    if (rest.z != 0) m.rotate(rest.z, 0.f, 0.f, 1.f);
+    if (rest.y != 0) m.rotate(-rest.y, 0.f, 1.f, 0.f);
+    if (rest.x != 0) m.rotate(-rest.x, 1.f, 0.f, 0.f);
     static_cast<bool&>(batch.mApplyTransform) = true;
     static_cast<glm::mat4x4&>(batch.mTransformMatrix) = m._m;
     part.compileCubes(batch);
-    for (auto* child : *part.mChildren) if (child) compilePart(batch, *child, m, depth + 1);
+    for (auto* child : *part.mChildren) if (child) compilePart(batch, geometry, *child, m, depth + 1);
 }
 void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& camera) {
     auto dispatcher = client.getEntityRenderDispatcher();
@@ -1225,7 +1255,7 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         Tessellator faces(screen.tessellator.mBufferResourceService);
         faces.begin({}, mce::PrimitiveMode::QuadList, cubes * 24, false);
         for (auto root : *geometry->mRootModelParts)
-            if (root < parts.size()) compilePart(faces, parts[root], base, 0);
+            if (root < parts.size()) compilePart(faces, *geometry, parts[root], base, 0);
         translated(screen, glm::vec3{0}, [&] {
             auto const& material = static_cast<mce::MaterialPtr const&>(renderer->mEntityAlphatestMaterial);
             if (!material.mRenderMaterialInfoPtr) return;
