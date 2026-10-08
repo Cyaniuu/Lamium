@@ -1255,6 +1255,11 @@ Pose const& restPose(IClientInstance& client, std::string const& id, DataDrivenG
         bool own = animationName.starts_with(prefix);
         auto const* animation = static_cast<std::unique_ptr<ActorSkeletalAnimation> const&>(info->mPtr).get();
         bool general = animationName.find("setup") != std::string::npos || animationName.find("general") != std::string::npos;
+        // "animation.chicken.general.v1.0" is the legacy copy kept for old
+        // packs; the current one has the same name without the suffix.
+        if (auto version = animationName.rfind(".v"); version != std::string::npos && version > prefix.size()
+            && group->mAnimations->contains(HashedString{animationName.substr(0, version)}))
+            continue;
         if (!own && (!animation || !general)) continue;
         // Another entity's animation counts only when every bone it moves is
         // in this model (the villager's arms fit a witch; a wolf's body and
@@ -1319,14 +1324,14 @@ Vec3 restRotation(DataDrivenGeometry const& geometry, ModelPart const& part) {
 }
 // Outlines each cube along the compiled faces. A cube's stored corners are
 // y-up model pixels; compileCubes emits them relative to the part's pivot in
-// the y-down space: (-x - pos.x, 24 - y - pos.y, z - pos.z).
+// the y-down space: (-x - p.x, 24 - y - p.y, z - p.z), p being the pivot
+// (the sum of the positions down from the root).
 struct ModelOutline {
     Tessellator* lines = nullptr;
     bool log = false; // also log each part's bounds in y-up model pixels
 };
-void outlinePart(ModelOutline const& outline, ModelPart const& part, Matrix const& m, Matrix const& model) {
+void outlinePart(ModelOutline const& outline, ModelPart const& part, Vec3 const& pos, Matrix const& m, Matrix const& model) {
     constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
-    auto pos = *part.mPos;
     glm::vec3 low{1e9f}, high{-1e9f};
     for (auto const& cube : *part.mCubes) {
         auto o = *cube.mOrigin, z = *cube.mSize;
@@ -1343,8 +1348,9 @@ void outlinePart(ModelOutline const& outline, ModelPart const& part, Matrix cons
         modelLog(std::format("  bounds {}: x {:.1f}..{:.1f} y {:.1f}..{:.1f} z {:.1f}..{:.1f}", part.mName->getString(), low.x, high.x, low.y, high.y, low.z, high.z));
 }
 void compilePart(Tessellator& batch, ModelOutline const& outline, DataDrivenGeometry const& geometry, Pose const& pose, Pose const& shared, ModelPart& part,
-                 Matrix const& parent, Matrix const& parentModel, int depth) {
+                 Matrix const& parent, Matrix const& parentModel, Vec3 const& parentPivot, int depth) {
     if (depth > 16 || part.mNeverRender) return;
+    Vec3 pivot = parentPivot + *part.mPos;
     Matrix m = parent, model = parentModel;
     part.translateTo(m, 1.f);
     part.translateTo(model, 1.f);
@@ -1361,8 +1367,8 @@ void compilePart(Tessellator& batch, ModelOutline const& outline, DataDrivenGeom
     static_cast<bool&>(batch.mApplyTransform) = true;
     static_cast<glm::mat4x4&>(batch.mTransformMatrix) = m._m;
     part.compileCubes(batch);
-    outlinePart(outline, part, m, model);
-    for (auto* child : *part.mChildren) if (child) compilePart(batch, outline, geometry, pose, shared, *child, m, model, depth + 1);
+    outlinePart(outline, part, pivot, m, model);
+    for (auto* child : *part.mChildren) if (child) compilePart(batch, outline, geometry, pose, shared, *child, m, model, pivot, depth + 1);
 }
 void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& camera) {
     auto dispatcher = client.getEntityRenderDispatcher();
@@ -1402,7 +1408,7 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         modelSpace.translate(0.f, -24.f, 0.f);
         ModelOutline outline{&lines, loggedBounds.insert(id).second};
         for (auto root : *geometry->mRootModelParts)
-            if (root < parts.size()) compilePart(faces, outline, *geometry, pose, sharedPose[id], parts[root], base, modelSpace, 0);
+            if (root < parts.size()) compilePart(faces, outline, *geometry, pose, sharedPose[id], parts[root], base, modelSpace, Vec3{}, 0);
         translated(screen, glm::vec3{0}, [&] {
             auto const& material = static_cast<mce::MaterialPtr const&>(renderer->mEntityAlphatestMaterial);
             if (!material.mRenderMaterialInfoPtr) return;
