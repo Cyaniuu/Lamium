@@ -245,6 +245,8 @@ void placementTransforms() {
     check(near(constantMolang("90"), 90) && near(constantMolang(" 90 - this "), 90) && near(constantMolang("-this + 22.5"), 22.5f)
           && near(constantMolang("(1 + 2) * -3 / 2"), -4.5f) && near(constantMolang("1.5f"), 1.5f),
           "rest-pose Molang: numbers, this as 0, arithmetic and parentheses");
+    check(near(constantMolang("-3.0 - this", 2), -5) && near(constantMolang("-14 - this", -14), 0),
+          "rest-pose Molang: this is the bone's rest value, so the result is the offset from it");
     check(!constantMolang("query.is_sitting ? 0 : 90") && !constantMolang("variable.tcos0 * 57.3") && !constantMolang("thisx")
           && !constantMolang("") && !constantMolang("1 / 0") && !constantMolang("(1"),
           "rest-pose Molang: anything needing the entity is not a constant");

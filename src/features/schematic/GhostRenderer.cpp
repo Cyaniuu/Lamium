@@ -1290,13 +1290,19 @@ Pose const& restPose(IClientInstance& client, std::string const& id, DataDrivenG
                 Vec3 sum{};
                 for (auto const& f : floats) { auto const* v = reinterpret_cast<float const*>(&f.mXYZ); sum.x += v[0]; sum.y += v[1]; sum.z += v[2]; }
                 std::string expressions;
+                // `this` is the bone's rest value for this channel.
+                Vec3 self{};
+                for (auto const& rest : *geometry.mDefaultBoneOrientations)
+                    if (rest.mName->getString() == bone.mBoneName->getString())
+                        self = reinterpret_cast<Vec3 const*>(&rest.mDefaultTransform->mData)[moves ? 0 : 1];
+                float const selves[3] = {self.x, self.y, self.z};
                 for (auto const& transform : *prePost.front().mChannelTransforms) {
                     auto const* nodes = reinterpret_cast<ExpressionNode const*>(&transform.mXYZ);
                     float* axes[3] = {&sum.x, &sum.y, &sum.z};
                     for (int axis = 0; axis < 3; ++axis) {
                         std::string text;
                         try { text = nodes[axis].getExpressionString(); } catch (...) {}
-                        auto value = constantMolang(text);
+                        auto value = constantMolang(text, selves[axis]);
                         if (value) *axes[axis] += *value;
                         expressions += std::format(" [{}]{}", text, value ? "" : "?");
                     }
@@ -1332,18 +1338,19 @@ Vec3 restRotation(DataDrivenGeometry const& geometry, ModelPart const& part) {
     if (index < 0 || index >= static_cast<int>(bones.size())) return {};
     return reinterpret_cast<Vec3 const*>(&bones[index].mDefaultTransform->mData)[1];
 }
-// Outlines worked out apart from the game's compile path, in the y-up space
-// the cubes are stored in, so where they differ from the faces one of the
-// two is wrong. Each part turns about its bone's pivot (absolute, y-up);
-// the y-down rotations the model uses turn the other way about x and y here.
+// Parts are placed in the y-up space the cubes are stored in: each turns
+// about its bone's pivot (absolute, y-up). Outlines and faces share it.
 struct ModelOutline {
     ScreenContext* screen = nullptr;
     Tessellator* lines = nullptr;
     bool log = false; // also log each part's bounds in y-up model pixels
 };
+// Bedrock turns x and y the other way round from the right hand; in the
+// stored (x-mirrored) space that leaves x reversed and z reversed instead
+// (wolf body, armor stand arms).
 glm::mat4 upRotation(glm::mat4 m, Vec3 degrees) {
-    m = glm::rotate(m, glm::radians(degrees.z), glm::vec3{0, 0, 1});
-    m = glm::rotate(m, glm::radians(-degrees.y), glm::vec3{0, 1, 0});
+    m = glm::rotate(m, glm::radians(-degrees.z), glm::vec3{0, 0, 1});
+    m = glm::rotate(m, glm::radians(degrees.y), glm::vec3{0, 1, 0});
     return glm::rotate(m, glm::radians(-degrees.x), glm::vec3{1, 0, 0});
 }
 void outlinePart(ModelOutline const& outline, ModelPart const& part, glm::mat4 const& world, glm::mat4 const& model) {

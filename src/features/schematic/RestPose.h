@@ -5,12 +5,13 @@
 
 // L-115: an entity's rest pose from its setup animations, without the entity.
 // Only Molang that needs nothing from the entity is evaluated: numbers,
-// `this` (the bone's own value, 0 at rest), + - * / and parentheses.
+// `this` (the bone's own rest value: "90 - this" turns a bone to 90 from
+// wherever it rests), + - * / and parentheses.
 // Anything else (queries, variables, conditions) is not a rest pose.
 namespace lamium::schematic {
 class ConstantMolang {
 public:
-    explicit ConstantMolang(std::string_view text) : text(text) {}
+    ConstantMolang(std::string_view text, float self) : text(text), self(self) {}
     std::optional<float> evaluate() {
         auto value = sum();
         skip();
@@ -20,6 +21,7 @@ public:
 
 private:
     std::string_view text;
+    float self = 0;
     size_t at = 0;
     void skip() { while (at < text.size() && std::isspace(static_cast<unsigned char>(text[at]))) ++at; }
     bool take(char c) {
@@ -56,7 +58,7 @@ private:
         skip();
         if (text.substr(at, 4) == "this" && (at + 4 == text.size() || !std::isalnum(static_cast<unsigned char>(text[at + 4])) && text[at + 4] != '_' && text[at + 4] != '.')) {
             at += 4;
-            return 0.f;
+            return self;
         }
         size_t start = at;
         while (at < text.size() && (std::isdigit(static_cast<unsigned char>(text[at])) || text[at] == '.')) ++at;
@@ -71,5 +73,5 @@ private:
         return value;
     }
 };
-inline std::optional<float> constantMolang(std::string_view text) { return ConstantMolang(text).evaluate(); }
+inline std::optional<float> constantMolang(std::string_view text, float self = 0) { return ConstantMolang(text, self).evaluate(); }
 } // namespace lamium::schematic
