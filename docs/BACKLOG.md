@@ -223,7 +223,9 @@ unmet gates for versions already published:
 ### L-117 Schematic entity name tags render badly in Japanese
 Kind: Bug. Reported by the maintainer 2026-10-08 (L-93 checks); present
 before the step 1 changes.
-Status: open; recorded only.
+Status: open. Decided 2026-10-08: world name tags stay only over entities
+drawn as dashed frames (no model, L-115); fix how they render before the
+next release.
 The world name tags over missing schematic entities show colored fringes and
 look broken with the Japanese locale (screenshot in the conversation). They
 are drawn in `GhostRenderer.cpp` `drawNameTags` with the "default" font and
@@ -703,50 +705,63 @@ report after two runtime rounds without a working path.
 
 ### L-115 Entity ghosts drawn as models
 Kind: Research **(strong model)**. Chosen 2026-10-08 (L-93 screen review).
-Status: built 2026-10-08 (`EntityModels.cpp`), waiting for the in-game check
-of the normal build; the probe rounds before it were all checked in game.
-Draw missing schematic entities as their models with the light-blue outline
-and the block ghosts' face treatment, not translucent. Drawing an actor model
-normally needs a live actor; creating one on the client may touch the world
-or the network, so prefer drawing the model geometry directly.
+Status: built and checked in game 2026-10-08 (`EntityModels.cpp`, rounds on
+trace builds up to `ef9bc54`); move to BACKLOG-DONE when the known limits
+below are accepted or split off.
+Draw missing schematic entities as their models with the light-blue outline,
+not translucent, without a live entity.
 
-How it works (probe rounds da315e7..1913e11, build option since removed):
-- No actor needed: `ActorRenderDispatcher::getDataDrivenRenderer(id)` by the
-  entity identifier gives the model and default skin, drawn with the
-  renderer's `mEntityAlphatestMaterial`. Entities without one keep the dashed
-  frame (logged once per identifier). At most 64 models a frame.
-- `Model` holds several geometries (adult, baby, charged, variants): draw
-  "default", else the first that is not baby/charged.
-- Placement: parts are placed in the stored y-up space, each turned about its
-  bone pivot (`BoneOrientation::mPivot`). Bedrock rotations: x and z turn the
-  other way in that space, y as is (wolf body, armor stand arms). Cube
-  rotations about the cube pivot (chicken body). Faces come from
-  `compileCubes`, whose output is the mirrored cube plus a per-part offset
-  measured once from an untransformed compile; `translateTo` is not used
-  (it placed the armor stand's arms wrong). `ModelPart::mRot` is not used
-  either: the game writes a live entity's pose into the shared model.
-- Pose: bone rest values plus the constant parts of the entity's
+How it works:
+- Model: `ActorRenderDispatcher::getDataDrivenRenderer(id)` by the entity
+  identifier gives the model and default skin, drawn with the renderer's
+  `mEntityAlphatestMaterial`. `Model` holds several geometries (adult, baby,
+  charged, variants): draw "default", else the first that is not
+  baby/charged. Entities without a model keep the dashed frame and the only
+  world name tags (logged once per identifier). At most 64 models a frame.
+- Placement: `compileCubes` (untransformed, once per part) emits each part's
+  quads relative to its bone pivot (`BoneOrientation::mPivot`, absolute) with
+  y flipped, cube rotations and inflation applied. Parts are chained in the
+  stored y-up space, each turned about its bone pivot; geometry x is mirrored
+  in the world, as the game draws it. Rotations in that stored space: x and
+  z turn the other way, y as is. Outlines follow the compiled quads.
+  `translateTo` and `ModelPart::mRot` are not used (the game writes a live
+  entity's pose into the shared model: posing one armor stand moved every
+  ghost).
+- Pose: bone rest rotations plus the constant parts of the entity's own
   `animation.<name>.*` setup/general animations (an armor stand's
-  `default_pose`), rotations and position offsets. Molang is evaluated only
-  when it needs nothing from the entity (`RestPose.h`, tested): numbers,
-  `this` as the bone's rest value, arithmetic. Legacy `.v1.0` copies are
-  skipped when the current animation exists. A bone the entity's own
-  animations leave alone takes a rotation that two or more other entities'
-  setup/general animations agree on, when all their bones are in the model
-  (the witch's crossed arms come from the villager's).
+  `default_pose`), rotations and position offsets, only from animations whose
+  bones are all in the model (a horse's legacy setup moved the new head).
+  Molang is evaluated only when it needs nothing from the entity
+  (`RestPose.h`, tested): numbers, `this` as the bone's rest value,
+  arithmetic. Legacy `.v1.0` copies are skipped when the current one exists.
+  A bone the entity's own animations leave alone takes a rotation that two
+  or more other entities' setup/general animations agree on, when all their
+  bones are in the model (the witch's crossed arms come from the villager's).
+  Borrowing a whole animation family by bone fit was tried and removed: it
+  gave traders, strays and polar bears the sheep's head offset.
+- Skin: the default skin is one texture of the entity's set; when it is a
+  layer (armor, decor, markings, profession, `_none`, baby, saddle, overlay)
+  the model draws light-blue faces with the overlay face material
+  (`overlay/FaceMaterial.h`, per graphics mode). Horses, donkeys, mules,
+  llamas, trader llamas, villagers and rabbits do.
 - The saved `Rotation` yaw turns with the placement (`toWorldYaw`, tested).
-- Light-blue outlines follow each cube (maintainer request).
+- `xmake f --schematic_model_trace=y` logs each model's geometries, skin,
+  animations, pose and per-part pivots once.
 
-Checked in the probe rounds: armor stand, chicken, creeper, witch, wolf look
-like the real ones. Known limits, not built:
+Checked in game: armor stand (default pose, arms on the right sides),
+chicken, cow, creeper, witch, wolf, pig, polar bear, turtle, camel, frog,
+wandering trader, stray, zombie, drowned, horse family (tinted). Known
+limits:
 - Poses that need the entity stay at rest: a wolf's tail hangs straight down
-  (`query.tail_angle`), sitting, walking.
+  into the body (`query.tail_angle`); zombie-like arms hang down, so a
+  drowned's sleeves flicker against its jacket; sitting, walking.
+- Layered skins beyond the default: a sheep's wool on head and legs is not
+  drawn; variants (cat, rabbit, villager profession) use the default skin.
 - An armor stand's own pose (`Pose.PoseIndex` in its saved data) is not
-  read; every armor stand shows the default pose. Texture variants
-  (villager professions, wolf variants) use the default skin.
-- The entity's real animation list (`ActorResourceDefinition`) is opaque in
-  the SDK, so animations are found by name; an entity whose animations are
-  named after another may stay unposed.
+  read. Animations are found by name, so an entity animated under another
+  name (donkey: horse) stays unposed.
+- Light-blue faces flicker more in Simple graphics (lightning material).
+- Many mobs (water, flying, projectiles) were not in the test schematic.
 
 ### L-116 Raw materials from the game's recipes
 Kind: Research, then Design. Chosen 2026-10-08 (L-93 screen review).

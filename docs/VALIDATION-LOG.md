@@ -12,6 +12,24 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## L-115 entity ghost models (2026-10-08)
+
+By the maintainer over about twenty probe and trace builds (`da315e7` to
+`ef9bc54`, last DLL
+`49d29a5afbce08e0ef40f8892ac269ac67457f7af9e327e7f161f6a5e8201648`, trace
+option on), Minecraft 1.26.51.01, local world, schematics with many mobs
+(screenshots in the conversation). On `ef9bc54`: models at the right size,
+place and saved facing for armor stand, chicken, cow, creeper, witch (robe
+outlined), wolf (mane at the shoulders), pig, polar bear, turtle, camel,
+frog, wandering trader, stray, zombie, drowned; armor stand default pose with
+the arms on the same sides as a real one, and no longer following a posed
+live armor stand; horse, donkey, mule, llama, trader llama, villager in
+light-blue faces in Fancy and Simple graphics (Simple flickers); outlines
+on the model parts; no slowdown with many entities. Not right: sheep wool on
+head and legs missing; wolf tail straight down into the body; drowned
+sleeves flicker against the jacket. Not seen: mobs in water or flying,
+projectiles, the trace-off build (same code without logging).
+
 ## L-93 screen review refinements (2026-10-08)
 
 By the maintainer, deployed `4b0f531`, DLL
