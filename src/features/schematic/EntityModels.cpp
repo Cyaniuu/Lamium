@@ -1,5 +1,6 @@
 #include "features/schematic/EntityModels.h"
 #include "features/schematic/RestPose.h"
+#include "overlay/FaceMaterial.h"
 #include "app/Runtime.h"
 #include "mc/client/game/IClientInstance.h"
 #include "mc/client/gui/screens/ScreenContext.h"
@@ -150,30 +151,6 @@ Pose restPose(IClientInstance& client, std::string const& id, DataDrivenGeometry
         }
         return true;
     };
-    // Some entities use another's animations under its name (a donkey the
-    // horse's, a trader llama the llama's). Without animations of its own
-    // name, take the family ("animation.<family>.") whose setup/general
-    // animations fit this model and move the most bones.
-    bool named = false;
-    for (auto const& [key, info] : *group->mAnimations) named = named || key.getString().starts_with(prefix);
-    if (!named) {
-        std::map<std::string, size_t> families;
-        for (auto const& [key, info] : *group->mAnimations) {
-            auto const& animationName = key.getString();
-            auto const* animation = info ? static_cast<std::unique_ptr<ActorSkeletalAnimation> const&>(info->mPtr).get() : nullptr;
-            if (!animation || !animationName.starts_with("animation.") || animation->mBoneAnimations->empty()) continue;
-            if (animationName.find("setup") == std::string::npos && animationName.find("general") == std::string::npos) continue;
-            if (!fitsModel(*animation)) continue;
-            auto end = animationName.find('.', 10);
-            if (end == std::string::npos) continue;
-            auto& score = families[animationName.substr(0, end + 1)];
-            score = std::max(score, animation->mBoneAnimations->size());
-        }
-        size_t best = 0;
-        for (auto const& [family, score] : families)
-            if (score > best) { best = score; prefix = family; }
-        trace(std::format("{}: no animations of its own name; using {}", id, best ? prefix : std::string("none")));
-    }
     for (auto const& [key, info] : *group->mAnimations) {
         if (!info) continue;
         auto const& animationName = key.getString();
@@ -188,7 +165,10 @@ Pose restPose(IClientInstance& client, std::string const& id, DataDrivenGeometry
             continue;
         if (!own && !general) continue;
         if (!own && !fitsModel(*animation)) continue;
-        bool used = own && (general || animationName.ends_with(".default_pose"));
+        // Own animations count only when they fit this model too: a horse's
+        // name also covers its legacy animations, whose bones are gone and
+        // whose head offset dropped the head below the neck.
+        bool used = own && (general || animationName.ends_with(".default_pose")) && fitsModel(*animation);
         std::string channels;
         for (auto const& bone : *animation->mBoneAnimations) {
             auto boneName = bone.mBoneName->getString();
@@ -321,7 +301,9 @@ void addPart(Build& build, ModelPart& part, glm::mat4 const& parent, int depth) 
         std::string cubes;
         for (auto const& cube : *part.mCubes) {
             auto o = *cube.mOrigin, z = *cube.mSize, t = *cube.mRotation;
-            cubes += std::format(" [{:.1f},{:.1f},{:.1f} size {:.1f},{:.1f},{:.1f} turn {:.2f},{:.2f},{:.2f}]", o.x, o.y, o.z, z.x, z.y, z.z, t.x, t.y, t.z);
+            auto cp = *cube.mCubePivot;
+            cubes += std::format(" [{:.1f},{:.1f},{:.1f} size {:.1f},{:.1f},{:.1f} turn {:.2f},{:.2f},{:.2f} about {:.1f},{:.1f},{:.1f}]", o.x, o.y, o.z, z.x, z.y, z.z,
+                t.x, t.y, t.z, cp.x, cp.y, cp.z);
         }
         auto restPos = restValue(build.geometry, name, 0);
         auto pivot = index >= 0 && index < static_cast<int>(bones.size()) ? *bones[index].mPivot : Vec3{};
@@ -395,7 +377,10 @@ std::vector<bool> draw(ScreenContext& screen, IClientInstance& client, Vec3 cons
                        std::function<void(std::function<void()> const&)> const& inWorld) {
     std::vector<bool> drawn(spots.size(), false);
     mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
-    mce::MaterialPtr tintMaterial(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"});
+    // The faces of skinless models use the overlay's face material, which
+    // changes with the graphics mode (the hologram one draws nothing in Simple).
+    auto tint = overlay::faceMaterial(client);
+    auto const& tintMaterial = tint.material;
     size_t count = 0;
     for (size_t i = 0; i < spots.size() && count < maxModels; ++i) {
         auto const& spot = spots[i];
@@ -415,7 +400,7 @@ std::vector<bool> draw(ScreenContext& screen, IClientInstance& client, Vec3 cons
         faces.begin({}, mce::PrimitiveMode::QuadList, cubes * 48, false);
         lines.begin({}, mce::PrimitiveMode::LineList, cubes * 24, false);
         lines.color(.35f, .85f, 1.f, 1.f);
-        if (model.tinted) faces.color(.35f, .85f, 1.f, .25f);
+        if (model.tinted) faces.color(.35f, .85f, 1.f, tint.alpha);
         Build build{screen, *model.geometry, model.pose, faces, lines, model.tinted, spot.identifier, !model.traced};
         model.traced = true;
         for (auto root : *model.geometry->mRootModelParts)

@@ -1,4 +1,5 @@
 #include "overlay/WorldOverlay.h"
+#include "overlay/FaceMaterial.h"
 #include "overlay/ChunkBorders.h"
 #include "overlay/Hitboxes.h"
 #include "overlay/Depth.h"
@@ -125,16 +126,7 @@ struct ShapeMesh {
     uint32_t faceVertices = 0, lineVertices = 0;
     int variant = -1; // The FaceMaterial variant the mesh was built for.
 };
-// Faces need an unlit, alpha-blended material, chosen per graphics mode:
-// - Fancy: the hologram pointer material (vertex color, alpha blending,
-//   depth-tested without depth writes). It culls, so faces get both windings.
-// - Simple: that material is not loaded (its pointer resolves but draws
-//   nothing); use the two-sided, additive lightning material, fainter.
-// - Vibrant Visuals / ray tracing: the deferred pipeline does not show the
-//   hologram material here. Try lightning and draw full-strength outlines so
-//   the shape stays readable even if faces are not shown.
-// The block selection overlay was unsuitable: it multiplies the scene color.
-struct FaceMaterial { mce::MaterialPtr material; int variant; bool twoSided; float alpha; bool strongLines; };
+} // namespace
 FaceMaterial faceMaterial(IClientInstance& client) {
     auto mode = client.getOptions().getGraphicsMode();
     static std::atomic<int> reported{-1};
@@ -152,6 +144,7 @@ FaceMaterial faceMaterial(IClientInstance& client) {
     if (mode == GraphicsMode::Simple) return {std::move(lightning), 1, false, .13f, false};
     return {std::move(lightning), 2, false, .13f, true};
 }
+namespace {
 std::map<ShapeId, ShapeMesh> shapeMeshes;
 std::atomic<bool> releaseMeshes{false};
 struct EyeTrack { EyeOffsetInterpolator offset; uint64_t seenFrame = 0; };
