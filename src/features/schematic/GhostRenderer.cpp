@@ -77,6 +77,8 @@
 #include "mc/client/model/models/Model.h"
 #include "mc/client/model/models/DataDrivenGeometry.h"
 #include "mc/world/actor/animation/BoneOrientation.h"
+#include "mc/util/molang/ExpressionNode.h"
+#include "features/schematic/RestPose.h"
 #include "mc/world/actor/animation/ActorAnimationGroup.h"
 #include "mc/world/actor/animation/ActorAnimationInfo.h"
 #include "mc/world/actor/animation/ActorSkeletalAnimation.h"
@@ -1197,7 +1199,15 @@ void describeModel(std::string const& id, DataDrivenRenderer* renderer) {
     if (!chosen) return;
     std::string parts;
     for (auto const& part : *chosen->mModelParts)
+    {
         parts += std::format(" {}{}{}", part.mName->getString(), part.mVisible ? "" : "(hidden)", part.mNeverRender ? "(never)" : "");
+        auto rot = *part.mRot;
+        if (rot.x || rot.y || rot.z) parts += std::format("(rot {:.2f},{:.2f},{:.2f})", rot.x, rot.y, rot.z);
+        for (auto const& cube : *part.mCubes) {
+            auto turn = *cube.mRotation;
+            if (turn.x || turn.y || turn.z) parts += std::format("(cube rot {:.1f},{:.1f},{:.1f})", turn.x, turn.y, turn.z);
+        }
+    }
     modelLog(std::format("  parts{}", parts));
     // Rest-pose bones: geometry rotations (a wolf's body lies along it)
     // live here, not in the part.
@@ -1228,11 +1238,23 @@ Pose const& restPose(IClientInstance& client, std::string const& id) {
     if (name.ends_with("_v2")) name.resize(name.size() - 3);
     std::string prefix = "animation." + name + ".";
     std::lock_guard lock(static_cast<std::mutex&>(group->mActorAnimationMutex));
+    int others = 0;
     for (auto const& [key, info] : *group->mAnimations) {
         auto const& animationName = key.getString();
-        if (!animationName.starts_with(prefix) || !info) continue;
+        if (!info) continue;
+        bool own = animationName.starts_with(prefix);
+        // Shared animations (a witch may use a villager's): log general ones
+        // that pose arms, not used.
+        if (!own) {
+            auto const* other = static_cast<std::unique_ptr<ActorSkeletalAnimation> const&>(info->mPtr).get();
+            if (!other || animationName.find(".general") == std::string::npos || others >= 12) continue;
+            bool arms = false;
+            for (auto const& bone : *other->mBoneAnimations) arms = arms || bone.mBoneName->getString() == "arms";
+            if (!arms) continue;
+            ++others;
+        }
         auto const* animation = static_cast<std::unique_ptr<ActorSkeletalAnimation> const&>(info->mPtr).get();
-        bool used = animationName.find("setup") != std::string::npos || animationName.find("general") != std::string::npos;
+        bool used = own && (animationName.find("setup") != std::string::npos || animationName.find("general") != std::string::npos);
         std::string bones;
         if (animation) for (auto const& bone : *animation->mBoneAnimations)
             for (auto const& channel : *bone.mAnimationChannels) {
@@ -1242,7 +1264,19 @@ Pose const& restPose(IClientInstance& client, std::string const& id) {
                 auto const& floats = *prePost.front().mChannelTransforms_Floats;
                 Vec3 sum{};
                 for (auto const& f : floats) { auto const* v = reinterpret_cast<float const*>(&f.mXYZ); sum.x += v[0]; sum.y += v[1]; sum.z += v[2]; }
-                bones += std::format(" {}:{:.0f},{:.0f},{:.0f}(+{} expr)", bone.mBoneName->getString(), sum.x, sum.y, sum.z, prePost.front().mChannelTransforms->size());
+                std::string expressions;
+                for (auto const& transform : *prePost.front().mChannelTransforms) {
+                    auto const* nodes = reinterpret_cast<ExpressionNode const*>(&transform.mXYZ);
+                    float* axes[3] = {&sum.x, &sum.y, &sum.z};
+                    for (int axis = 0; axis < 3; ++axis) {
+                        std::string text;
+                        try { text = nodes[axis].getExpressionString(); } catch (...) {}
+                        auto value = constantMolang(text);
+                        if (value) *axes[axis] += *value;
+                        expressions += std::format(" [{}]{}", text, value ? "" : "?");
+                    }
+                }
+                bones += std::format(" {}:{:.0f},{:.0f},{:.0f}{}", bone.mBoneName->getString(), sum.x, sum.y, sum.z, expressions);
                 if (used) { auto& p = pose[bone.mBoneName->getString()]; p.x += sum.x; p.y += sum.y; p.z += sum.z; }
             }
         modelLog(std::format("  animation {}{}{}", animationName, animation ? "" : " (not loaded)", used ? " used" : "") + bones);

@@ -9,6 +9,7 @@
 #include "ui/SchematicFiles.h"
 #include "features/schematic/MaterialAmount.h"
 #include "features/schematic/MenuModel.h"
+#include "features/schematic/RestPose.h"
 #include "features/schematic/GhostFaces.h"
 #include <array>
 #include <set>
@@ -239,6 +240,14 @@ void placementTransforms() {
                 facings = facings && std::abs(b.x - a.x + std::sin(turned)) < 1e-4 && std::abs(b.z - a.z - std::cos(turned)) < 1e-4;
             }
     check(facings, "an entity keeps facing the same way relative to the structure after any turn and mirror");
+
+    auto near = [](std::optional<float> v, float want) { return v && std::abs(*v - want) < 1e-4f; };
+    check(near(constantMolang("90"), 90) && near(constantMolang(" 90 - this "), 90) && near(constantMolang("-this + 22.5"), 22.5f)
+          && near(constantMolang("(1 + 2) * -3 / 2"), -4.5f) && near(constantMolang("1.5f"), 1.5f),
+          "rest-pose Molang: numbers, this as 0, arithmetic and parentheses");
+    check(!constantMolang("query.is_sitting ? 0 : 90") && !constantMolang("variable.tcos0 * 57.3") && !constantMolang("thisx")
+          && !constantMolang("") && !constantMolang("1 / 0") && !constantMolang("(1"),
+          "rest-pose Molang: anything needing the entity is not a constant");
 }
 
 void saveRules() {
