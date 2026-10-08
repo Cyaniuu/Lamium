@@ -75,6 +75,7 @@
 #include "mc/client/renderer/actor/ActorRenderDispatcher.h"
 #include "mc/client/renderer/actor/DataDrivenRenderer.h"
 #include "mc/client/model/models/Model.h"
+#include "mc/client/model/models/DataDrivenGeometry.h"
 #include "mc/client/model/geom/ModelPart.h"
 #include "mc/client/model/geom/Cube.h"
 #include "mc/deps/core/math/Matrix.h"
@@ -1156,36 +1157,37 @@ void modelLog(std::string const& text) {
     if (++modelLogs > 200) return;
     try { Runtime::instance().self().getLogger().info("L-115 probe: {}", text); } catch (...) {}
 }
+// A model holds several geometries (adult, baby, variants); the one a live
+// entity uses is picked by its render controller, which needs the entity.
+// Take the first that is not a baby.
+DataDrivenGeometry* plainGeometry(Model& model) {
+    DataDrivenGeometry* first = nullptr;
+    for (auto const& geometry : *model.mGeometries) {
+        if (!geometry) continue;
+        if (!first) first = geometry.get();
+        if (geometry->mGeoName->getString().find("baby") == std::string::npos) return geometry.get();
+    }
+    return first;
+}
 void describeModel(std::string const& id, DataDrivenRenderer* renderer) {
     if (!renderer) { modelLog(std::format("{}: no data-driven renderer", id)); return; }
     auto* model = static_cast<std::shared_ptr<Model>&>(renderer->mModel).get();
     auto const& skin = static_cast<mce::TexturePtr const&>(renderer->mDefaultSkin);
     std::string texture = skin.mResourceLocationPtr.get() ? skin.mResourceLocationPtr.get()->mPath->value : std::string("-");
     if (!model) { modelLog(std::format("{}: renderer without a model, texture {}", id, texture)); return; }
-    int cubes = 0;
-    for (auto const* part : *model->mAllParts) if (part) cubes += static_cast<int>(part->mCubes->size());
-    modelLog(std::format("{}: {} parts, {} cubes, texture {}", id, model->mAllParts->size(), cubes, texture));
-    // Every part's geometry group and visibility, to check drawnPart().
-    std::string groups;
-    for (auto const* part : *model->mAllParts)
-        if (part) groups += std::format(" {}:g{}{}{}", part->mName->getString(), static_cast<int>(part->mGroupIndex),
-            part->mVisible ? "" : " hidden", part->mNeverRender ? " never" : "");
-    modelLog(std::format("  {} geometries, parts{}", model->mGeometries->size(), groups));
-    int shown = 0;
-    for (auto const* part : *model->mAllParts) {
-        if (!part || ++shown > 8) continue;
-        auto pos = *part->mPos, rot = *part->mRot;
-        auto origin = part->mCubes->empty() ? Vec3{} : *part->mCubes->front().mOrigin;
-        modelLog(std::format("  part {} parent {} pos {:.2f},{:.2f},{:.2f} rot {:.3f},{:.3f},{:.3f} cubes {} first origin {:.2f},{:.2f},{:.2f}",
-            part->mName->getString(), static_cast<ModelPart*>(part->mParent) ? static_cast<ModelPart*>(part->mParent)->mName->getString() : std::string("-"),
-            pos.x, pos.y, pos.z, rot.x, rot.y, rot.z, part->mCubes->size(), origin.x, origin.y, origin.z));
-    }
+    std::string geometries;
+    for (auto const& geometry : *model->mGeometries)
+        if (geometry) geometries += std::format(" {}({} parts, {} roots)", geometry->mGeoName->getString(), geometry->mModelParts->size(), geometry->mRootModelParts->size());
+    auto* chosen = plainGeometry(*model);
+    modelLog(std::format("{}: texture {}, geometries{}; drawing {}", id, texture, geometries, chosen ? chosen->mGeoName->getString() : std::string("none")));
+    if (!chosen) return;
+    std::string parts;
+    for (auto const& part : *chosen->mModelParts)
+        parts += std::format(" {}{}{}", part.mName->getString(), part.mVisible ? "" : "(hidden)", part.mNeverRender ? "(never)" : "");
+    modelLog(std::format("  parts{}", parts));
 }
-// A model can hold several geometries (a baby or armor layer); only the first
-// is the plain entity.
-bool drawnPart(ModelPart const& part) { return !part.mNeverRender && part.mVisible && part.mGroupIndex <= 0; }
 void compilePart(Tessellator& batch, ModelPart& part, Matrix const& parent, int depth) {
-    if (depth > 16 || !drawnPart(part)) return;
+    if (depth > 16 || part.mNeverRender) return;
     Matrix m = parent;
     part.translateTo(m, 1.f);
     static_cast<bool&>(batch.mApplyTransform) = true;
@@ -1196,7 +1198,6 @@ void compilePart(Tessellator& batch, ModelPart& part, Matrix const& parent, int 
 void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& camera) {
     auto dispatcher = client.getEntityRenderDispatcher();
     if (!dispatcher || modelSpots.empty()) return;
-    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
     for (auto const& [at, id, yaw] : modelSpots) {
         auto found = modelRenderers.find(id);
         if (found == modelRenderers.end()) {
@@ -1208,51 +1209,29 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         auto* renderer = found->second.get();
         if (!renderer) continue;
         auto* model = static_cast<std::shared_ptr<Model>&>(renderer->mModel).get();
-        if (!model) continue;
-        // Camera-relative, turned to face south like a fresh entity, model
-        // pixels to blocks.
+        auto* geometry = model ? plainGeometry(*model) : nullptr;
+        if (!geometry) continue;
+        auto& parts = *geometry->mModelParts;
+        // Camera-relative, turned to the saved facing, model pixels to
+        // blocks. Compiled cubes come out y-down with the feet at 24 pixels.
         Matrix base = Matrix::IDENTITY();
         base.translate(static_cast<float>(at.x - camera.x), static_cast<float>(at.y - camera.y), static_cast<float>(at.z - camera.z));
         base.rotate(180.f - yaw, 0.f, 1.f, 0.f);
         base.scale(1.f / 16);
-        // Compiled cubes come out y-down with the feet at 24 pixels (round 1
-        // drew them upside down); the stored cube corners are y-up.
-        Matrix compiled = base;
-        compiled.scale(-1.f, -1.f, 1.f);
-        compiled.translate(0.f, -24.f, 0.f);
+        base.scale(-1.f, -1.f, 1.f);
+        base.translate(0.f, -24.f, 0.f);
         int cubes = 0;
-        for (auto const* part : *model->mAllParts) if (part) cubes += static_cast<int>(part->mCubes->size());
+        for (auto const& part : parts) cubes += static_cast<int>(part.mCubes->size());
         Tessellator faces(screen.tessellator.mBufferResourceService);
         faces.begin({}, mce::PrimitiveMode::QuadList, cubes * 24, false);
-        for (auto* part : *model->mAllParts)
-            if (part && !static_cast<ModelPart*>(part->mParent)) compilePart(faces, *part, compiled, 0);
-        // The cubes' stored corners through the base alone, to compare with
-        // where the game puts them.
-        Tessellator lines(screen.tessellator.mBufferResourceService);
-        lines.begin({}, mce::PrimitiveMode::LineList, cubes * 24, false);
-        lines.color(.35f, .85f, 1.f, 1.f);
-        constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
-        for (auto const* part : *model->mAllParts) {
-            if (!part || !drawnPart(*part)) continue;
-            for (auto const& cube : *part->mCubes) {
-                auto o = *cube.mOrigin, z = *cube.mSize;
-                glm::vec3 c[8];
-                for (int k = 0; k < 8; ++k) {
-                    glm::vec4 v{k & 1 ? o.x + z.x : o.x, k & 2 ? o.y + z.y : o.y, k & 4 ? o.z + z.z : o.z, 1.f};
-                    c[k] = glm::vec3(base._m.get() * v);
-                }
-                for (auto [a, b] : edges) { lines.vertex(c[a].x, c[a].y, c[a].z); lines.vertex(c[b].x, c[b].y, c[b].z); }
-            }
-        }
+        for (auto root : *geometry->mRootModelParts)
+            if (root < parts.size()) compilePart(faces, parts[root], base, 0);
         translated(screen, glm::vec3{0}, [&] {
             auto const& material = static_cast<mce::MaterialPtr const&>(renderer->mEntityAlphatestMaterial);
-            if (material.mRenderMaterialInfoPtr)
-            {
-                using Texture = std::variant<std::monostate, mce::TexturePtr, mce::ClientTexture, mce::ServerTexture>;
-                Texture texture{static_cast<mce::TexturePtr const&>(renderer->mDefaultSkin)};
-                MeshHelpers::renderMeshImmediately(screen, faces, material, texture, OffscreenCaptureDescription{});
-            }
-            if (lineMaterial.mRenderMaterialInfoPtr) MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
+            if (!material.mRenderMaterialInfoPtr) return;
+            using Texture = std::variant<std::monostate, mce::TexturePtr, mce::ClientTexture, mce::ServerTexture>;
+            Texture texture{static_cast<mce::TexturePtr const&>(renderer->mDefaultSkin)};
+            MeshHelpers::renderMeshImmediately(screen, faces, material, texture, OffscreenCaptureDescription{});
         });
     }
 }
