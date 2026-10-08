@@ -72,8 +72,7 @@ struct Entry {
     bool traced = false;
 };
 std::map<std::string, Entry> entries;
-// What compileCubes adds to each part's mirrored cubes, measured once.
-std::map<ModelPart const*, std::optional<glm::vec3>> compiledOffsets;
+std::map<ModelPart const*, std::vector<glm::vec3>> compiledMeshes;
 
 // A model holds several geometries (adult, baby, charged, variants); the one
 // a live entity uses is picked by its render controller, which needs the
@@ -211,51 +210,24 @@ glm::mat4 upRotation(glm::mat4 m, Vec3 degrees) {
     m = glm::rotate(m, glm::radians(degrees.y), glm::vec3{0, 1, 0});
     return glm::rotate(m, glm::radians(-degrees.x), glm::vec3{1, 0, 0});
 }
-// A cube's own rotation about its pivot (radians in the cube).
-glm::mat4 cubeTurn(Cube const& cube) {
-    auto turn = *cube.mRotation;
-    if (!turn.x && !turn.y && !turn.z) return glm::mat4{1.f};
-    auto pivot = *cube.mCubePivot;
-    glm::vec3 p{pivot.x, pivot.y, pivot.z};
-    return glm::translate(upRotation(glm::translate(glm::mat4{1.f}, p), Vec3{glm::degrees(turn.x), glm::degrees(turn.y), glm::degrees(turn.z)}), -p);
-}
-glm::vec4 corner(Cube const& cube, int k) {
-    auto o = *cube.mOrigin, z = *cube.mSize;
-    return {k & 1 ? o.x + z.x : o.x, k & 2 ? o.y + z.y : o.y, k & 4 ? o.z + z.z : o.z, 1.f};
-}
-
-// compileCubes emits each cube mirrored into a y-down space plus an offset
-// of the part's own; measure it once from an untransformed compile so the
-// faces follow the same y-up chain as the outlines (the part's own
-// placement, translateTo, put the armor stand's arms off). Box centers, not
-// corners: inflated cubes (a witch's robe, a drowned's outer layer) grow on
-// every side, and a corner match shifted the whole part.
-std::optional<glm::vec3> compiledOffset(ScreenContext& screen, ModelPart& part) {
-    if (auto found = compiledOffsets.find(&part); found != compiledOffsets.end()) return found->second;
-    auto& offset = compiledOffsets[&part];
-    if (part.mCubes->empty()) return offset;
+// What compileCubes emits for a part, compiled once without a transform.
+// Its frame, read from the probe traces (bone pivots against compiled
+// boxes): relative to the bone pivot with y flipped, x and z as stored, and
+// cube rotations and inflation already applied. So stored = pivot +
+// flipY(compiled), and the compiled quads give both the faces and the
+// outlines of rotated (sheep body) and inflated (witch robe) cubes.
+std::vector<glm::vec3> const& compiledMesh(ScreenContext& screen, ModelPart& part) {
+    if (auto found = compiledMeshes.find(&part); found != compiledMeshes.end()) return found->second;
+    auto& mesh = compiledMeshes[&part];
+    if (part.mCubes->empty()) return mesh;
     Tessellator scratch(screen.tessellator.mBufferResourceService);
     scratch.begin({}, mce::PrimitiveMode::QuadList, static_cast<int>(part.mCubes->size()) * 24, false);
     static_cast<bool&>(scratch.mApplyTransform) = false;
     part.compileCubes(scratch);
-    auto const& positions = *static_cast<mce::MeshData&>(scratch.mMeshData).mPositions;
-    if (positions.empty()) return offset;
-    glm::vec3 compiledLow{1e9f}, compiledHigh{-1e9f}, storedLow{1e9f}, storedHigh{-1e9f};
-    for (auto const& v : positions) { compiledLow = glm::min(compiledLow, v); compiledHigh = glm::max(compiledHigh, v); }
-    for (auto const& cube : *part.mCubes) {
-        auto turn = cubeTurn(cube);
-        for (int k = 0; k < 8; ++k) {
-            auto v = glm::vec3(turn * corner(cube, k));
-            glm::vec3 mirrored{-v.x, -v.y, v.z};
-            storedLow = glm::min(storedLow, mirrored);
-            storedHigh = glm::max(storedHigh, mirrored);
-        }
-    }
-    offset = (compiledLow + compiledHigh - storedLow - storedHigh) / 2.f;
-    trace(std::format("{} part {}: {} cubes, offset {:.2f},{:.2f},{:.2f}, compiled size {:.1f},{:.1f},{:.1f}, stored size {:.1f},{:.1f},{:.1f}",
-        traced, part.mName->getString(), part.mCubes->size(), offset->x, offset->y, offset->z, compiledHigh.x - compiledLow.x, compiledHigh.y - compiledLow.y,
-        compiledHigh.z - compiledLow.z, storedHigh.x - storedLow.x, storedHigh.y - storedLow.y, storedHigh.z - storedLow.z));
-    return offset;
+    mesh = *static_cast<mce::MeshData&>(scratch.mMeshData).mPositions;
+    if (mesh.size() % 4) mesh.clear();
+    trace(std::format("{} part {}: {} cubes, {} compiled vertices", traced, part.mName->getString(), part.mCubes->size(), mesh.size()));
+    return mesh;
 }
 
 // The renderer's default skin is only one texture of the entity's set: for
@@ -311,31 +283,31 @@ void addPart(Build& build, ModelPart& part, glm::mat4 const& parent, int depth) 
             restPos.x, restPos.y, restPos.z, rest.x, rest.y, rest.z, cubes));
     }
 #endif
-    // Faces: a compiled vertex is mirror(stored) + offset.
+    auto const& mesh = compiledMesh(build.screen, part);
+    if (index < 0 || index >= static_cast<int>(bones.size()) || mesh.empty()) {
+        for (auto* child : *part.mChildren) if (child) addPart(build, *child, world, depth + 1);
+        return;
+    }
+    auto pivot = *bones[index].mPivot;
+    glm::mat4 frame = glm::scale(glm::translate(world, glm::vec3{pivot.x, pivot.y, pivot.z}), glm::vec3{1, -1, 1});
     if (build.tinted) {
-        constexpr int sides[6][4] = {{0,2,6,4},{1,5,7,3},{0,4,5,1},{2,3,7,6},{0,1,3,2},{4,6,7,5}};
-        for (auto const& cube : *part.mCubes) {
-            auto at = world * cubeTurn(cube);
-            glm::vec3 c[8];
-            for (int k = 0; k < 8; ++k) c[k] = glm::vec3(at * corner(cube, k));
-            for (auto const& side : sides) {
-                for (int k = 0; k < 4; ++k) build.faces.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
-                for (int k = 3; k >= 0; --k) build.faces.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
-            }
+        for (size_t q = 0; q + 3 < mesh.size(); q += 4) {
+            glm::vec3 c[4];
+            for (int k = 0; k < 4; ++k) c[k] = glm::vec3(frame * glm::vec4{mesh[q + k], 1.f});
+            for (int k = 0; k < 4; ++k) build.faces.vertex(c[k].x, c[k].y, c[k].z);
+            for (int k = 3; k >= 0; --k) build.faces.vertex(c[k].x, c[k].y, c[k].z);
         }
-    } else if (auto offset = compiledOffset(build.screen, part)) {
+    } else {
         static_cast<bool&>(build.faces.mApplyTransform) = true;
-        static_cast<glm::mat4x4&>(build.faces.mTransformMatrix) = glm::translate(glm::scale(world, glm::vec3{-1, -1, 1}), -*offset);
+        static_cast<glm::mat4x4&>(build.faces.mTransformMatrix) = frame;
         part.compileCubes(build.faces);
     }
-    constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
-    for (auto const& cube : *part.mCubes) {
-        auto at = world * cubeTurn(cube);
-        glm::vec3 c[8];
-        for (int k = 0; k < 8; ++k) c[k] = glm::vec3(at * corner(cube, k));
-        for (auto [a, b] : edges) {
-            build.lines.vertex(c[a].x, c[a].y, c[a].z);
-            build.lines.vertex(c[b].x, c[b].y, c[b].z);
+    for (size_t q = 0; q + 3 < mesh.size(); q += 4) {
+        glm::vec3 c[4];
+        for (int k = 0; k < 4; ++k) c[k] = glm::vec3(frame * glm::vec4{mesh[q + k], 1.f});
+        for (int k = 0; k < 4; ++k) {
+            build.lines.vertex(c[k].x, c[k].y, c[k].z);
+            build.lines.vertex(c[(k + 1) % 4].x, c[(k + 1) % 4].y, c[(k + 1) % 4].z);
         }
     }
     for (auto* child : *part.mChildren) if (child) addPart(build, *child, world, depth + 1);
@@ -395,10 +367,12 @@ std::vector<bool> draw(ScreenContext& screen, IClientInstance& client, Vec3 cons
         // Camera-relative, turned to the saved facing, model pixels to blocks.
         glm::mat4 base = glm::translate(glm::mat4{1.f}, glm::vec3{static_cast<float>(spot.at.x - camera.x), static_cast<float>(spot.at.y - camera.y),
                                                                   static_cast<float>(spot.at.z - camera.z)});
-        base = glm::scale(glm::rotate(base, glm::radians(180.f - spot.yaw), glm::vec3{0, 1, 0}), glm::vec3{1.f / 16});
+        // Geometry x is mirrored in the world: the game draws the compiled
+        // (y-flipped) cubes with a proper transform, so x flips too.
+        base = glm::scale(glm::rotate(base, glm::radians(180.f - spot.yaw), glm::vec3{0, 1, 0}), glm::vec3{-1.f / 16, 1.f / 16, 1.f / 16});
         Tessellator faces(screen.tessellator.mBufferResourceService), lines(screen.tessellator.mBufferResourceService);
         faces.begin({}, mce::PrimitiveMode::QuadList, cubes * 48, false);
-        lines.begin({}, mce::PrimitiveMode::LineList, cubes * 24, false);
+        lines.begin({}, mce::PrimitiveMode::LineList, cubes * 48, false);
         lines.color(.35f, .85f, 1.f, 1.f);
         if (model.tinted) faces.color(.35f, .85f, 1.f, tint.alpha);
         Build build{screen, *model.geometry, model.pose, faces, lines, model.tinted, spot.identifier, !model.traced};
@@ -420,6 +394,6 @@ std::vector<bool> draw(ScreenContext& screen, IClientInstance& client, Vec3 cons
 
 void reset() {
     entries.clear();
-    compiledOffsets.clear();
+    compiledMeshes.clear();
 }
 } // namespace lamium::schematic::models

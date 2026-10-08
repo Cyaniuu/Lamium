@@ -56,7 +56,7 @@ private:
             return value;
         }
         skip();
-        if (text.substr(at, 4) == "this" && (at + 4 == text.size() || !std::isalnum(static_cast<unsigned char>(text[at + 4])) && text[at + 4] != '_' && text[at + 4] != '.')) {
+        if (text.substr(at, 4) == "this" && (at + 4 == text.size() || (!std::isalnum(static_cast<unsigned char>(text[at + 4])) && text[at + 4] != '_' && text[at + 4] != '.'))) {
             at += 4;
             return self;
         }
