@@ -1140,8 +1140,8 @@ void drawPlacementFrames(ScreenContext& screen, session::Snapshot const& snapsho
 // Missing entities: their game model with part outlines (L-115), or a dashed
 // frame when the entity has no model.
 void drawEntities(ScreenContext& screen, IClientInstance& client, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
-    std::vector<std::pair<Position, std::string>> named;
     std::vector<models::Spot> spots;
+    std::vector<std::pair<size_t, std::string>> names; // spot index, name
     for (size_t i = 0; i < snapshot.placements.size() && i < resolved.size(); ++i) {
         auto const& shown = snapshot.placements[i];
         if (!shown.structure || !shown.placement.visible || !shown.placement.entities || shown.placement.dimension != dimension) continue;
@@ -1153,11 +1153,18 @@ void drawEntities(ScreenContext& screen, IClientInstance& client, session::Snaps
             double dx = at.x - camera.x, dy = at.y - camera.y, dz = at.z - camera.z, distance = dx * dx + dy * dy + dz * dz;
             if (distance > drawDistance * drawDistance) continue;
             spots.push_back({at, r.entities[e].identifier, r.entities[e].yaw});
-            if (named.size() < 64 && distance < 32 * 32) named.push_back({{at.x, at.y + entityFrameHeight + .3, at.z}, r.entities[e].name});
+            if (distance < 32 * 32) names.push_back({spots.size() - 1, r.entities[e].name});
         }
     }
-    labels = std::move(named);
     auto modelled = models::draw(screen, client, camera, spots, [&](std::function<void()> const& draw) { translated(screen, glm::vec3{0}, draw); });
+    // A model says what the entity is; only the frames get name tags.
+    std::vector<std::pair<Position, std::string>> named;
+    for (auto& [index, name] : names) {
+        if (modelled[index] || named.size() >= 64) continue;
+        auto const& at = spots[index].at;
+        named.push_back({{at.x, at.y + entityFrameHeight + .3, at.z}, std::move(name)});
+    }
+    labels = std::move(named);
     std::vector<Position> frames;
     for (size_t i = 0; i < spots.size(); ++i)
         if (!modelled[i]) frames.push_back(spots[i].at);
