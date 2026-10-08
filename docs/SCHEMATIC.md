@@ -75,7 +75,9 @@ maintainer decided:
 9. Entities: no limit on name tags. First, missing entities get the
    light-blue outline and faces like block ghosts instead of dashed frames,
    and translucency is dropped; drawing their real models is research
-   (L-115).
+   (L-115). Built 2026-10-08: missing entities are drawn as their game
+   models with light-blue part outlines; entities without a model keep the
+   dashed frame. How the model is posed and its limits: BACKLOG L-115.
 
 Built 2026-10-08 (not yet checked in game):
 - World frames drawn after the ghosts, one line box per placement in the

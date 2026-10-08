@@ -703,35 +703,50 @@ report after two runtime rounds without a working path.
 
 ### L-115 Entity ghosts drawn as models
 Kind: Research **(strong model)**. Chosen 2026-10-08 (L-93 screen review).
-Status: open; L-93 step 1 replaces the dashed frames first.
+Status: built 2026-10-08 (`EntityModels.cpp`), waiting for the in-game check
+of the normal build; the probe rounds before it were all checked in game.
 Draw missing schematic entities as their models with the light-blue outline
 and the block ghosts' face treatment, not translucent. Drawing an actor model
 normally needs a live actor; creating one on the client may touch the world
-or the network, so prefer drawing the model geometry directly (the radar
-faces already read resource-pack geometry, `SkinGeometry.h`). Stop and report
-if no path works without a live actor.
+or the network, so prefer drawing the model geometry directly.
 
-Probe findings 2026-10-08 (build option `schematic_model_probe`, commits
-da315e7..44ac48d; maintainer checked each round in game):
-- Works without an actor: `ActorRenderDispatcher::getDataDrivenRenderer(id)`
-  by the entity identifier gives the model and default skin; compiling
-  `DataDrivenGeometry::mModelParts` from `mRootModelParts` with
-  `ModelPart::translateTo` + `compileCubes`, drawn with the renderer's
-  `mEntityAlphatestMaterial` and `mDefaultSkin`, gives textured models at the
-  right size and place. Compiled cubes are y-down with the feet at 24 px
-  (scale -1,-1,1 and translate -24); the saved `Rotation` yaw turns with the
-  placement (`toWorldYaw`, tested).
-- `Model::mAllParts` holds every geometry (adult, baby, charged, variants);
-  draw one: "default" first, else the first that is not baby/charged.
-  Armor stand, chicken and creeper then look right.
-- Not solved: rest poses that come from animations. Wolf body (lies along it)
-  and witch arms (crossed) stay unposed. Bone default transforms are zero;
-  `animation.wolf.setup` has its body rotation as a Molang expression, not a
-  constant; the witch's arm pose is not in any `animation.witch.*` channel.
-  The entity's real animation list sits in `ActorResourceDefinition`, which
-  the SDK leaves opaque, so animations are only found by name guessing.
-- Maintainer request: outline the model's parts with light-blue lines (they
-  read as a schematic entity better than the rough box).
+How it works (probe rounds da315e7..1913e11, build option since removed):
+- No actor needed: `ActorRenderDispatcher::getDataDrivenRenderer(id)` by the
+  entity identifier gives the model and default skin, drawn with the
+  renderer's `mEntityAlphatestMaterial`. Entities without one keep the dashed
+  frame (logged once per identifier). At most 64 models a frame.
+- `Model` holds several geometries (adult, baby, charged, variants): draw
+  "default", else the first that is not baby/charged.
+- Placement: parts are placed in the stored y-up space, each turned about its
+  bone pivot (`BoneOrientation::mPivot`). Bedrock rotations: x and z turn the
+  other way in that space, y as is (wolf body, armor stand arms). Cube
+  rotations about the cube pivot (chicken body). Faces come from
+  `compileCubes`, whose output is the mirrored cube plus a per-part offset
+  measured once from an untransformed compile; `translateTo` is not used
+  (it placed the armor stand's arms wrong). `ModelPart::mRot` is not used
+  either: the game writes a live entity's pose into the shared model.
+- Pose: bone rest values plus the constant parts of the entity's
+  `animation.<name>.*` setup/general animations (an armor stand's
+  `default_pose`), rotations and position offsets. Molang is evaluated only
+  when it needs nothing from the entity (`RestPose.h`, tested): numbers,
+  `this` as the bone's rest value, arithmetic. Legacy `.v1.0` copies are
+  skipped when the current animation exists. A bone the entity's own
+  animations leave alone takes a rotation that two or more other entities'
+  setup/general animations agree on, when all their bones are in the model
+  (the witch's crossed arms come from the villager's).
+- The saved `Rotation` yaw turns with the placement (`toWorldYaw`, tested).
+- Light-blue outlines follow each cube (maintainer request).
+
+Checked in the probe rounds: armor stand, chicken, creeper, witch, wolf look
+like the real ones. Known limits, not built:
+- Poses that need the entity stay at rest: a wolf's tail hangs straight down
+  (`query.tail_angle`), sitting, walking.
+- An armor stand's own pose (`Pose.PoseIndex` in its saved data) is not
+  read; every armor stand shows the default pose. Texture variants
+  (villager professions, wolf variants) use the default skin.
+- The entity's real animation list (`ActorResourceDefinition`) is opaque in
+  the SDK, so animations are found by name; an entity whose animations are
+  named after another may stay unposed.
 
 ### L-116 Raw materials from the game's recipes
 Kind: Research, then Design. Chosen 2026-10-08 (L-93 screen review).

@@ -3,6 +3,7 @@
 #include "features/schematic/SchematicItems.h"
 #include "features/schematic/Selection.h"
 #include "features/schematic/GhostFaces.h"
+#include "features/schematic/EntityModels.h"
 #include "overlay/Depth.h"
 #include "app/AtomicFile.h"
 #include "ui/Localization.h"
@@ -71,30 +72,6 @@
 #include <chrono>
 #include <cmath>
 #include <map>
-#ifdef LAMIUM_SCHEMATIC_MODEL_PROBE
-#include "mc/client/renderer/actor/ActorRenderDispatcher.h"
-#include "mc/client/renderer/actor/DataDrivenRenderer.h"
-#include "mc/client/model/models/Model.h"
-#include "mc/client/model/models/DataDrivenGeometry.h"
-#include "mc/deps/minecraft_renderer/renderer/MeshData.h"
-#include "mc/world/actor/animation/BoneOrientation.h"
-#include "mc/util/molang/ExpressionNode.h"
-#include "features/schematic/RestPose.h"
-#include "mc/world/actor/animation/ActorAnimationGroup.h"
-#include "mc/world/actor/animation/ActorAnimationInfo.h"
-#include "mc/world/actor/animation/ActorSkeletalAnimation.h"
-#include "mc/world/actor/animation/BoneAnimation.h"
-#include "mc/world/actor/animation/BoneAnimationChannel.h"
-#include "mc/world/actor/animation/KeyFrameTransform.h"
-#include "mc/world/actor/animation/KeyFrameTransformData.h"
-#include "mc/world/actor/animation/ChannelTransform_Float.h"
-#include "mc/world/actor/animation/ChannelTransform.h"
-#include "mc/world/actor/animation/BoneTransformType.h"
-#include "mc/client/model/geom/ModelPart.h"
-#include "mc/client/model/geom/Cube.h"
-#include "mc/deps/core/math/Matrix.h"
-#include "mc/common/client/renderer/helpers/MeshHelpers.h"
-#endif
 #include <optional>
 #include <set>
 #include <tuple>
@@ -263,6 +240,7 @@ void log(std::string const& text) {
 void release() {
     sections.clear();
     resolved.clear();
+    models::reset();
     builtKeys.clear();
     actors.clear();
     watched.clear();
@@ -1159,360 +1137,11 @@ void drawPlacementFrames(ScreenContext& screen, session::Snapshot const& snapsho
         MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
     });
 }
-#ifdef LAMIUM_SCHEMATIC_MODEL_PROBE
-// L-115 research: missing entities drawn with their game model. The model is
-// looked up by the entity's identifier, which is also its renderer name for
-// data-driven entities (the radar faces use the same lookup with a live actor).
-struct ModelSpot { Position at; std::string identifier; float yaw; };
-std::vector<ModelSpot> modelSpots;
-std::map<std::string, std::shared_ptr<DataDrivenRenderer>> modelRenderers;
-int modelLogs = 0;
-void modelLog(std::string const& text) {
-    if (++modelLogs > 200) return;
-    try { Runtime::instance().self().getLogger().info("L-115 probe: {}", text); } catch (...) {}
-}
-// A model holds several geometries (adult, baby, variants); the one a live
-// entity uses is picked by its render controller, which needs the entity.
-// Take "default", else the first that is not a baby or a charged layer.
-DataDrivenGeometry* plainGeometry(Model& model) {
-    DataDrivenGeometry* first = nullptr;
-    DataDrivenGeometry* plain = nullptr;
-    for (auto const& geometry : *model.mGeometries) {
-        if (!geometry) continue;
-        auto name = geometry->mGeoName->getString();
-        if (name == "default") return geometry.get();
-        if (!first) first = geometry.get();
-        if (!plain && name.find("baby") == std::string::npos && name.find("charged") == std::string::npos) plain = geometry.get();
-    }
-    return plain ? plain : first;
-}
-void describeModel(std::string const& id, DataDrivenRenderer* renderer) {
-    if (!renderer) { modelLog(std::format("{}: no data-driven renderer", id)); return; }
-    auto* model = static_cast<std::shared_ptr<Model>&>(renderer->mModel).get();
-    auto const& skin = static_cast<mce::TexturePtr const&>(renderer->mDefaultSkin);
-    std::string texture = skin.mResourceLocationPtr.get() ? skin.mResourceLocationPtr.get()->mPath->value : std::string("-");
-    if (!model) { modelLog(std::format("{}: renderer without a model, texture {}", id, texture)); return; }
-    std::string geometries;
-    for (auto const& geometry : *model->mGeometries)
-        if (geometry) geometries += std::format(" {}({} parts, {} roots)", geometry->mGeoName->getString(), geometry->mModelParts->size(), geometry->mRootModelParts->size());
-    auto* chosen = plainGeometry(*model);
-    modelLog(std::format("{}: texture {}, geometries{}; drawing {}", id, texture, geometries, chosen ? chosen->mGeoName->getString() : std::string("none")));
-    if (!chosen) return;
-    std::string parts;
-    for (auto const& part : *chosen->mModelParts)
-    {
-        parts += std::format(" {}{}{}", part.mName->getString(), part.mVisible ? "" : "(hidden)", part.mNeverRender ? "(never)" : "");
-        auto rot = *part.mRot;
-        if (rot.x || rot.y || rot.z) parts += std::format("(rot {:.2f},{:.2f},{:.2f})", rot.x, rot.y, rot.z);
-        for (auto const& cube : *part.mCubes) {
-            auto turn = *cube.mRotation;
-            if (turn.x || turn.y || turn.z) parts += std::format("(cube rot {:.1f},{:.1f},{:.1f})", turn.x, turn.y, turn.z);
-        }
-    }
-    modelLog(std::format("  parts{}", parts));
-    // Rest-pose bones: geometry rotations (a wolf's body lies along it)
-    // live here, not in the part.
-    auto const& bones = *chosen->mDefaultBoneOrientations;
-    for (auto const& part : *chosen->mModelParts) {
-        int index = part.mBoneOrientationIndex;
-        if (index < 0 || index >= static_cast<int>(bones.size())) { modelLog(std::format("  bone of {}: index {}", part.mName->getString(), index)); continue; }
-        auto const& bone = bones[index];
-        auto const* t = reinterpret_cast<Vec3 const*>(&bone.mDefaultTransform->mData);
-        auto const* pre = static_cast<std::unique_ptr<Matrix> const&>(bone.mLocalPreTransformMatrix).get();
-        auto pivot = *bone.mPivot;
-        modelLog(std::format("  bone of {}: {} default {:.1f},{:.1f},{:.1f} / {:.1f},{:.1f},{:.1f} / {:.1f},{:.1f},{:.1f} pivot {:.1f},{:.1f},{:.1f}{}",
-            part.mName->getString(), bone.mName->getString(), t[0].x, t[0].y, t[0].z, t[1].x, t[1].y, t[1].z, t[2].x, t[2].y, t[2].z,
-            pivot.x, pivot.y, pivot.z, pre ? " pre-transform" : ""));
-    }
-}
-// Constant bone rotations of the entity's setup/general animations, by bone
-// name: a wolf's body and a witch's crossed arms are posed there. Without the
-// entity the animation list is guessed from the animation names.
-using Pose = std::map<std::string, Vec3>;
-std::map<std::string, Pose> poses;
-// Shared candidates per entity; only bones the model has are used.
-std::map<std::string, Pose> sharedPose;
-std::map<std::string, Pose> posePositions; // constant position offsets, y-up model pixels
-std::set<std::string> loggedBounds;
-std::map<std::string, long long> liveLogAt;
-int liveLogs = 0;
-Pose const& restPose(IClientInstance& client, std::string const& id, DataDrivenGeometry const& geometry) {
-    if (auto found = poses.find(id); found != poses.end()) return found->second;
-    Pose& pose = poses[id];
-    auto group = client.getActorAnimationGroup();
-    if (!group) return pose;
-    std::string name = id.substr(id.find(':') + 1);
-    if (name.ends_with("_v2")) name.resize(name.size() - 3);
-    std::string prefix = "animation." + name + ".";
-    std::lock_guard lock(static_cast<std::mutex&>(group->mActorAnimationMutex));
-    int others = 0;
-    // Entities share animations (a witch uses the villager's crossed arms).
-    // A bone the entity's own animations leave alone takes the constant pose
-    // other entities' setup/general animations give a bone of that name,
-    // when they all agree.
-    struct Shared { std::optional<Vec3> rotation; int count = 0; };
-    std::map<std::string, Shared> shared;
-    std::set<std::string> touched; // bones the entity's own animations move
-    for (auto const& [key, info] : *group->mAnimations) {
-        auto const& animationName = key.getString();
-        if (!info) continue;
-        bool own = animationName.starts_with(prefix);
-        auto const* animation = static_cast<std::unique_ptr<ActorSkeletalAnimation> const&>(info->mPtr).get();
-        bool general = animationName.find("setup") != std::string::npos || animationName.find("general") != std::string::npos;
-        // "animation.chicken.general.v1.0" is the legacy copy kept for old
-        // packs; the current one has the same name without the suffix.
-        if (auto version = animationName.rfind(".v"); version != std::string::npos && version > prefix.size()
-            && group->mAnimations->contains(HashedString{animationName.substr(0, version)}))
-            continue;
-        if (!own && (!animation || !general)) continue;
-        // Another entity's animation counts only when every bone it moves is
-        // in this model (the villager's arms fit a witch; a wolf's body and
-        // upperbody do not fit a creeper).
-        if (!own) {
-            bool fits = true;
-            for (auto const& bone : *animation->mBoneAnimations) {
-                bool found = false;
-                for (auto const& part : *geometry.mModelParts) found = found || part.mName->getString() == bone.mBoneName->getString();
-                fits = fits && found;
-            }
-            if (!fits) continue;
-        }
-        // An armor stand's resting pose is its default_pose animation.
-        bool used = own && (general || animationName.ends_with(".default_pose"));
-        std::string bones;
-        if (animation) for (auto const& bone : *animation->mBoneAnimations)
-            for (auto const& channel : *bone.mAnimationChannels) {
-                bool moves = channel.mBoneTransformType == BoneTransformType::Position;
-                if ((!moves && channel.mBoneTransformType != BoneTransformType::Rotation) || channel.mKeyFrames->empty()) continue;
-                auto const& prePost = *channel.mKeyFrames->front().mPrePost;
-                if (prePost.empty()) continue;
-                auto const& floats = *prePost.front().mChannelTransforms_Floats;
-                Vec3 sum{};
-                for (auto const& f : floats) { auto const* v = reinterpret_cast<float const*>(&f.mXYZ); sum.x += v[0]; sum.y += v[1]; sum.z += v[2]; }
-                std::string expressions;
-                // `this` is the bone's rest value for this channel.
-                Vec3 self{};
-                for (auto const& rest : *geometry.mDefaultBoneOrientations)
-                    if (rest.mName->getString() == bone.mBoneName->getString())
-                        self = reinterpret_cast<Vec3 const*>(&rest.mDefaultTransform->mData)[moves ? 0 : 1];
-                float const selves[3] = {self.x, self.y, self.z};
-                for (auto const& transform : *prePost.front().mChannelTransforms) {
-                    auto const* nodes = reinterpret_cast<ExpressionNode const*>(&transform.mXYZ);
-                    float* axes[3] = {&sum.x, &sum.y, &sum.z};
-                    for (int axis = 0; axis < 3; ++axis) {
-                        std::string text;
-                        try { text = nodes[axis].getExpressionString(); } catch (...) {}
-                        auto value = constantMolang(text, selves[axis]);
-                        if (value) *axes[axis] += *value;
-                        expressions += std::format(" [{}]{}", text, value ? "" : "?");
-                    }
-                }
-                bones += std::format(" {}{}:{:.1f},{:.1f},{:.1f}{}", bone.mBoneName->getString(), moves ? " position" : "", sum.x, sum.y, sum.z, expressions);
-                if (moves) {
-                    if (used) { auto& p = posePositions[id][bone.mBoneName->getString()]; p.x += sum.x; p.y += sum.y; p.z += sum.z; }
-                    continue;
-                }
-                if (used) { auto& p = pose[bone.mBoneName->getString()]; p.x += sum.x; p.y += sum.y; p.z += sum.z; }
-                if (own) touched.insert(bone.mBoneName->getString());
-                else if (expressions.find('?') == std::string::npos) {
-                    auto [it, fresh] = shared.try_emplace(bone.mBoneName->getString(), Shared{sum, 0});
-                    auto& r = it->second.rotation;
-                    if (r && !(std::abs(r->x - sum.x) < .01f && std::abs(r->y - sum.y) < .01f && std::abs(r->z - sum.z) < .01f)) r.reset();
-                    ++it->second.count;
-                } else shared[bone.mBoneName->getString()].rotation.reset(), shared[bone.mBoneName->getString()].count = -1000;
-            }
-        if (own || (bones.find(" arms:") != std::string::npos && ++others <= 12))
-            modelLog(std::format("  animation {}{}{}", animationName, animation ? "" : " (not loaded)", used ? " used" : "") + bones);
-    }
-    for (auto const& [bone, entry] : shared)
-        if (entry.rotation && entry.count >= 2 && !touched.contains(bone) && (entry.rotation->x || entry.rotation->y || entry.rotation->z)) {
-            sharedPose[id][bone] = *entry.rotation;
-            modelLog(std::format("  shared pose {}: {:.1f},{:.1f},{:.1f} from {} animations", bone, entry.rotation->x, entry.rotation->y, entry.rotation->z, entry.count));
-        }
-    return pose;
-}
-// The rest-pose rotation of a part's bone, degrees.
-Vec3 restRotation(DataDrivenGeometry const& geometry, ModelPart const& part) {
-    auto const& bones = *geometry.mDefaultBoneOrientations;
-    int index = part.mBoneOrientationIndex;
-    if (index < 0 || index >= static_cast<int>(bones.size())) return {};
-    return reinterpret_cast<Vec3 const*>(&bones[index].mDefaultTransform->mData)[1];
-}
-// Parts are placed in the y-up space the cubes are stored in: each turns
-// about its bone's pivot (absolute, y-up). Outlines and faces share it.
-struct ModelOutline {
-    ScreenContext* screen = nullptr;
-    Tessellator* lines = nullptr;
-    bool log = false; // also log each part's bounds in y-up model pixels
-};
-// Bedrock turns x and y the other way round from the right hand; in the
-// stored (x-mirrored) space that leaves x reversed and z reversed instead
-// (wolf body, armor stand arms).
-glm::mat4 upRotation(glm::mat4 m, Vec3 degrees) {
-    m = glm::rotate(m, glm::radians(-degrees.z), glm::vec3{0, 0, 1});
-    m = glm::rotate(m, glm::radians(degrees.y), glm::vec3{0, 1, 0});
-    return glm::rotate(m, glm::radians(-degrees.x), glm::vec3{1, 0, 0});
-}
-void outlinePart(ModelOutline const& outline, ModelPart const& part, glm::mat4 const& world, glm::mat4 const& model) {
-    constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
-    glm::vec3 low{1e9f}, high{-1e9f};
-    for (auto const& cube : *part.mCubes) {
-        auto o = *cube.mOrigin, z = *cube.mSize, turn = *cube.mRotation, pivot = *cube.mCubePivot;
-        glm::mat4 local{1.f};
-        if (turn.x || turn.y || turn.z) {
-            glm::vec3 p{pivot.x, pivot.y, pivot.z};
-            local = glm::translate(upRotation(glm::translate(local, p), Vec3{glm::degrees(turn.x), glm::degrees(turn.y), glm::degrees(turn.z)}), -p);
-        }
-        glm::vec3 c[8];
-        for (int k = 0; k < 8; ++k) {
-            glm::vec4 v = local * glm::vec4{k & 1 ? o.x + z.x : o.x, k & 2 ? o.y + z.y : o.y, k & 4 ? o.z + z.z : o.z, 1.f};
-            c[k] = glm::vec3(world * v);
-            auto w = glm::vec3(model * v);
-            low = glm::min(low, w); high = glm::max(high, w);
-        }
-        if (outline.lines) for (auto [a, b] : edges) { outline.lines->vertex(c[a].x, c[a].y, c[a].z); outline.lines->vertex(c[b].x, c[b].y, c[b].z); }
-    }
-    if (outline.log && !part.mCubes->empty())
-        modelLog(std::format("  bounds {}: x {:.1f}..{:.1f} y {:.1f}..{:.1f} z {:.1f}..{:.1f}", part.mName->getString(), low.x, high.x, low.y, high.y, low.z, high.z));
-}
-// The cube corners of a part in y-up model pixels, cube rotations applied.
-glm::vec3 storedLow(ModelPart const& part) {
-    glm::vec3 low{1e9f};
-    for (auto const& cube : *part.mCubes) {
-        auto o = *cube.mOrigin, z = *cube.mSize, turn = *cube.mRotation, pivot = *cube.mCubePivot;
-        glm::mat4 local{1.f};
-        if (turn.x || turn.y || turn.z) {
-            glm::vec3 p{pivot.x, pivot.y, pivot.z};
-            local = glm::translate(upRotation(glm::translate(local, p), Vec3{glm::degrees(turn.x), glm::degrees(turn.y), glm::degrees(turn.z)}), -p);
-        }
-        for (int k = 0; k < 8; ++k) {
-            // Mirrored into the y-down space the game compiles in.
-            auto v = glm::vec3(local * glm::vec4{k & 1 ? o.x + z.x : o.x, k & 2 ? o.y + z.y : o.y, k & 4 ? o.z + z.z : o.z, 1.f});
-            low = glm::min(low, glm::vec3{-v.x, -v.y, v.z});
-        }
-    }
-    return low;
-}
-// What compileCubes emits is the mirrored cube plus an offset of its own;
-// learn the offset once per part from an untransformed compile, so the
-// faces can be placed by the same y-up chain as the outlines instead of by
-// translateTo (whose x handling put the armor stand's arms off).
-std::map<ModelPart const*, std::optional<glm::vec3>> compiledOffsets;
-std::optional<glm::vec3> compiledOffset(ScreenContext& screen, ModelPart& part) {
-    if (auto found = compiledOffsets.find(&part); found != compiledOffsets.end()) return found->second;
-    auto& offset = compiledOffsets[&part];
-    if (part.mCubes->empty()) return offset;
-    Tessellator scratch(screen.tessellator.mBufferResourceService);
-    scratch.begin({}, mce::PrimitiveMode::QuadList, static_cast<int>(part.mCubes->size()) * 24, false);
-    static_cast<bool&>(scratch.mApplyTransform) = false;
-    part.compileCubes(scratch);
-    auto const& positions = *static_cast<mce::MeshData&>(scratch.mMeshData).mPositions;
-    if (positions.empty()) { modelLog(std::format("  compiled {}: no vertices", part.mName->getString())); return offset; }
-    glm::vec3 low{1e9f};
-    for (auto const& v : positions) low = glm::min(low, v);
-    offset = low - storedLow(part);
-    modelLog(std::format("  compiled {}: {} vertices, offset {:.2f},{:.2f},{:.2f}", part.mName->getString(), positions.size(), offset->x, offset->y, offset->z));
-    return offset;
-}
-void compilePart(Tessellator& batch, ModelOutline const& outline, DataDrivenGeometry const& geometry, Pose const& pose, Pose const& shared,
-                 Pose const& moves, ModelPart& part, glm::mat4 const& parentWorld, glm::mat4 const& parentModel, int depth) {
-    if (depth > 16 || part.mNeverRender) return;
-    // The bone's own rest rotation plus the constant animation pose, about
-    // the bone pivot, after the animation's position offset. The part's
-    // mRot is not used: the game writes a live entity's pose into it (one
-    // posed armor stand moved every schematic armor stand).
-    auto rest = restRotation(geometry, part);
-    auto name = part.mName->getString();
-    if (auto found = pose.find(name); found != pose.end()) rest = rest + found->second;
-    else if (auto other = shared.find(name); other != shared.end()) rest = rest + other->second;
-    auto const& bones = *geometry.mDefaultBoneOrientations;
-    int index = part.mBoneOrientationIndex;
-    glm::mat4 turn{1.f};
-    if (auto offset = moves.find(name); offset != moves.end()) turn = glm::translate(turn, glm::vec3{offset->second.x, offset->second.y, offset->second.z});
-    if (index >= 0 && index < static_cast<int>(bones.size())) {
-        auto pv = *bones[index].mPivot;
-        glm::vec3 p{pv.x, pv.y, pv.z};
-        turn = glm::translate(upRotation(glm::translate(turn, p), rest), -p);
-    }
-    glm::mat4 world = parentWorld * turn, model = parentModel * turn;
-    // Faces: compiled vertex v is mirror(stored) + offset, so stored =
-    // mirror(v - offset) and the y-up chain places it.
-    if (auto offset = compiledOffset(*outline.screen, part)) {
-        glm::mat4 faces = glm::translate(glm::scale(world, glm::vec3{-1, -1, 1}), -*offset);
-        static_cast<bool&>(batch.mApplyTransform) = true;
-        static_cast<glm::mat4x4&>(batch.mTransformMatrix) = faces;
-        part.compileCubes(batch);
-    }
-    outlinePart(outline, part, world, model);
-    for (auto* child : *part.mChildren) if (child) compilePart(batch, outline, geometry, pose, shared, moves, *child, world, model, depth + 1);
-}
-void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& camera) {
-    auto dispatcher = client.getEntityRenderDispatcher();
-    if (!dispatcher || modelSpots.empty()) return;
-    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
-    for (auto const& [at, id, yaw] : modelSpots) {
-        auto found = modelRenderers.find(id);
-        if (found == modelRenderers.end()) {
-            std::shared_ptr<DataDrivenRenderer> renderer;
-            try { renderer = dispatcher->getDataDrivenRenderer(HashedString{id}); } catch (...) {}
-            describeModel(id, renderer.get());
-            found = modelRenderers.emplace(id, renderer).first;
-        }
-        auto* renderer = found->second.get();
-        if (!renderer) continue;
-        auto* model = static_cast<std::shared_ptr<Model>&>(renderer->mModel).get();
-        auto* geometry = model ? plainGeometry(*model) : nullptr;
-        if (!geometry) continue;
-        auto& parts = *geometry->mModelParts;
-        auto const& pose = restPose(client, id, *geometry);
-        // Whether the shared model keeps the pose of the last live entity
-        // drawn with it: log its parts now and then.
-        if (auto& next = liveLogAt[id]; liveLogs < 12 && steadyMs() >= next) {
-            next = steadyMs() + 15000;
-            ++liveLogs;
-            std::string values;
-            for (auto const& part : parts) {
-                auto r = *part.mRot, q = *part.mPos;
-                values += std::format(" {}:rot {:.0f},{:.0f},{:.0f} pos {:.1f},{:.1f},{:.1f}", part.mName->getString(),
-                    glm::degrees(r.x), glm::degrees(r.y), glm::degrees(r.z), q.x, q.y, q.z);
-            }
-            modelLog(std::format("  live {}:{}", id, values));
-        }
-        // Camera-relative, turned to the saved facing, model pixels to
-        // blocks. Compiled cubes come out y-down with the feet at 24 pixels.
-        Matrix base = Matrix::IDENTITY();
-        base.translate(static_cast<float>(at.x - camera.x), static_cast<float>(at.y - camera.y), static_cast<float>(at.z - camera.z));
-        base.rotate(180.f - yaw, 0.f, 1.f, 0.f);
-        base.scale(1.f / 16);
-        glm::mat4 upBase = base._m.get();
-        base.scale(-1.f, -1.f, 1.f);
-        base.translate(0.f, -24.f, 0.f);
-        int cubes = 0;
-        for (auto const& part : parts) cubes += static_cast<int>(part.mCubes->size());
-        Tessellator faces(screen.tessellator.mBufferResourceService), lines(screen.tessellator.mBufferResourceService);
-        faces.begin({}, mce::PrimitiveMode::QuadList, cubes * 24, false);
-        lines.begin({}, mce::PrimitiveMode::LineList, cubes * 24, false);
-        lines.color(.35f, .85f, 1.f, 1.f);
-        ModelOutline outline{&screen, &lines, loggedBounds.insert(id).second};
-        for (auto root : *geometry->mRootModelParts)
-            if (root < parts.size()) compilePart(faces, outline, *geometry, pose, sharedPose[id], posePositions[id], parts[root], upBase, glm::mat4{1.f}, 0);
-        translated(screen, glm::vec3{0}, [&] {
-            auto const& material = static_cast<mce::MaterialPtr const&>(renderer->mEntityAlphatestMaterial);
-            if (!material.mRenderMaterialInfoPtr) return;
-            using Texture = std::variant<std::monostate, mce::TexturePtr, mce::ClientTexture, mce::ServerTexture>;
-            Texture texture{static_cast<mce::TexturePtr const&>(renderer->mDefaultSkin)};
-            MeshHelpers::renderMeshImmediately(screen, faces, material, texture, OffscreenCaptureDescription{});
-            if (lineMaterial.mRenderMaterialInfoPtr) MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
-        });
-    }
-}
-#endif
-void drawEntities(ScreenContext& screen, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
+// Missing entities: their game model with part outlines (L-115), or a dashed
+// frame when the entity has no model.
+void drawEntities(ScreenContext& screen, IClientInstance& client, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
     std::vector<std::pair<Position, std::string>> named;
-#ifdef LAMIUM_SCHEMATIC_MODEL_PROBE
-    modelSpots.clear();
-#endif
-    std::vector<Position> frames;
+    std::vector<models::Spot> spots;
     for (size_t i = 0; i < snapshot.placements.size() && i < resolved.size(); ++i) {
         auto const& shown = snapshot.placements[i];
         if (!shown.structure || !shown.placement.visible || !shown.placement.entities || shown.placement.dimension != dimension) continue;
@@ -1523,14 +1152,15 @@ void drawEntities(ScreenContext& screen, session::Snapshot const& snapshot, int 
             auto const& at = r.entities[e].at;
             double dx = at.x - camera.x, dy = at.y - camera.y, dz = at.z - camera.z, distance = dx * dx + dy * dy + dz * dz;
             if (distance > drawDistance * drawDistance) continue;
-            frames.push_back(at);
-#ifdef LAMIUM_SCHEMATIC_MODEL_PROBE
-            modelSpots.push_back({at, r.entities[e].identifier, r.entities[e].yaw});
-#endif
+            spots.push_back({at, r.entities[e].identifier, r.entities[e].yaw});
             if (named.size() < 64 && distance < 32 * 32) named.push_back({{at.x, at.y + entityFrameHeight + .3, at.z}, r.entities[e].name});
         }
     }
     labels = std::move(named);
+    auto modelled = models::draw(screen, client, camera, spots, [&](std::function<void()> const& draw) { translated(screen, glm::vec3{0}, draw); });
+    std::vector<Position> frames;
+    for (size_t i = 0; i < spots.size(); ++i)
+        if (!modelled[i]) frames.push_back(spots[i].at);
     mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
     if (frames.empty() || !lineMaterial.mRenderMaterialInfoPtr) return;
     // Each edge as dashes. The frame has one size: it does not claim the
@@ -1846,10 +1476,7 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
         }
     }
     drawPlacementFrames(screen, snapshot, dimension, camera);
-    drawEntities(screen, snapshot, dimension, camera);
-#ifdef LAMIUM_SCHEMATIC_MODEL_PROBE
-    drawModels(screen, client, camera);
-#endif
+    drawEntities(screen, client, snapshot, dimension, camera);
     drawNameTags(screen, client, region, *moving, camera);
 }
 
