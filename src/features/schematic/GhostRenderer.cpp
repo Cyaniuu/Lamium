@@ -1202,12 +1202,17 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         base.translate(static_cast<float>(at.x - camera.x), static_cast<float>(at.y - camera.y), static_cast<float>(at.z - camera.z));
         base.rotate(180.f, 0.f, 1.f, 0.f);
         base.scale(1.f / 16);
+        // Compiled cubes come out y-down with the feet at 24 pixels (round 1
+        // drew them upside down); the stored cube corners are y-up.
+        Matrix compiled = base;
+        compiled.scale(-1.f, -1.f, 1.f);
+        compiled.translate(0.f, -24.f, 0.f);
         int cubes = 0;
         for (auto const* part : *model->mAllParts) if (part) cubes += static_cast<int>(part->mCubes->size());
         Tessellator faces(screen.tessellator.mBufferResourceService);
         faces.begin({}, mce::PrimitiveMode::QuadList, cubes * 24, false);
         for (auto* part : *model->mAllParts)
-            if (part && !static_cast<ModelPart*>(part->mParent)) compilePart(faces, *part, base, 0);
+            if (part && !static_cast<ModelPart*>(part->mParent)) compilePart(faces, *part, compiled, 0);
         // The cubes' stored corners through the base alone, to compare with
         // where the game puts them.
         Tessellator lines(screen.tessellator.mBufferResourceService);
