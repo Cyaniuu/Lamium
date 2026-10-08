@@ -1229,7 +1229,9 @@ void describeModel(std::string const& id, DataDrivenRenderer* renderer) {
 // entity the animation list is guessed from the animation names.
 using Pose = std::map<std::string, Vec3>;
 std::map<std::string, Pose> poses;
-Pose const& restPose(IClientInstance& client, std::string const& id) {
+// Shared candidates per entity; only bones the model has are used.
+std::map<std::string, Pose> sharedPose;
+Pose const& restPose(IClientInstance& client, std::string const& id, DataDrivenGeometry const& geometry) {
     if (auto found = poses.find(id); found != poses.end()) return found->second;
     Pose& pose = poses[id];
     auto group = client.getActorAnimationGroup();
@@ -1239,21 +1241,32 @@ Pose const& restPose(IClientInstance& client, std::string const& id) {
     std::string prefix = "animation." + name + ".";
     std::lock_guard lock(static_cast<std::mutex&>(group->mActorAnimationMutex));
     int others = 0;
+    // Entities share animations (a witch uses the villager's crossed arms).
+    // A bone the entity's own animations leave alone takes the constant pose
+    // other entities' setup/general animations give a bone of that name,
+    // when they all agree.
+    struct Shared { std::optional<Vec3> rotation; int count = 0; };
+    std::map<std::string, Shared> shared;
+    std::set<std::string> touched; // bones the entity's own animations move
     for (auto const& [key, info] : *group->mAnimations) {
         auto const& animationName = key.getString();
         if (!info) continue;
         bool own = animationName.starts_with(prefix);
-        // Shared animations (a witch may use a villager's): log general ones
-        // that pose arms, not used.
-        if (!own) {
-            auto const* other = static_cast<std::unique_ptr<ActorSkeletalAnimation> const&>(info->mPtr).get();
-            if (!other || animationName.find(".general") == std::string::npos || others >= 12) continue;
-            bool arms = false;
-            for (auto const& bone : *other->mBoneAnimations) arms = arms || bone.mBoneName->getString() == "arms";
-            if (!arms) continue;
-            ++others;
-        }
         auto const* animation = static_cast<std::unique_ptr<ActorSkeletalAnimation> const&>(info->mPtr).get();
+        bool general = animationName.find("setup") != std::string::npos || animationName.find("general") != std::string::npos;
+        if (!own && (!animation || !general)) continue;
+        // Another entity's animation counts only when every bone it moves is
+        // in this model (the villager's arms fit a witch; a wolf's body and
+        // upperbody do not fit a creeper).
+        if (!own) {
+            bool fits = true;
+            for (auto const& bone : *animation->mBoneAnimations) {
+                bool found = false;
+                for (auto const& part : *geometry.mModelParts) found = found || part.mName->getString() == bone.mBoneName->getString();
+                fits = fits && found;
+            }
+            if (!fits) continue;
+        }
         bool used = own && (animationName.find("setup") != std::string::npos || animationName.find("general") != std::string::npos);
         std::string bones;
         if (animation) for (auto const& bone : *animation->mBoneAnimations)
@@ -1278,9 +1291,22 @@ Pose const& restPose(IClientInstance& client, std::string const& id) {
                 }
                 bones += std::format(" {}:{:.0f},{:.0f},{:.0f}{}", bone.mBoneName->getString(), sum.x, sum.y, sum.z, expressions);
                 if (used) { auto& p = pose[bone.mBoneName->getString()]; p.x += sum.x; p.y += sum.y; p.z += sum.z; }
+                if (own) touched.insert(bone.mBoneName->getString());
+                else if (expressions.find('?') == std::string::npos) {
+                    auto [it, fresh] = shared.try_emplace(bone.mBoneName->getString(), Shared{sum, 0});
+                    auto& r = it->second.rotation;
+                    if (r && !(std::abs(r->x - sum.x) < .01f && std::abs(r->y - sum.y) < .01f && std::abs(r->z - sum.z) < .01f)) r.reset();
+                    ++it->second.count;
+                } else shared[bone.mBoneName->getString()].rotation.reset(), shared[bone.mBoneName->getString()].count = -1000;
             }
-        modelLog(std::format("  animation {}{}{}", animationName, animation ? "" : " (not loaded)", used ? " used" : "") + bones);
+        if (own || (bones.find(" arms:") != std::string::npos && ++others <= 12))
+            modelLog(std::format("  animation {}{}{}", animationName, animation ? "" : " (not loaded)", used ? " used" : "") + bones);
     }
+    for (auto const& [bone, entry] : shared)
+        if (entry.rotation && entry.count >= 2 && !touched.contains(bone) && (entry.rotation->x || entry.rotation->y || entry.rotation->z)) {
+            sharedPose[id][bone] = *entry.rotation;
+            modelLog(std::format("  shared pose {}: {:.1f},{:.1f},{:.1f} from {} animations", bone, entry.rotation->x, entry.rotation->y, entry.rotation->z, entry.count));
+        }
     return pose;
 }
 // The rest-pose rotation of a part's bone, degrees.
@@ -1290,20 +1316,22 @@ Vec3 restRotation(DataDrivenGeometry const& geometry, ModelPart const& part) {
     if (index < 0 || index >= static_cast<int>(bones.size())) return {};
     return reinterpret_cast<Vec3 const*>(&bones[index].mDefaultTransform->mData)[1];
 }
-void compilePart(Tessellator& batch, DataDrivenGeometry const& geometry, Pose const& pose, ModelPart& part, Matrix const& parent, int depth) {
+void compilePart(Tessellator& batch, DataDrivenGeometry const& geometry, Pose const& pose, Pose const& shared, ModelPart& part, Matrix const& parent, int depth) {
     if (depth > 16 || part.mNeverRender) return;
     Matrix m = parent;
     part.translateTo(m, 1.f);
-    // In the y-down model space x and y rotations turn the other way.
+    // Same sign as the part's own rotation: a bone's -3 degrees is mRot
+    // -0.052 (witch hat), which translateTo applies in this y-down space.
     auto rest = restRotation(geometry, part);
     if (auto found = pose.find(part.mName->getString()); found != pose.end()) rest = rest + found->second;
+    else if (auto other = shared.find(part.mName->getString()); other != shared.end()) rest = rest + other->second;
     if (rest.z != 0) m.rotate(rest.z, 0.f, 0.f, 1.f);
-    if (rest.y != 0) m.rotate(-rest.y, 0.f, 1.f, 0.f);
-    if (rest.x != 0) m.rotate(-rest.x, 1.f, 0.f, 0.f);
+    if (rest.y != 0) m.rotate(rest.y, 0.f, 1.f, 0.f);
+    if (rest.x != 0) m.rotate(rest.x, 1.f, 0.f, 0.f);
     static_cast<bool&>(batch.mApplyTransform) = true;
     static_cast<glm::mat4x4&>(batch.mTransformMatrix) = m._m;
     part.compileCubes(batch);
-    for (auto* child : *part.mChildren) if (child) compilePart(batch, geometry, pose, *child, m, depth + 1);
+    for (auto* child : *part.mChildren) if (child) compilePart(batch, geometry, pose, shared, *child, m, depth + 1);
 }
 void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& camera) {
     auto dispatcher = client.getEntityRenderDispatcher();
@@ -1322,7 +1350,7 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         auto* geometry = model ? plainGeometry(*model) : nullptr;
         if (!geometry) continue;
         auto& parts = *geometry->mModelParts;
-        auto const& pose = restPose(client, id);
+        auto const& pose = restPose(client, id, *geometry);
         // Camera-relative, turned to the saved facing, model pixels to
         // blocks. Compiled cubes come out y-down with the feet at 24 pixels.
         Matrix base = Matrix::IDENTITY();
@@ -1336,7 +1364,7 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         Tessellator faces(screen.tessellator.mBufferResourceService);
         faces.begin({}, mce::PrimitiveMode::QuadList, cubes * 24, false);
         for (auto root : *geometry->mRootModelParts)
-            if (root < parts.size()) compilePart(faces, *geometry, pose, parts[root], base, 0);
+            if (root < parts.size()) compilePart(faces, *geometry, pose, sharedPose[id], parts[root], base, 0);
         translated(screen, glm::vec3{0}, [&] {
             auto const& material = static_cast<mce::MaterialPtr const&>(renderer->mEntityAlphatestMaterial);
             if (!material.mRenderMaterialInfoPtr) return;
