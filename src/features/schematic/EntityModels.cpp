@@ -67,6 +67,8 @@ struct Entry {
     std::shared_ptr<DataDrivenRenderer> renderer; // null: no model, the frame stays
     DataDrivenGeometry* geometry = nullptr;
     Pose pose;
+    bool tinted = false; // drawn with light-blue faces instead of its skin
+    bool traced = false;
 };
 std::map<std::string, Entry> entries;
 // What compileCubes adds to each part's mirrored cubes, measured once.
@@ -140,6 +142,38 @@ Pose restPose(IClientInstance& client, std::string const& id, DataDrivenGeometry
     std::map<std::string, Shared> shared;
     std::set<std::string> touched;
     std::lock_guard lock(static_cast<std::mutex&>(group->mActorAnimationMutex));
+    auto fitsModel = [&](ActorSkeletalAnimation const& animation) {
+        for (auto const& bone : *animation.mBoneAnimations) {
+            bool found = false;
+            for (auto const& part : *geometry.mModelParts) found = found || part.mName->getString() == bone.mBoneName->getString();
+            if (!found) return false;
+        }
+        return true;
+    };
+    // Some entities use another's animations under its name (a donkey the
+    // horse's, a trader llama the llama's). Without animations of its own
+    // name, take the family ("animation.<family>.") whose setup/general
+    // animations fit this model and move the most bones.
+    bool named = false;
+    for (auto const& [key, info] : *group->mAnimations) named = named || key.getString().starts_with(prefix);
+    if (!named) {
+        std::map<std::string, size_t> families;
+        for (auto const& [key, info] : *group->mAnimations) {
+            auto const& animationName = key.getString();
+            auto const* animation = info ? static_cast<std::unique_ptr<ActorSkeletalAnimation> const&>(info->mPtr).get() : nullptr;
+            if (!animation || !animationName.starts_with("animation.") || animation->mBoneAnimations->empty()) continue;
+            if (animationName.find("setup") == std::string::npos && animationName.find("general") == std::string::npos) continue;
+            if (!fitsModel(*animation)) continue;
+            auto end = animationName.find('.', 10);
+            if (end == std::string::npos) continue;
+            auto& score = families[animationName.substr(0, end + 1)];
+            score = std::max(score, animation->mBoneAnimations->size());
+        }
+        size_t best = 0;
+        for (auto const& [family, score] : families)
+            if (score > best) { best = score; prefix = family; }
+        trace(std::format("{}: no animations of its own name; using {}", id, best ? prefix : std::string("none")));
+    }
     for (auto const& [key, info] : *group->mAnimations) {
         if (!info) continue;
         auto const& animationName = key.getString();
@@ -153,15 +187,7 @@ Pose restPose(IClientInstance& client, std::string const& id, DataDrivenGeometry
             && group->mAnimations->contains(HashedString{animationName.substr(0, version)}))
             continue;
         if (!own && !general) continue;
-        if (!own) {
-            bool fits = true;
-            for (auto const& bone : *animation->mBoneAnimations) {
-                bool found = false;
-                for (auto const& part : *geometry.mModelParts) found = found || part.mName->getString() == bone.mBoneName->getString();
-                fits = fits && found;
-            }
-            if (!fits) continue;
-        }
+        if (!own && !fitsModel(*animation)) continue;
         bool used = own && (general || animationName.ends_with(".default_pose"));
         std::string channels;
         for (auto const& bone : *animation->mBoneAnimations) {
@@ -252,12 +278,25 @@ std::optional<glm::vec3> compiledOffset(ScreenContext& screen, ModelPart& part) 
     return offset;
 }
 
+// The renderer's default skin is only one texture of the entity's set: for
+// entities whose look is layered by its state (horse coat and armor, llama
+// decor, villager profession) it is a layer, not the body. Without the
+// entity the right set cannot be chosen, so those draw light-blue faces.
+bool layerSkin(std::string const& path) {
+    for (auto const* layer : {"/armor/", "/decor/", "markings", "/professions/", "_none", "baby", "saddle", "overlay"})
+        if (path.find(layer) != std::string::npos) return true;
+    return path.empty();
+}
+
 struct Build {
     ScreenContext& screen;
     DataDrivenGeometry const& geometry;
     Pose const& pose;
     Tessellator& faces;
     Tessellator& lines;
+    bool tinted;
+    std::string const& id;
+    bool traceParts;
 };
 void addPart(Build& build, ModelPart& part, glm::mat4 const& parent, int depth) {
     // The part's mRot is not used: the game writes a live entity's pose into
@@ -277,8 +316,32 @@ void addPart(Build& build, ModelPart& part, glm::mat4 const& parent, int depth) 
         turn = glm::translate(upRotation(glm::translate(turn, p), rest), -p);
     }
     glm::mat4 world = parent * turn;
+#ifdef LAMIUM_SCHEMATIC_MODEL_TRACE
+    if (build.traceParts) {
+        std::string cubes;
+        for (auto const& cube : *part.mCubes) {
+            auto o = *cube.mOrigin, z = *cube.mSize, t = *cube.mRotation;
+            cubes += std::format(" [{:.1f},{:.1f},{:.1f} size {:.1f},{:.1f},{:.1f} turn {:.2f},{:.2f},{:.2f}]", o.x, o.y, o.z, z.x, z.y, z.z, t.x, t.y, t.z);
+        }
+        auto restPos = restValue(build.geometry, name, 0);
+        auto pivot = index >= 0 && index < static_cast<int>(bones.size()) ? *bones[index].mPivot : Vec3{};
+        trace(std::format("{} {}: pivot {:.1f},{:.1f},{:.1f} rest pos {:.1f},{:.1f},{:.1f} rot {:.1f},{:.1f},{:.1f}{}", build.id, name, pivot.x, pivot.y, pivot.z,
+            restPos.x, restPos.y, restPos.z, rest.x, rest.y, rest.z, cubes));
+    }
+#endif
     // Faces: a compiled vertex is mirror(stored) + offset.
-    if (auto offset = compiledOffset(build.screen, part)) {
+    if (build.tinted) {
+        constexpr int sides[6][4] = {{0,2,6,4},{1,5,7,3},{0,4,5,1},{2,3,7,6},{0,1,3,2},{4,6,7,5}};
+        for (auto const& cube : *part.mCubes) {
+            auto at = world * cubeTurn(cube);
+            glm::vec3 c[8];
+            for (int k = 0; k < 8; ++k) c[k] = glm::vec3(at * corner(cube, k));
+            for (auto const& side : sides) {
+                for (int k = 0; k < 4; ++k) build.faces.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
+                for (int k = 3; k >= 0; --k) build.faces.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
+            }
+        }
+    } else if (auto offset = compiledOffset(build.screen, part)) {
         static_cast<bool&>(build.faces.mApplyTransform) = true;
         static_cast<glm::mat4x4&>(build.faces.mTransformMatrix) = glm::translate(glm::scale(world, glm::vec3{-1, -1, 1}), -*offset);
         part.compileCubes(build.faces);
@@ -312,8 +375,10 @@ Entry& entry(IClientInstance& client, std::string const& id) {
             std::string pose;
             for (auto const& [bone, v] : made.pose.rotations) pose += std::format(" {} rot {:.1f},{:.1f},{:.1f}", bone, v.x, v.y, v.z);
             for (auto const& [bone, v] : made.pose.positions) pose += std::format(" {} pos {:.1f},{:.1f},{:.1f}", bone, v.x, v.y, v.z);
-            trace(std::format("{}: geometries{}; drawing {}; texture {}; pose{}", id, geometries, made.geometry->mGeoName->getString(),
-                skin.mResourceLocationPtr.get() ? skin.mResourceLocationPtr.get()->mPath->value : std::string("none"), pose));
+            std::string path = skin.mResourceLocationPtr.get() ? skin.mResourceLocationPtr.get()->mPath->value : std::string();
+            made.tinted = layerSkin(path);
+            trace(std::format("{}: geometries{}; drawing {}; texture {}{}; pose{}", id, geometries, made.geometry->mGeoName->getString(),
+                path.empty() ? std::string("none") : path, made.tinted ? " (a layer: light-blue faces)" : "", pose));
         }
     } catch (...) {
         made.geometry = nullptr;
@@ -330,13 +395,14 @@ std::vector<bool> draw(ScreenContext& screen, IClientInstance& client, Vec3 cons
                        std::function<void(std::function<void()> const&)> const& inWorld) {
     std::vector<bool> drawn(spots.size(), false);
     mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
+    mce::MaterialPtr tintMaterial(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"});
     size_t count = 0;
     for (size_t i = 0; i < spots.size() && count < maxModels; ++i) {
         auto const& spot = spots[i];
         auto& model = entry(client, spot.identifier);
         if (!model.geometry) continue;
         auto const& material = static_cast<mce::MaterialPtr const&>(model.renderer->mEntityAlphatestMaterial);
-        if (!material.mRenderMaterialInfoPtr) continue;
+        if (!(model.tinted ? tintMaterial : material).mRenderMaterialInfoPtr) continue;
         auto& parts = *model.geometry->mModelParts;
         int cubes = 0;
         for (auto const& part : parts) cubes += static_cast<int>(part.mCubes->size());
@@ -346,16 +412,19 @@ std::vector<bool> draw(ScreenContext& screen, IClientInstance& client, Vec3 cons
                                                                   static_cast<float>(spot.at.z - camera.z)});
         base = glm::scale(glm::rotate(base, glm::radians(180.f - spot.yaw), glm::vec3{0, 1, 0}), glm::vec3{1.f / 16});
         Tessellator faces(screen.tessellator.mBufferResourceService), lines(screen.tessellator.mBufferResourceService);
-        faces.begin({}, mce::PrimitiveMode::QuadList, cubes * 24, false);
+        faces.begin({}, mce::PrimitiveMode::QuadList, cubes * 48, false);
         lines.begin({}, mce::PrimitiveMode::LineList, cubes * 24, false);
         lines.color(.35f, .85f, 1.f, 1.f);
-        Build build{screen, *model.geometry, model.pose, faces, lines};
+        if (model.tinted) faces.color(.35f, .85f, 1.f, .25f);
+        Build build{screen, *model.geometry, model.pose, faces, lines, model.tinted, spot.identifier, !model.traced};
+        model.traced = true;
         for (auto root : *model.geometry->mRootModelParts)
             if (root < parts.size()) addPart(build, parts[root], base, 0);
         using Texture = std::variant<std::monostate, mce::TexturePtr, mce::ClientTexture, mce::ServerTexture>;
         Texture texture{static_cast<mce::TexturePtr const&>(model.renderer->mDefaultSkin)};
         inWorld([&] {
-            MeshHelpers::renderMeshImmediately(screen, faces, material, texture, OffscreenCaptureDescription{});
+            if (model.tinted) MeshHelpers::renderMeshImmediately(screen, faces, tintMaterial, OffscreenCaptureDescription{});
+            else MeshHelpers::renderMeshImmediately(screen, faces, material, texture, OffscreenCaptureDescription{});
             if (lineMaterial.mRenderMaterialInfoPtr) MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
         });
         drawn[i] = true;
