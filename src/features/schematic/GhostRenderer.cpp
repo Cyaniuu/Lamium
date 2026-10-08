@@ -1232,6 +1232,7 @@ using Pose = std::map<std::string, Vec3>;
 std::map<std::string, Pose> poses;
 // Shared candidates per entity; only bones the model has are used.
 std::map<std::string, Pose> sharedPose;
+std::map<std::string, Pose> posePositions; // constant position offsets, y-up model pixels
 std::set<std::string> loggedBounds;
 std::map<std::string, long long> liveLogAt;
 int liveLogs = 0;
@@ -1276,11 +1277,13 @@ Pose const& restPose(IClientInstance& client, std::string const& id, DataDrivenG
             }
             if (!fits) continue;
         }
-        bool used = own && (animationName.find("setup") != std::string::npos || animationName.find("general") != std::string::npos);
+        // An armor stand's resting pose is its default_pose animation.
+        bool used = own && (general || animationName.ends_with(".default_pose"));
         std::string bones;
         if (animation) for (auto const& bone : *animation->mBoneAnimations)
             for (auto const& channel : *bone.mAnimationChannels) {
-                if (channel.mBoneTransformType != BoneTransformType::Rotation || channel.mKeyFrames->empty()) continue;
+                bool moves = channel.mBoneTransformType == BoneTransformType::Position;
+                if ((!moves && channel.mBoneTransformType != BoneTransformType::Rotation) || channel.mKeyFrames->empty()) continue;
                 auto const& prePost = *channel.mKeyFrames->front().mPrePost;
                 if (prePost.empty()) continue;
                 auto const& floats = *prePost.front().mChannelTransforms_Floats;
@@ -1298,7 +1301,11 @@ Pose const& restPose(IClientInstance& client, std::string const& id, DataDrivenG
                         expressions += std::format(" [{}]{}", text, value ? "" : "?");
                     }
                 }
-                bones += std::format(" {}:{:.0f},{:.0f},{:.0f}{}", bone.mBoneName->getString(), sum.x, sum.y, sum.z, expressions);
+                bones += std::format(" {}{}:{:.1f},{:.1f},{:.1f}{}", bone.mBoneName->getString(), moves ? " position" : "", sum.x, sum.y, sum.z, expressions);
+                if (moves) {
+                    if (used) { auto& p = posePositions[id][bone.mBoneName->getString()]; p.x += sum.x; p.y += sum.y; p.z += sum.z; }
+                    continue;
+                }
                 if (used) { auto& p = pose[bone.mBoneName->getString()]; p.x += sum.x; p.y += sum.y; p.z += sum.z; }
                 if (own) touched.insert(bone.mBoneName->getString());
                 else if (expressions.find('?') == std::string::npos) {
@@ -1400,29 +1407,25 @@ std::optional<glm::vec3> compiledOffset(ScreenContext& screen, ModelPart& part) 
     modelLog(std::format("  compiled {}: {} vertices, offset {:.2f},{:.2f},{:.2f}", part.mName->getString(), positions.size(), offset->x, offset->y, offset->z));
     return offset;
 }
-void compilePart(Tessellator& batch, ModelOutline const& outline, DataDrivenGeometry const& geometry, Pose const& pose, Pose const& shared, ModelPart& part,
-                 Matrix const& parent, glm::mat4 const& parentWorld, glm::mat4 const& parentModel, int depth) {
+void compilePart(Tessellator& batch, ModelOutline const& outline, DataDrivenGeometry const& geometry, Pose const& pose, Pose const& shared,
+                 Pose const& moves, ModelPart& part, glm::mat4 const& parentWorld, glm::mat4 const& parentModel, int depth) {
     if (depth > 16 || part.mNeverRender) return;
-    Matrix m = parent;
-    part.translateTo(m, 1.f);
-    // Same sign as the part's own rotation: a bone's -3 degrees is mRot
-    // -0.052 (witch hat), which translateTo applies in this y-down space.
+    // The bone's own rest rotation plus the constant animation pose, about
+    // the bone pivot, after the animation's position offset. The part's
+    // mRot is not used: the game writes a live entity's pose into it (one
+    // posed armor stand moved every schematic armor stand).
     auto rest = restRotation(geometry, part);
-    if (auto found = pose.find(part.mName->getString()); found != pose.end()) rest = rest + found->second;
-    else if (auto other = shared.find(part.mName->getString()); other != shared.end()) rest = rest + other->second;
-    if (rest.z != 0) m.rotate(rest.z, 0.f, 0.f, 1.f);
-    if (rest.y != 0) m.rotate(rest.y, 0.f, 1.f, 0.f);
-    if (rest.x != 0) m.rotate(rest.x, 1.f, 0.f, 0.f);
-    // The outline's own chain: the part's rest rotation plus its mRot
-    // (radians), about the bone pivot.
+    auto name = part.mName->getString();
+    if (auto found = pose.find(name); found != pose.end()) rest = rest + found->second;
+    else if (auto other = shared.find(name); other != shared.end()) rest = rest + other->second;
     auto const& bones = *geometry.mDefaultBoneOrientations;
     int index = part.mBoneOrientationIndex;
     glm::mat4 turn{1.f};
+    if (auto offset = moves.find(name); offset != moves.end()) turn = glm::translate(turn, glm::vec3{offset->second.x, offset->second.y, offset->second.z});
     if (index >= 0 && index < static_cast<int>(bones.size())) {
         auto pv = *bones[index].mPivot;
-        auto own = *part.mRot;
         glm::vec3 p{pv.x, pv.y, pv.z};
-        turn = glm::translate(upRotation(glm::translate(turn, p), rest + Vec3{glm::degrees(own.x), glm::degrees(own.y), glm::degrees(own.z)}), -p);
+        turn = glm::translate(upRotation(glm::translate(turn, p), rest), -p);
     }
     glm::mat4 world = parentWorld * turn, model = parentModel * turn;
     // Faces: compiled vertex v is mirror(stored) + offset, so stored =
@@ -1434,7 +1437,7 @@ void compilePart(Tessellator& batch, ModelOutline const& outline, DataDrivenGeom
         part.compileCubes(batch);
     }
     outlinePart(outline, part, world, model);
-    for (auto* child : *part.mChildren) if (child) compilePart(batch, outline, geometry, pose, shared, *child, m, world, model, depth + 1);
+    for (auto* child : *part.mChildren) if (child) compilePart(batch, outline, geometry, pose, shared, moves, *child, world, model, depth + 1);
 }
 void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& camera) {
     auto dispatcher = client.getEntityRenderDispatcher();
@@ -1485,7 +1488,7 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         lines.color(.35f, .85f, 1.f, 1.f);
         ModelOutline outline{&screen, &lines, loggedBounds.insert(id).second};
         for (auto root : *geometry->mRootModelParts)
-            if (root < parts.size()) compilePart(faces, outline, *geometry, pose, sharedPose[id], parts[root], base, upBase, glm::mat4{1.f}, 0);
+            if (root < parts.size()) compilePart(faces, outline, *geometry, pose, sharedPose[id], posePositions[id], parts[root], upBase, glm::mat4{1.f}, 0);
         translated(screen, glm::vec3{0}, [&] {
             auto const& material = static_cast<mce::MaterialPtr const&>(renderer->mEntityAlphatestMaterial);
             if (!material.mRenderMaterialInfoPtr) return;
