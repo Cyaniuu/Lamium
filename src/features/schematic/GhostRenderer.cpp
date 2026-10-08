@@ -124,6 +124,7 @@ struct EntityGhost {
     std::string identifier, name, icon; // icon: an item of the same name, if the game has one
     Position at;   // world position of its feet
     Point offset;  // its cell inside the placed box, for layers
+    float yaw = 0; // world facing, degrees (0 = south)
 };
 struct Resolved {
     std::shared_ptr<Structure const> keep; // keeps `structure` alive across snapshots
@@ -340,6 +341,8 @@ Resolved resolve(Structure const& structure, SavedPlacement const& placement) {
         ghost.offset = {std::clamp(static_cast<int>(std::floor(ghost.at.x)) - o.x, 0, placed.x - 1),
                         std::clamp(static_cast<int>(std::floor(ghost.at.y)) - o.y, 0, placed.y - 1),
                         std::clamp(static_cast<int>(std::floor(ghost.at.z)) - o.z, 0, placed.z - 1)};
+        if (auto const* turn = entity.data.find("Rotation"); turn && turn->as<nbt::List>() && !turn->as<nbt::List>()->items.empty())
+            if (auto const* yaw = turn->as<nbt::List>()->items.front().as<float>()) ghost.yaw = toWorldYaw(*yaw, placement.placement);
         auto key = entityNameKey(entity.identifier);
         ghost.name = getI18n().get(key, getI18n().getCurrentLanguage());
         if (ghost.name.empty() || ghost.name == key) ghost.name = entity.identifier;
@@ -1145,11 +1148,12 @@ void drawPlacementFrames(ScreenContext& screen, session::Snapshot const& snapsho
 // L-115 research: missing entities drawn with their game model. The model is
 // looked up by the entity's identifier, which is also its renderer name for
 // data-driven entities (the radar faces use the same lookup with a live actor).
-std::vector<std::pair<Position, std::string>> modelSpots;
+struct ModelSpot { Position at; std::string identifier; float yaw; };
+std::vector<ModelSpot> modelSpots;
 std::map<std::string, std::shared_ptr<DataDrivenRenderer>> modelRenderers;
 int modelLogs = 0;
 void modelLog(std::string const& text) {
-    if (++modelLogs > 80) return;
+    if (++modelLogs > 200) return;
     try { Runtime::instance().self().getLogger().info("L-115 probe: {}", text); } catch (...) {}
 }
 void describeModel(std::string const& id, DataDrivenRenderer* renderer) {
@@ -1161,6 +1165,12 @@ void describeModel(std::string const& id, DataDrivenRenderer* renderer) {
     int cubes = 0;
     for (auto const* part : *model->mAllParts) if (part) cubes += static_cast<int>(part->mCubes->size());
     modelLog(std::format("{}: {} parts, {} cubes, texture {}", id, model->mAllParts->size(), cubes, texture));
+    // Every part's geometry group and visibility, to check drawnPart().
+    std::string groups;
+    for (auto const* part : *model->mAllParts)
+        if (part) groups += std::format(" {}:g{}{}{}", part->mName->getString(), *part->mGroupIndex,
+            *part->mVisible ? "" : " hidden", *part->mNeverRender ? " never" : "");
+    modelLog(std::format("  {} geometries, parts{}", model->mGeometries->size(), groups));
     int shown = 0;
     for (auto const* part : *model->mAllParts) {
         if (!part || ++shown > 8) continue;
@@ -1171,8 +1181,11 @@ void describeModel(std::string const& id, DataDrivenRenderer* renderer) {
             pos.x, pos.y, pos.z, rot.x, rot.y, rot.z, part->mCubes->size(), origin.x, origin.y, origin.z));
     }
 }
+// A model can hold several geometries (a baby or armor layer); only the first
+// is the plain entity.
+bool drawnPart(ModelPart const& part) { return !*part.mNeverRender && *part.mVisible && *part.mGroupIndex <= 0; }
 void compilePart(Tessellator& batch, ModelPart& part, Matrix const& parent, int depth) {
-    if (depth > 16) return;
+    if (depth > 16 || !drawnPart(part)) return;
     Matrix m = parent;
     part.translateTo(m, 1.f);
     static_cast<bool&>(batch.mApplyTransform) = true;
@@ -1184,7 +1197,7 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
     auto dispatcher = client.getEntityRenderDispatcher();
     if (!dispatcher || modelSpots.empty()) return;
     mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
-    for (auto const& [at, id] : modelSpots) {
+    for (auto const& [at, id, yaw] : modelSpots) {
         auto found = modelRenderers.find(id);
         if (found == modelRenderers.end()) {
             std::shared_ptr<DataDrivenRenderer> renderer;
@@ -1200,7 +1213,7 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         // pixels to blocks.
         Matrix base = Matrix::IDENTITY();
         base.translate(static_cast<float>(at.x - camera.x), static_cast<float>(at.y - camera.y), static_cast<float>(at.z - camera.z));
-        base.rotate(180.f, 0.f, 1.f, 0.f);
+        base.rotate(180.f - yaw, 0.f, 1.f, 0.f);
         base.scale(1.f / 16);
         // Compiled cubes come out y-down with the feet at 24 pixels (round 1
         // drew them upside down); the stored cube corners are y-up.
@@ -1220,7 +1233,7 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         lines.color(.35f, .85f, 1.f, 1.f);
         constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
         for (auto const* part : *model->mAllParts) {
-            if (!part) continue;
+            if (!part || !drawnPart(*part)) continue;
             for (auto const& cube : *part->mCubes) {
                 auto o = *cube.mOrigin, z = *cube.mSize;
                 glm::vec3 c[8];
@@ -1262,7 +1275,7 @@ void drawEntities(ScreenContext& screen, session::Snapshot const& snapshot, int 
             if (distance > drawDistance * drawDistance) continue;
             frames.push_back(at);
 #ifdef LAMIUM_SCHEMATIC_MODEL_PROBE
-            modelSpots.push_back({at, r.entities[e].identifier});
+            modelSpots.push_back({at, r.entities[e].identifier, r.entities[e].yaw});
 #endif
             if (named.size() < 64 && distance < 32 * 32) named.push_back({{at.x, at.y + entityFrameHeight + .3, at.z}, r.entities[e].name});
         }

@@ -65,6 +65,16 @@ inline Position toWorldPosition(Size size, Placement const& placement, Position 
     }
     return {placement.origin.x + x, placement.origin.y + local.y, placement.origin.z + z};
 }
+// An entity's facing (yaw in degrees: 0 faces south, 90 west) after the same
+// mirror and turns as its position.
+inline float toWorldYaw(float yaw, Placement const& placement) {
+    if (placement.mirror == Mirror::X) yaw = -yaw;
+    if (placement.mirror == Mirror::Z) yaw = 180 - yaw;
+    yaw += 90.f * quarterTurns(placement.rotation);
+    while (yaw >= 180) yaw -= 360;
+    while (yaw < -180) yaw += 360;
+    return yaw;
+}
 // World cell -> structure-local cell, or nullopt outside the placed box.
 inline std::optional<Point> toLocal(Size size, Placement const& placement, Point world) {
     Size placed = placedSize(size, placement.rotation);

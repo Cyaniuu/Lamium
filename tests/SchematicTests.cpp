@@ -1,3 +1,4 @@
+#include <cmath>
 #include "features/schematic/Structure.h"
 #include "features/schematic/Verify.h"
 #include "features/schematic/PlacementStore.h"
@@ -225,6 +226,19 @@ void placementTransforms() {
             }
         }
     check(centers, "an entity in a cell's center stays in that cell's center after any turn and mirror");
+
+    bool facings = true;
+    constexpr double toRadians = 3.14159265358979 / 180;
+    for (int rotation = 0; rotation < 4; ++rotation)
+        for (auto mirror : {Mirror::None, Mirror::X, Mirror::Z})
+            for (float yaw : {0.f, 90.f, -45.f, 170.f}) {
+                Placement placement{{10, 64, -7}, rotation, mirror};
+                Position from{1.5, 0, 2.5}, ahead{from.x - std::sin(yaw * toRadians), 0, from.z + std::cos(yaw * toRadians)};
+                auto a = toWorldPosition(size, placement, from), b = toWorldPosition(size, placement, ahead);
+                double turned = toWorldYaw(yaw, placement) * toRadians;
+                facings = facings && std::abs(b.x - a.x + std::sin(turned)) < 1e-4 && std::abs(b.z - a.z - std::cos(turned)) < 1e-4;
+            }
+    check(facings, "an entity keeps facing the same way relative to the structure after any turn and mirror");
 }
 
 void saveRules() {
