@@ -77,6 +77,16 @@
 #include "mc/client/model/models/Model.h"
 #include "mc/client/model/models/DataDrivenGeometry.h"
 #include "mc/world/actor/animation/BoneOrientation.h"
+#include "mc/world/actor/animation/ActorAnimationGroup.h"
+#include "mc/world/actor/animation/ActorAnimationInfo.h"
+#include "mc/world/actor/animation/ActorSkeletalAnimation.h"
+#include "mc/world/actor/animation/BoneAnimation.h"
+#include "mc/world/actor/animation/BoneAnimationChannel.h"
+#include "mc/world/actor/animation/KeyFrameTransform.h"
+#include "mc/world/actor/animation/KeyFrameTransformData.h"
+#include "mc/world/actor/animation/ChannelTransform_Float.h"
+#include "mc/world/actor/animation/ChannelTransform.h"
+#include "mc/world/actor/animation/BoneTransformType.h"
 #include "mc/client/model/geom/ModelPart.h"
 #include "mc/client/model/geom/Cube.h"
 #include "mc/deps/core/math/Matrix.h"
@@ -1204,6 +1214,41 @@ void describeModel(std::string const& id, DataDrivenRenderer* renderer) {
             pivot.x, pivot.y, pivot.z, pre ? " pre-transform" : ""));
     }
 }
+// Constant bone rotations of the entity's setup/general animations, by bone
+// name: a wolf's body and a witch's crossed arms are posed there. Without the
+// entity the animation list is guessed from the animation names.
+using Pose = std::map<std::string, Vec3>;
+std::map<std::string, Pose> poses;
+Pose const& restPose(IClientInstance& client, std::string const& id) {
+    if (auto found = poses.find(id); found != poses.end()) return found->second;
+    Pose& pose = poses[id];
+    auto group = client.getActorAnimationGroup();
+    if (!group) return pose;
+    std::string name = id.substr(id.find(':') + 1);
+    if (name.ends_with("_v2")) name.resize(name.size() - 3);
+    std::string prefix = "animation." + name + ".";
+    std::lock_guard lock(static_cast<std::mutex&>(group->mActorAnimationMutex));
+    for (auto const& [key, info] : *group->mAnimations) {
+        auto const& animationName = key.getString();
+        if (!animationName.starts_with(prefix) || !info) continue;
+        auto const* animation = static_cast<std::unique_ptr<ActorSkeletalAnimation> const&>(info->mPtr).get();
+        bool used = animationName.find("setup") != std::string::npos || animationName.find("general") != std::string::npos;
+        std::string bones;
+        if (animation) for (auto const& bone : *animation->mBoneAnimations)
+            for (auto const& channel : *bone.mAnimationChannels) {
+                if (channel.mBoneTransformType != BoneTransformType::Rotation || channel.mKeyFrames->empty()) continue;
+                auto const& prePost = *channel.mKeyFrames->front().mPrePost;
+                if (prePost.empty()) continue;
+                auto const& floats = *prePost.front().mChannelTransforms_Floats;
+                Vec3 sum{};
+                for (auto const& f : floats) { auto const* v = reinterpret_cast<float const*>(&f.mXYZ); sum.x += v[0]; sum.y += v[1]; sum.z += v[2]; }
+                bones += std::format(" {}:{:.0f},{:.0f},{:.0f}(+{} expr)", bone.mBoneName->getString(), sum.x, sum.y, sum.z, prePost.front().mChannelTransforms->size());
+                if (used) { auto& p = pose[bone.mBoneName->getString()]; p.x += sum.x; p.y += sum.y; p.z += sum.z; }
+            }
+        modelLog(std::format("  animation {}{}{}", animationName, animation ? "" : " (not loaded)", used ? " used" : "") + bones);
+    }
+    return pose;
+}
 // The rest-pose rotation of a part's bone, degrees.
 Vec3 restRotation(DataDrivenGeometry const& geometry, ModelPart const& part) {
     auto const& bones = *geometry.mDefaultBoneOrientations;
@@ -1211,19 +1256,20 @@ Vec3 restRotation(DataDrivenGeometry const& geometry, ModelPart const& part) {
     if (index < 0 || index >= static_cast<int>(bones.size())) return {};
     return reinterpret_cast<Vec3 const*>(&bones[index].mDefaultTransform->mData)[1];
 }
-void compilePart(Tessellator& batch, DataDrivenGeometry const& geometry, ModelPart& part, Matrix const& parent, int depth) {
+void compilePart(Tessellator& batch, DataDrivenGeometry const& geometry, Pose const& pose, ModelPart& part, Matrix const& parent, int depth) {
     if (depth > 16 || part.mNeverRender) return;
     Matrix m = parent;
     part.translateTo(m, 1.f);
     // In the y-down model space x and y rotations turn the other way.
     auto rest = restRotation(geometry, part);
+    if (auto found = pose.find(part.mName->getString()); found != pose.end()) rest = rest + found->second;
     if (rest.z != 0) m.rotate(rest.z, 0.f, 0.f, 1.f);
     if (rest.y != 0) m.rotate(-rest.y, 0.f, 1.f, 0.f);
     if (rest.x != 0) m.rotate(-rest.x, 1.f, 0.f, 0.f);
     static_cast<bool&>(batch.mApplyTransform) = true;
     static_cast<glm::mat4x4&>(batch.mTransformMatrix) = m._m;
     part.compileCubes(batch);
-    for (auto* child : *part.mChildren) if (child) compilePart(batch, geometry, *child, m, depth + 1);
+    for (auto* child : *part.mChildren) if (child) compilePart(batch, geometry, pose, *child, m, depth + 1);
 }
 void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& camera) {
     auto dispatcher = client.getEntityRenderDispatcher();
@@ -1242,6 +1288,7 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         auto* geometry = model ? plainGeometry(*model) : nullptr;
         if (!geometry) continue;
         auto& parts = *geometry->mModelParts;
+        auto const& pose = restPose(client, id);
         // Camera-relative, turned to the saved facing, model pixels to
         // blocks. Compiled cubes come out y-down with the feet at 24 pixels.
         Matrix base = Matrix::IDENTITY();
@@ -1255,7 +1302,7 @@ void drawModels(ScreenContext& screen, IClientInstance& client, Vec3 const& came
         Tessellator faces(screen.tessellator.mBufferResourceService);
         faces.begin({}, mce::PrimitiveMode::QuadList, cubes * 24, false);
         for (auto root : *geometry->mRootModelParts)
-            if (root < parts.size()) compilePart(faces, *geometry, parts[root], base, 0);
+            if (root < parts.size()) compilePart(faces, *geometry, pose, parts[root], base, 0);
         translated(screen, glm::vec3{0}, [&] {
             auto const& material = static_cast<mce::MaterialPtr const&>(renderer->mEntityAlphatestMaterial);
             if (!material.mRenderMaterialInfoPtr) return;
