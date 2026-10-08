@@ -711,6 +711,28 @@ or the network, so prefer drawing the model geometry directly (the radar
 faces already read resource-pack geometry, `SkinGeometry.h`). Stop and report
 if no path works without a live actor.
 
+Probe findings 2026-10-08 (build option `schematic_model_probe`, commits
+da315e7..44ac48d; maintainer checked each round in game):
+- Works without an actor: `ActorRenderDispatcher::getDataDrivenRenderer(id)`
+  by the entity identifier gives the model and default skin; compiling
+  `DataDrivenGeometry::mModelParts` from `mRootModelParts` with
+  `ModelPart::translateTo` + `compileCubes`, drawn with the renderer's
+  `mEntityAlphatestMaterial` and `mDefaultSkin`, gives textured models at the
+  right size and place. Compiled cubes are y-down with the feet at 24 px
+  (scale -1,-1,1 and translate -24); the saved `Rotation` yaw turns with the
+  placement (`toWorldYaw`, tested).
+- `Model::mAllParts` holds every geometry (adult, baby, charged, variants);
+  draw one: "default" first, else the first that is not baby/charged.
+  Armor stand, chicken and creeper then look right.
+- Not solved: rest poses that come from animations. Wolf body (lies along it)
+  and witch arms (crossed) stay unposed. Bone default transforms are zero;
+  `animation.wolf.setup` has its body rotation as a Molang expression, not a
+  constant; the witch's arm pose is not in any `animation.witch.*` channel.
+  The entity's real animation list sits in `ActorResourceDefinition`, which
+  the SDK leaves opaque, so animations are only found by name guessing.
+- Maintainer request: outline the model's parts with light-blue lines (they
+  read as a schematic entity better than the rough box).
+
 ### L-116 Raw materials from the game's recipes
 Kind: Research, then Design. Chosen 2026-10-08 (L-93 screen review).
 Status: open.
