@@ -48,6 +48,14 @@ constexpr size_t maxModels = 64;
 void log(std::string const& text) {
     try { Runtime::instance().self().getLogger().info("Schematic models: {}", text); } catch (...) {}
 }
+// Trace builds (xmake f --schematic_model_trace=y) log how each model is
+// chosen and posed, once per identifier.
+std::string traced; // the identifier being set up
+#ifdef LAMIUM_SCHEMATIC_MODEL_TRACE
+void trace(std::string const& text) { log(text); }
+#else
+void trace(std::string const&) {}
+#endif
 
 // The constant pose of an entity, by bone name: rotations in degrees and
 // position offsets in model pixels, both added to the bone's rest values.
@@ -155,6 +163,7 @@ Pose restPose(IClientInstance& client, std::string const& id, DataDrivenGeometry
             if (!fits) continue;
         }
         bool used = own && (general || animationName.ends_with(".default_pose"));
+        std::string channels;
         for (auto const& bone : *animation->mBoneAnimations) {
             auto boneName = bone.mBoneName->getString();
             for (auto const& channel : *bone.mAnimationChannels) {
@@ -163,6 +172,8 @@ Pose restPose(IClientInstance& client, std::string const& id, DataDrivenGeometry
                 // `this` is the bone's rest value, so the result is the
                 // offset from it ("90 - this" turns the bone to 90).
                 auto value = constantChannel(channel, restValue(geometry, boneName, moves ? 0 : 1));
+                channels += value ? std::format(" {} {} {:.1f},{:.1f},{:.1f}", boneName, moves ? "pos" : "rot", value->x, value->y, value->z)
+                                  : std::format(" {} {} ?", boneName, moves ? "pos" : "rot");
                 if (own && !moves) touched.insert(boneName);
                 if (used && value) {
                     auto& at = (moves ? pose.positions : pose.rotations)[boneName];
@@ -177,6 +188,7 @@ Pose restPose(IClientInstance& client, std::string const& id, DataDrivenGeometry
                 ++entry.count;
             }
         }
+        if (own) trace(std::format("{}: {}{}{}", id, animationName, used ? " (used)" : "", channels));
     }
     for (auto const& [bone, entry] : shared)
         if (entry.rotation && entry.count >= 2 && !touched.contains(bone) && (entry.rotation->x || entry.rotation->y || entry.rotation->z))
@@ -209,7 +221,9 @@ glm::vec4 corner(Cube const& cube, int k) {
 // compileCubes emits each cube mirrored into a y-down space plus an offset
 // of the part's own; measure it once from an untransformed compile so the
 // faces follow the same y-up chain as the outlines (the part's own
-// placement, translateTo, put the armor stand's arms off).
+// placement, translateTo, put the armor stand's arms off). Box centers, not
+// corners: inflated cubes (a witch's robe, a drowned's outer layer) grow on
+// every side, and a corner match shifted the whole part.
 std::optional<glm::vec3> compiledOffset(ScreenContext& screen, ModelPart& part) {
     if (auto found = compiledOffsets.find(&part); found != compiledOffsets.end()) return found->second;
     auto& offset = compiledOffsets[&part];
@@ -220,16 +234,21 @@ std::optional<glm::vec3> compiledOffset(ScreenContext& screen, ModelPart& part) 
     part.compileCubes(scratch);
     auto const& positions = *static_cast<mce::MeshData&>(scratch.mMeshData).mPositions;
     if (positions.empty()) return offset;
-    glm::vec3 compiled{1e9f}, stored{1e9f};
-    for (auto const& v : positions) compiled = glm::min(compiled, v);
+    glm::vec3 compiledLow{1e9f}, compiledHigh{-1e9f}, storedLow{1e9f}, storedHigh{-1e9f};
+    for (auto const& v : positions) { compiledLow = glm::min(compiledLow, v); compiledHigh = glm::max(compiledHigh, v); }
     for (auto const& cube : *part.mCubes) {
         auto turn = cubeTurn(cube);
         for (int k = 0; k < 8; ++k) {
             auto v = glm::vec3(turn * corner(cube, k));
-            stored = glm::min(stored, glm::vec3{-v.x, -v.y, v.z});
+            glm::vec3 mirrored{-v.x, -v.y, v.z};
+            storedLow = glm::min(storedLow, mirrored);
+            storedHigh = glm::max(storedHigh, mirrored);
         }
     }
-    offset = compiled - stored;
+    offset = (compiledLow + compiledHigh - storedLow - storedHigh) / 2.f;
+    trace(std::format("{} part {}: {} cubes, offset {:.2f},{:.2f},{:.2f}, compiled size {:.1f},{:.1f},{:.1f}, stored size {:.1f},{:.1f},{:.1f}",
+        traced, part.mName->getString(), part.mCubes->size(), offset->x, offset->y, offset->z, compiledHigh.x - compiledLow.x, compiledHigh.y - compiledLow.y,
+        compiledHigh.z - compiledLow.z, storedHigh.x - storedLow.x, storedHigh.y - storedLow.y, storedHigh.z - storedLow.z));
     return offset;
 }
 
@@ -280,11 +299,22 @@ void addPart(Build& build, ModelPart& part, glm::mat4 const& parent, int depth) 
 Entry& entry(IClientInstance& client, std::string const& id) {
     if (auto found = entries.find(id); found != entries.end()) return found->second;
     Entry& made = entries[id];
+    traced = id;
     try {
         if (auto dispatcher = client.getEntityRenderDispatcher()) made.renderer = dispatcher->getDataDrivenRenderer(HashedString{id});
         auto* model = made.renderer ? static_cast<std::shared_ptr<Model>&>(made.renderer->mModel).get() : nullptr;
         made.geometry = model ? plainGeometry(*model) : nullptr;
         if (made.geometry) made.pose = restPose(client, id, *made.geometry);
+        if (made.geometry) {
+            auto const& skin = static_cast<mce::TexturePtr const&>(made.renderer->mDefaultSkin);
+            std::string geometries;
+            for (auto const& geometry : *model->mGeometries) if (geometry) geometries += " " + geometry->mGeoName->getString();
+            std::string pose;
+            for (auto const& [bone, v] : made.pose.rotations) pose += std::format(" {} rot {:.1f},{:.1f},{:.1f}", bone, v.x, v.y, v.z);
+            for (auto const& [bone, v] : made.pose.positions) pose += std::format(" {} pos {:.1f},{:.1f},{:.1f}", bone, v.x, v.y, v.z);
+            trace(std::format("{}: geometries{}; drawing {}; texture {}; pose{}", id, geometries, made.geometry->mGeoName->getString(),
+                skin.mResourceLocationPtr.get() ? skin.mResourceLocationPtr.get()->mPath->value : std::string("none"), pose));
+        }
     } catch (...) {
         made.geometry = nullptr;
     }
