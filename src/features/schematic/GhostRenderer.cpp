@@ -1168,8 +1168,8 @@ void describeModel(std::string const& id, DataDrivenRenderer* renderer) {
     // Every part's geometry group and visibility, to check drawnPart().
     std::string groups;
     for (auto const* part : *model->mAllParts)
-        if (part) groups += std::format(" {}:g{}{}{}", part->mName->getString(), *part->mGroupIndex,
-            *part->mVisible ? "" : " hidden", *part->mNeverRender ? " never" : "");
+        if (part) groups += std::format(" {}:g{}{}{}", part->mName->getString(), static_cast<int>(part->mGroupIndex),
+            part->mVisible ? "" : " hidden", part->mNeverRender ? " never" : "");
     modelLog(std::format("  {} geometries, parts{}", model->mGeometries->size(), groups));
     int shown = 0;
     for (auto const* part : *model->mAllParts) {
@@ -1183,7 +1183,7 @@ void describeModel(std::string const& id, DataDrivenRenderer* renderer) {
 }
 // A model can hold several geometries (a baby or armor layer); only the first
 // is the plain entity.
-bool drawnPart(ModelPart const& part) { return !*part.mNeverRender && *part.mVisible && *part.mGroupIndex <= 0; }
+bool drawnPart(ModelPart const& part) { return !part.mNeverRender && part.mVisible && part.mGroupIndex <= 0; }
 void compilePart(Tessellator& batch, ModelPart& part, Matrix const& parent, int depth) {
     if (depth > 16 || !drawnPart(part)) return;
     Matrix m = parent;
