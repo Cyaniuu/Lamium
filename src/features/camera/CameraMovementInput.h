@@ -1,13 +1,18 @@
 #pragma once
 #include "features/camera/DetachedCameraMotion.h"
+#include <cstddef>
 struct RawMoveInputComponent;
 struct MoveInputComponent;
 
 namespace lamium::camera {
+template <class InputFlags, class... Indices>
+void clearMovementFlags(InputFlags& flags, Indices... indices) {
+    (flags.set(static_cast<size_t>(indices), false), ...);
+}
 bool freecameraSprintHeld(RawMoveInputComponent const&);
-// Call only for the detached session's local owner, after vanilla HID extraction.
-// Returns right/up/forward axes and removes movement from that extracted output.
-// Stored physical input and non-movement look/selection flags remain untouched.
+// Call only for the detached session's local owner, after vanilla input update.
+// Returns right/up/forward axes and removes movement from processed player
+// output while preserving physical device state for continuous input.
 DetachedCameraMotion::Vector consumeMovement(RawMoveInputComponent&);
 DetachedCameraMotion::Vector freecameraInputAxes(MoveInputComponent const&);
 DetachedCameraMotion::Vector consumeMovement(MoveInputComponent&);

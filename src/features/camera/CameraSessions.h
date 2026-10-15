@@ -14,6 +14,7 @@ class Actor;
 class IClientInstance;
 class LocalPlayer;
 class Player;
+struct MoveInputState;
 struct MoveInputComponent;
 namespace lamium {
 struct Settings;
@@ -118,6 +119,8 @@ public:
     // Input-update entry: captures movement and suppresses player movement
     // only for the FreeCamera owner.
     void consumeFreeCameraInput(MoveInputComponent&);
+    // Movement calculation may read a different copy of the local input.
+    bool suppressesPlayerMovement(MoveInputState const&) const;
     // Render-hook entry: advances the session displacement from the stashed
     // input. Returns false when vanilla rendering must stay untouched.
     bool freeCameraView(IClientInstance const&, mce::Camera&);

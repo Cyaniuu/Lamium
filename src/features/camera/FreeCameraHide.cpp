@@ -1,11 +1,4 @@
 #include "features/camera/FreeCameraHide.h"
-#if defined(LAMIUM_SDK_26_20_7)
-namespace lamium::camera::freeCameraHide {
-bool hudHidden() noexcept { return false; }
-void start() {}
-void stop() {}
-}
-#else
 #include "features/camera/CameraSessions.h"
 #include "app/Runtime.h"
 #include "app/Versions.h"
@@ -34,9 +27,9 @@ int hiding() noexcept {
 }
 // FreeCamera always flies first person, so the hand is the first-person pass.
 LL_TYPE_INSTANCE_HOOK(FreeCameraHand, ll::memory::HookPriority::Normal, ItemInHandRenderer,
-    &ItemInHandRenderer::renderFirstPerson, void, BaseActorRenderContext& context, Matrix const& previous, ItemContextFlags flags) {
+    &ItemInHandRenderer::renderFirstPerson, void, BaseActorRenderContext& context, ItemContextFlags flags) {
     if (hidesHand(hiding()) && capabilities::registry().status(capabilities::Id::FreeCameraHand).available()) return;
-    origin(context, previous, flags);
+    origin(context, flags);
 }
 bool hudScreen(ScreenView const& view) {
     auto const& tree = view.mVisualTree;
@@ -82,4 +75,3 @@ void stop() {
     capabilities::detachHook<FreeCameraHand>(handInstalled,{capabilities::Id::FreeCameraHand});
 }
 }
-#endif

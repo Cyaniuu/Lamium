@@ -2,6 +2,8 @@
 #include "features/interaction/EdgeGuardPlan.h"
 #include "features/interaction/EdgeGuardHistory.h"
 #include "features/interaction/EdgeGuardPacketPlan.h"
+#include "features/camera/CameraSessions.h"
+#include "features/camera/CameraMovementInput.h"
 #include "app/Runtime.h"
 #include "app/Versions.h"
 #include "ll/api/memory/Hook.h"
@@ -580,14 +582,36 @@ LL_STATIC_HOOK(EdgeGuardInputHook, ll::memory::HookPriority::Normal, &PlayerMove
     MoveInputState const& inputState, bool playerIsFlying, ActorDataFlagComponent const& playerData, bool playerIsInWater,
     SneakingComponent const* sneakComponent) {
     auto move = origin(inputState, playerIsFlying, playerData, playerIsInWater, sneakComponent);
+    if (CameraSessions::instance().suppressesPlayerMovement(inputState)) return Vec2{};
     try {
         if (versionSensitiveAllowed(capabilities::Id::EdgeGuardMovement)) guardMoveVector(inputState, move);
     } catch (...) {}
     return move;
 }
 LL_TYPE_INSTANCE_HOOK(EdgeGuardSendHook, ll::memory::HookPriority::High, LoopbackPacketSender,
-    &LoopbackPacketSender::$send, void, Packet& packet) {
+    &LoopbackPacketSender::$sendToServer, void, Packet& packet) {
     try {
+        auto client = ll::service::getClientInstance();
+        if (client && CameraSessions::instance().blocksPerspective()
+            && packet.getId() == MinecraftPacketIds::PlayerAuthInputPacket
+            && packet.mSenderSubId == client->getClientSubId()) {
+            auto& auth = static_cast<PlayerAuthInputPacket&>(packet);
+            *auth.mMove = Vec2{};
+            *auth.mRawMoveVector = Vec2{};
+            *auth.mAnalogMoveVector = Vec2{};
+            using A = PlayerAuthInputPacket::InputData;
+            lamium::camera::clearMovementFlags(*auth.mInputData,
+                A::Ascend, A::Descend, A::JumpDown, A::ChangeHeight,
+                A::Jumping, A::AutoJumpingInWater, A::Sneaking, A::SneakDown,
+                A::Up, A::Down, A::Left, A::Right, A::UpLeft, A::UpRight,
+                A::WantUp, A::WantDown, A::WantDownSlow, A::WantUpSlow,
+                A::SprintDown, A::Sprinting, A::SneakToggleDown, A::PersistSneak,
+                A::AscendBlock, A::DescendBlock, A::DownLeft, A::DownRight,
+                A::StartSprinting, A::StopSprinting, A::StartSneaking, A::StopSneaking,
+                A::StartJumping, A::StartFlying, A::StopFlying,
+                A::JumpReleasedRaw, A::JumpPressedRaw, A::JumpCurrentRaw,
+                A::SneakReleasedRaw, A::SneakPressedRaw, A::SneakCurrentRaw);
+        }
         auto& runtime = Runtime::instance();
         if (history::onClientThread() && runtime.enabled() && runtime.snapshot()->interaction.edgeGuard
             && packet.getId() == MinecraftPacketIds::PlayerAuthInputPacket

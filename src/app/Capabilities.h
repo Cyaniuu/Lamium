@@ -86,7 +86,8 @@ inline constexpr bool loaderSupported(int major, int minor, int patch) {
 }
 inline constexpr bool legacy26_20_7Capability(Definition const& d) {
     return d.id == Id::NightVision || d.id == Id::ConnectedTextures
-        || d.id == Id::SchematicBlocks || d.id == Id::SchematicBlend;
+        || d.id == Id::SchematicBlocks || d.id == Id::SchematicBlend
+        || d.id == Id::FreeCameraHotbar;
 }
 inline constexpr bool legacy26_20_7Target(Definition const& d, Environment env) {
     return legacy26_20_7Capability(d) && env.gameBuild[0] == 1 && env.gameBuild[1] == 26

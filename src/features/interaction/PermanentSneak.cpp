@@ -11,12 +11,14 @@
 #include "mc/client/game/ClientInstance.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/client/renderer/game/LevelRendererPlayer.h"
+#include "mc/client/input/ClientMoveInputHandler.h"
 #include "mc/entity/components/MoveInputComponent.h"
 #include "mc/entity/components/MobEffectsComponent.h"
 #include "mc/deps/vanilla_components/ActorDataFlagComponent.h"
 #include "mc/deps/vanilla_components/MovementAbilitiesComponent.h"
 #include "mc/input/MoveInputState.h"
 #include <stdexcept>
+#include <array>
 
 namespace lamium::interaction::sneak {
 namespace {
@@ -25,6 +27,42 @@ AutomationInput sprintIntent;
 bool installed = false;
 bool dimensionInstalled = false;
 unsigned observed = 0, matched = 0, rawSneak = 0;
+struct SuppressDetachedVerticalInput {
+    MoveInputState& rawState;
+    MoveInputState& processedState;
+    bool active;
+    std::array<MoveInputState::Flag, 5> flags{
+        MoveInputState::Flag::JumpDown,
+        MoveInputState::Flag::Ascend,
+        MoveInputState::Flag::SneakDown,
+        MoveInputState::Flag::Descend,
+        MoveInputState::Flag::SneakToggleDown,
+    };
+    std::array<bool, 5> wasSet{};
+    explicit SuppressDetachedVerticalInput(MoveInputComponent& input, bool suppress)
+        : rawState(*input.mRawInputState), processedState(*input.mInputState), active(suppress) {
+        auto& rawValues = *rawState.mFlagValues;
+        auto& processedValues = *processedState.mFlagValues;
+        for (size_t i = 0; i < flags.size(); ++i) {
+            auto index = static_cast<size_t>(flags[i]);
+            wasSet[i] = rawValues.test(index);
+            if (suppress) {
+                rawValues.set(index, false);
+                processedValues.set(index, false);
+            }
+        }
+    }
+    ~SuppressDetachedVerticalInput() noexcept {
+        if (!active) return;
+        auto& rawValues = *rawState.mFlagValues;
+        auto& processedValues = *processedState.mFlagValues;
+        for (size_t i = 0; i < flags.size(); ++i) {
+            auto index = static_cast<size_t>(flags[i]);
+            rawValues.set(index, wasSet[i]);
+            processedValues.set(index, false);
+        }
+    }
+};
 struct RestoreRawFlags {
     MoveInputState& state;
     bool sneakDown;
@@ -73,7 +111,12 @@ LL_TYPE_INSTANCE_HOOK(ApplyAutomationInput, ll::memory::HookPriority::Normal, Cl
     bool sneak = intent.active() && ready;
     bool sprint = sprintIntent.active() && ready;
     if (!sneak && !sprint) {
-        origin(client, abilities, effects, flags, input, riding, inWater);
+        {
+            SuppressDetachedVerticalInput suppress{
+                input, CameraSessions::instance().blocksPerspective()
+                    && ClientMoveInputHandler::getMoveInput(*current) == &input};
+            origin(client, abilities, effects, flags, input, riding, inWater);
+        }
         captureDetachedCameraInput(client.get(), input);
         return;
     }
@@ -90,7 +133,12 @@ LL_TYPE_INSTANCE_HOOK(ApplyAutomationInput, ll::memory::HookPriority::Normal, Cl
     }
     if (sprint)
         rawFlags->set(static_cast<size_t>(MoveInputState::Flag::SprintDown));
-    origin(client, abilities, effects, flags, input, riding, inWater);
+    {
+        SuppressDetachedVerticalInput suppress{
+            input, CameraSessions::instance().blocksPerspective()
+                && ClientMoveInputHandler::getMoveInput(*current) == &input};
+        origin(client, abilities, effects, flags, input, riding, inWater);
+    }
     captureDetachedCameraInput(client.get(), input);
     if (sneak && input.checkFlag(MoveInputComponent::Flag::Sneaking) && rawSneak < 1000) ++rawSneak;
 }

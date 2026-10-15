@@ -3,6 +3,7 @@
 #include "mc/entity/components/RawMoveInputComponent.h"
 #include <iostream>
 #include <stdexcept>
+#include <bitset>
 
 void check(bool value, char const* message) {
     if (!value) throw std::runtime_error(message);
@@ -13,6 +14,31 @@ int main() try {
     extern void nativeEdgeGuardReplayTests();
     nativeEdgeGuardReplayTests();
     using Flag = MoveInputState::Flag;
+    enum class PacketFlag {
+        Move = 10, Sneaking = 8, SneakDown = 9, Sprinting = 20,
+        SneakToggle = 23, StartSneaking = 27, StartSprinting = 25, Jump = 31,
+        StartFlying = 42, Use = 34
+    };
+    std::bitset<65> fullPacketFlags;
+    for (auto flag : {PacketFlag::Move, PacketFlag::Sneaking, PacketFlag::SneakDown,
+             PacketFlag::Sprinting, PacketFlag::SneakToggle, PacketFlag::StartSneaking,
+             PacketFlag::StartSprinting, PacketFlag::Jump, PacketFlag::StartFlying, PacketFlag::Use})
+        fullPacketFlags.set(static_cast<size_t>(flag));
+    lamium::camera::clearMovementFlags(fullPacketFlags,
+        PacketFlag::Move, PacketFlag::Sneaking, PacketFlag::SneakDown,
+        PacketFlag::Sprinting, PacketFlag::SneakToggle, PacketFlag::StartSneaking,
+        PacketFlag::StartSprinting, PacketFlag::Jump, PacketFlag::StartFlying);
+    check(!fullPacketFlags.test(static_cast<size_t>(PacketFlag::Move))
+        && !fullPacketFlags.test(static_cast<size_t>(PacketFlag::Sneaking))
+        && !fullPacketFlags.test(static_cast<size_t>(PacketFlag::SneakDown))
+        && !fullPacketFlags.test(static_cast<size_t>(PacketFlag::Sprinting))
+        && !fullPacketFlags.test(static_cast<size_t>(PacketFlag::SneakToggle))
+        && !fullPacketFlags.test(static_cast<size_t>(PacketFlag::StartSneaking))
+        && !fullPacketFlags.test(static_cast<size_t>(PacketFlag::StartSprinting))
+        && !fullPacketFlags.test(static_cast<size_t>(PacketFlag::Jump))
+        && !fullPacketFlags.test(static_cast<size_t>(PacketFlag::StartFlying))
+        && fullPacketFlags.test(static_cast<size_t>(PacketFlag::Use)),
+        "player auth input suppression clears locomotion transitions while preserving unrelated actions");
     RawMoveInputComponent raw{};
     auto& flags = *raw.mRawInput->mFlagValues;
     for (size_t i = 0; i < static_cast<size_t>(Flag::Count); ++i) flags.set(i);
@@ -73,6 +99,7 @@ int main() try {
     move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::SprintDown));
     move.mInputState->mFlagValues->set(static_cast<size_t>(Flag::Up));
     move.mFlagValues->set(static_cast<size_t>(MoveInputComponent::Flag::Sprinting));
+    move.mFlagValues->set(static_cast<size_t>(MoveInputComponent::Flag::PersistSneak));
     *move.mMove = Vec2{1, 1};
     check(lamium::camera::freecameraInputAxes(move) == lamium::DetachedCameraMotion::Vector{1, 1, 1},
           "26.20 component flags provide keyboard and vertical movement");
@@ -82,10 +109,17 @@ int main() try {
         && !move.mFlagValues->test(static_cast<size_t>(MoveInputComponent::Flag::Sprinting))
         && !move.mFlagValues->test(static_cast<size_t>(MoveInputComponent::Flag::WantUp))
         && !move.mFlagValues->test(static_cast<size_t>(MoveInputComponent::Flag::Jumping))
-        && !move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::SprintDown))
-        && !move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::Up))
+        && !move.mFlagValues->test(static_cast<size_t>(MoveInputComponent::Flag::PersistSneak))
+        && move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::SprintDown))
+        && move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::Up))
         && !move.mInputState->mFlagValues->test(static_cast<size_t>(Flag::Up)),
-        "26.20 movement is captured and raw, processed, and component movement is suppressed");
+        "26.20 movement is captured, processed player movement is suppressed, and held raw input is preserved");
+    *move.mMove = Vec2{1, 1};
+    move.mInputState->mFlagValues->set(static_cast<size_t>(Flag::Up));
+    check(lamium::camera::consumeMovement(move) == lamium::DetachedCameraMotion::Vector{1, 1, 1}
+        && move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::Up))
+        && !move.mInputState->mFlagValues->test(static_cast<size_t>(Flag::Up)),
+        "a held movement input is available again on the next update without reaching player movement");
     MoveInputComponent touch{};
     *touch.mMove = Vec2{.5f, -.25f};
     check(lamium::camera::freecameraInputAxes(touch) == lamium::DetachedCameraMotion::Vector{.5, 0, -.25},

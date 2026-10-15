@@ -536,6 +536,13 @@ void CameraSessions::consumeFreeCameraInput(MoveInputComponent& input) {
     hasFreeCameraInput = true;
     if (freeMoveSamples < 1000000) ++freeMoveSamples;
 }
+bool CameraSessions::suppressesPlayerMovement(MoveInputState const& state) const {
+    if (!blocksPerspective()) return false;
+    auto* current = client.load();
+    if (!running || !current) return false;
+    auto* input = ClientMoveInputHandler::getMoveInput(*current);
+    return input && (&state == &*input->mInputState || &state == &*input->mRawInputState);
+}
 void CameraSessions::logFreeCameraSamples() {
     unsigned samples = 0;
     { std::lock_guard lock{freeInputMutex}; samples = freeMoveSamples; }

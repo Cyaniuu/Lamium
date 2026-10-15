@@ -44,7 +44,7 @@ DetachedCameraMotion::Vector consumeMovement(RawMoveInputComponent& raw) {
     constexpr auto movementFlags = std::to_array<Flag>({
         Flag::SneakDown, Flag::SneakToggleDown, Flag::WantDownSlow, Flag::WantUpSlow,
         Flag::AscendBlock, Flag::DescendBlock,
-        Flag::AscendBlock, Flag::DescendBlock, Flag::JumpDown, Flag::SprintDown,
+        Flag::JumpDown, Flag::SprintDown,
         Flag::UpLeft, Flag::UpRight, Flag::DownLeft, Flag::DownRight,
         Flag::Up, Flag::Down, Flag::Left, Flag::Right,
         Flag::Ascend, Flag::Descend, Flag::ChangeHeight,
@@ -74,7 +74,7 @@ DetachedCameraMotion::Vector freecameraInputAxes(MoveInputComponent const& input
 }
 DetachedCameraMotion::Vector consumeMovement(MoveInputComponent& input) {
     auto axes = freecameraInputAxes(input);
-    auto clearState = [](MoveInputState& state) {
+    auto clearProcessedState = [](MoveInputState& state) {
         using InputFlag = MoveInputState::Flag;
         constexpr auto movementFlags = std::to_array<InputFlag>({
             InputFlag::SneakDown, InputFlag::SneakToggleDown, InputFlag::WantDownSlow, InputFlag::WantUpSlow,
@@ -88,12 +88,14 @@ DetachedCameraMotion::Vector consumeMovement(MoveInputComponent& input) {
         for (auto flag : movementFlags) state.mFlagValues->set(static_cast<size_t>(flag), false);
         *state.mAnalogMoveVector = Vec2{};
     };
-    clearState(*input.mRawInputState);
-    clearState(*input.mInputState);
+    // updatePlayerState refreshes the processed values from this raw state on
+    // subsequent updates. Keep the device's held state intact so continuous
+    // keys remain visible to FreeCamera, and clear only player-facing output.
+    clearProcessedState(*input.mInputState);
     *input.mMove = Vec2{};
     for (auto flag : {MoveInputComponent::Flag::Sneaking, MoveInputComponent::Flag::Sprinting,
              MoveInputComponent::Flag::WantUp, MoveInputComponent::Flag::WantDown,
-             MoveInputComponent::Flag::Jumping})
+             MoveInputComponent::Flag::Jumping, MoveInputComponent::Flag::PersistSneak})
         input.mFlagValues->set(static_cast<size_t>(flag), false);
     return axes;
 }
