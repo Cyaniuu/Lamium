@@ -1,5 +1,11 @@
 #include "features/camera/FreeCameraHide.h"
-#if !defined(LAMIUM_DISABLE_DETACHED_CAMERAS)
+#if defined(LAMIUM_SDK_26_20_7)
+namespace lamium::camera::freeCameraHide {
+bool hudHidden() noexcept { return false; }
+void start() {}
+void stop() {}
+}
+#else
 #include "features/camera/CameraSessions.h"
 #include "app/Runtime.h"
 #include "app/Versions.h"
@@ -14,14 +20,8 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-#endif
 
 namespace lamium::camera::freeCameraHide {
-#if defined(LAMIUM_DISABLE_DETACHED_CAMERAS)
-bool hudHidden() noexcept { return false; }
-void start() {}
-void stop() {}
-#else
 namespace {
 bool handInstalled = false, hudInstalled = false;
 // The setting while FreeCamera flies; -1 otherwise (nothing hidden).
@@ -81,5 +81,5 @@ void stop() {
     capabilities::detachHook<FreeCameraHud>(hudInstalled,{capabilities::Id::FreeCameraHud,capabilities::Id::FreeCameraHotbar});
     capabilities::detachHook<FreeCameraHand>(handInstalled,{capabilities::Id::FreeCameraHand});
 }
-#endif
 }
+#endif

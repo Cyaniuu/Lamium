@@ -1,4 +1,5 @@
 #include "features/camera/CameraMovementInput.h"
+#include "mc/entity/components/MoveInputComponent.h"
 #include "mc/entity/components/RawMoveInputComponent.h"
 #include <iostream>
 #include <stdexcept>
@@ -65,6 +66,34 @@ int main() try {
     *pad.mRawMove = Vec2{.5f, -.25f};
     check(lamium::camera::freecameraInputAxes(pad) == lamium::DetachedCameraMotion::Vector{.5, 0, -.25},
           "analog vector is the fallback without flags");
+    MoveInputComponent move{};
+    move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::Up));
+    move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::Right));
+    move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::JumpDown));
+    move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::SprintDown));
+    move.mInputState->mFlagValues->set(static_cast<size_t>(Flag::Up));
+    move.mFlagValues->set(static_cast<size_t>(MoveInputComponent::Flag::Sprinting));
+    *move.mMove = Vec2{1, 1};
+    check(lamium::camera::freecameraInputAxes(move) == lamium::DetachedCameraMotion::Vector{1, 1, 1},
+          "26.20 component flags provide keyboard and vertical movement");
+    check(lamium::camera::consumeMovement(move) == lamium::DetachedCameraMotion::Vector{1, 1, 1}
+        && move.mMove->x == 0 && move.mMove->z == 0
+        && !move.mFlagValues->test(static_cast<size_t>(MoveInputComponent::Flag::Sneaking))
+        && !move.mFlagValues->test(static_cast<size_t>(MoveInputComponent::Flag::Sprinting))
+        && !move.mFlagValues->test(static_cast<size_t>(MoveInputComponent::Flag::WantUp))
+        && !move.mFlagValues->test(static_cast<size_t>(MoveInputComponent::Flag::Jumping))
+        && !move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::SprintDown))
+        && !move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::Up))
+        && !move.mInputState->mFlagValues->test(static_cast<size_t>(Flag::Up)),
+        "26.20 movement is captured and raw, processed, and component movement is suppressed");
+    MoveInputComponent touch{};
+    *touch.mMove = Vec2{.5f, -.25f};
+    check(lamium::camera::freecameraInputAxes(touch) == lamium::DetachedCameraMotion::Vector{.5, 0, -.25},
+          "touch movement uses the processed move vector when direction flags are absent");
+    MoveInputComponent analog{};
+    *analog.mRawInputState->mAnalogMoveVector = Vec2{-.5f, .25f};
+    check(lamium::camera::freecameraInputAxes(analog) == lamium::DetachedCameraMotion::Vector{-.5, 0, .25},
+          "raw analog movement is used when processed movement is empty");
     std::cout << "Native camera movement extraction checks passed\n";
     return 0;
 } catch (std::exception const& error) {

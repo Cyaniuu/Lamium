@@ -15,7 +15,6 @@ class IClientInstance;
 class LocalPlayer;
 class Player;
 struct MoveInputComponent;
-struct RawMoveInputComponent;
 namespace lamium {
 struct Settings;
 // The three camera sessions: Zoom, Freelook and FreeCamera. They share the
@@ -42,8 +41,8 @@ class CameraSessions {
     // world clear them.
     std::atomic<bool> wantZoom{false}, wantLook{false}, wantFree{false};
     std::atomic<bool> zoomToggle{false};
-    // Latest extracted movement axes while FreeCamera owns the session.
-    // Written by the input extraction hook, read by the render hook.
+    // Latest captured movement axes while FreeCamera owns the session.
+    // Written by the client input update, read by the render hook.
     std::mutex freeInputMutex;
     DetachedCameraMotion::Vector freeCameraInput{};
     bool hasFreeCameraInput = false;
@@ -116,8 +115,9 @@ public:
     void pollFreeTravel();
     void abortPendingTravel();
     void restoreFreePerspective(IClientInstance&);
-    // Extraction-hook entry: consumes movement only for the FreeCamera owner.
-    void consumeFreeCameraInput(MoveInputComponent const&, RawMoveInputComponent&);
+    // Input-update entry: captures movement and suppresses player movement
+    // only for the FreeCamera owner.
+    void consumeFreeCameraInput(MoveInputComponent&);
     // Render-hook entry: advances the session displacement from the stashed
     // input. Returns false when vanilla rendering must stay untouched.
     bool freeCameraView(IClientInstance const&, mce::Camera&);

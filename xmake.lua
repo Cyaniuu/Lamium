@@ -202,10 +202,8 @@ if not has_config("vs_runtime") then
 end
 
 target("Lamium")
-    -- SDK 26.20.7 removed the raw-input hook and perspective option setter
-    -- used by detached camera sessions.
+    -- SDK-specific compatibility adapters for this client release.
     add_defines("LAMIUM_SDK_26_20_7")
-    add_defines("LAMIUM_DISABLE_DETACHED_CAMERAS")
     if has_config("effects_trace") then add_defines("LAMIUM_EFFECTS_TRACE") end
     if has_config("automation_trace") then add_defines("LAMIUM_AUTOMATION_TRACE") end
     if has_config("restock_trace") then add_defines("LAMIUM_RESTOCK_TRACE") end

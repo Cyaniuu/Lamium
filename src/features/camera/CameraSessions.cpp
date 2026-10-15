@@ -18,13 +18,12 @@
 #include "mc/client/game/IClientInstance.h"
 #include "mc/client/game/ClientInstance.h"
 #include "ll/api/service/TargetedBedrock.h"
-#include "mc/client/options/IOptionRegistry.h"
 #include "mc/deps/shared_types/v1_21_100/camera/PlayerViewMode.h"
 #include "mc/client/game/MinecraftGame.h"
 #include "mc/client/input/ClientMoveInputHandler.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/entity/components/MoveInputComponent.h"
-#include "mc/entity/components/RawMoveInputComponent.h"
+#include "mc/input/MoveInputState.h"
 #include "mc/client/renderer/game/LevelRendererPlayer.h"
 #include "mc/deps/core/math/Vec2.h"
 #include "mc/deps/input/MouseAction.h"
@@ -32,10 +31,12 @@
 #include "mc/deps/ecs/gamerefs_entity/EntityContext.h"
 #include "mc/entity/components/ActorHeadRotationComponent.h"
 #include "mc/deps/vanilla_camera/CameraAPI.h"
+#include "mc/deps/vanilla_camera/VanillaCameraAPI.h"
 #include "mc/legacy/ActorRuntimeID.h"
 #include "mc/world/actor/ActorFlags.h"
 #include "ui/SettingsScreen.h"
 #include <cmath>
+#include <stdexcept>
 
 namespace lamium {
 namespace {
@@ -44,6 +45,25 @@ bool canDetachLook(LocalPlayer const& player) {
     // release it on the player's behalf when entering a detached camera.
     return player.isAlive() && !player.isSleeping() && !player.getVehicle()
         && player.hasRuntimeID() && !player.getStatusFlag(ActorFlags::Usingitem);
+}
+std::optional<int> currentPerspective(IClientInstance& current) {
+    auto value = static_cast<int>(VanillaCameraAPI(current).getPlayerViewPerspectiveOption());
+    if (value < static_cast<int>(SharedTypes::v1_21_100::PlayerViewMode::FirstPerson)
+        || value >= static_cast<int>(SharedTypes::v1_21_100::PlayerViewMode::Count)) return {};
+    return value;
+}
+bool setPerspective(IClientInstance& current, int target) {
+    using Mode = SharedTypes::v1_21_100::PlayerViewMode;
+    if (target < static_cast<int>(Mode::FirstPerson) || target >= static_cast<int>(Mode::Count)) return false;
+    for (int attempt = 0; attempt < static_cast<int>(Mode::Count); ++attempt) {
+        auto before = currentPerspective(current);
+        if (!before) return false;
+        if (*before == target) return true;
+        ClientInputCallbacks::handleTogglePerspectiveButtonPress(current);
+        auto after = currentPerspective(current);
+        if (!after || *after == *before) return false;
+    }
+    return currentPerspective(current) == target;
 }
 LL_TYPE_INSTANCE_HOOK(FovHook, ll::memory::HookPriority::Normal, LevelRendererPlayer,
     &LevelRendererPlayer::getFov, float, float alpha, bool variable) {
@@ -111,21 +131,6 @@ LL_STATIC_HOOK(PerspectiveLockHook, ll::memory::HookPriority::Normal,
     if (CameraSessions::instance().blocksPerspective()) return;
     origin(client);
 }
-// After vanilla HID extraction, withhold movement from the extracted
-// output for the FreeCamera owner. Other players and Freelook pass through
-// untouched; Freelook keeps its movement while looking around.
-#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_DISABLE_DETACHED_CAMERAS)
-LL_STATIC_HOOK(ExtractFreeCameraInput, ll::memory::HookPriority::Normal,
-    &ClientInputUpdateSystem::extractRawHIDInput, void,
-    MovementAbilitiesComponent const& abilities, MoveInputComponent const& input,
-    ActorDataFlagComponent const& flags, RawMoveInputComponent& raw,
-    Optional<SneakingComponent const> sneaking, Optional<WasInWaterFlagComponent const> water) {
-    origin(abilities, input, flags, raw, sneaking, water);
-    try {
-        CameraSessions::instance().consumeFreeCameraInput(input, raw);
-    } catch (...) {}
-}
-#endif
 struct HookEntry {
     int (*install)(bool);
     bool (*remove)(bool);
@@ -136,9 +141,6 @@ HookEntry hooks[] = {
     {PerspectiveLockHook::hook, PerspectiveLockHook::unhook},
     {FreeCameraSetupHook::hook, FreeCameraSetupHook::unhook},
     {FreeCameraInterpolatedPosition::hook, FreeCameraInterpolatedPosition::unhook},
-#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_DISABLE_DETACHED_CAMERAS)
-    {ExtractFreeCameraInput::hook, ExtractFreeCameraInput::unhook},
-#endif
     {TurnHook::hook, TurnHook::unhook},
     {DimensionHook::hook, DimensionHook::unhook},
     {FocusHook::hook, FocusHook::unhook}
@@ -233,24 +235,13 @@ bool CameraSessions::wanted(Session session) const {
     switch (session) {
     case Session::Zoom: return wantZoom.load();
     case Session::Freelook: return wantLook.load();
-    case Session::FreeCamera:
-#ifdef LAMIUM_DISABLE_DETACHED_CAMERAS
-        return false;
-#else
-        return wantFree.load();
-#endif
+    case Session::FreeCamera: return wantFree.load();
     }
     return false;
 }
 void CameraSessions::toggleWanted(Session session) {
 #ifdef LAMIUM_INPUT_UPDATE_PROBE
     if (session != Session::Zoom) return;
-#elif defined(LAMIUM_DISABLE_DETACHED_CAMERAS)
-    if (session != Session::Zoom) {
-        Runtime::instance().self().getLogger().warn(
-            "Detached camera sessions are unavailable on SDK 26.20.7 pending input and perspective API adapters");
-        return;
-    }
 #endif
     auto& flag = session == Session::Zoom ? wantZoom : session == Session::Freelook ? wantLook : wantFree;
     flag = !flag.load();
@@ -263,10 +254,6 @@ void CameraSessions::suspendInput() {
 }
 void CameraSessions::reconcile() {
     if (!running) return;
-#ifdef LAMIUM_DISABLE_DETACHED_CAMERAS
-    wantLook = false;
-    wantFree = false;
-#endif
     auto instance = ll::service::getClientInstance();
     if (!instance) return;
     IClientInstance& current = *instance;
@@ -295,11 +282,6 @@ void CameraSessions::pressLook(IClientInstance& current) {
 #ifdef LAMIUM_INPUT_UPDATE_PROBE
     (void)current;
     return;
-#elif defined(LAMIUM_DISABLE_DETACHED_CAMERAS)
-    (void)current;
-    Runtime::instance().self().getLogger().warn(
-        "Freelook is unavailable on SDK 26.20.7 until its perspective adapter is updated");
-    return;
 #endif
     if (!running) return;
     client = &current;
@@ -308,7 +290,7 @@ void CameraSessions::pressLook(IClientInstance& current) {
     reconcile();
 }
 bool CameraSessions::beginLook(IClientInstance& current) {
-#if defined(LAMIUM_INPUT_UPDATE_PROBE) || defined(LAMIUM_DISABLE_DETACHED_CAMERAS)
+#ifdef LAMIUM_INPUT_UPDATE_PROBE
     (void)current;
     return false;
 #else
@@ -326,8 +308,12 @@ bool CameraSessions::beginLook(IClientInstance& current) {
     try {
         lockedHead = player->getYHeadRot();
         camera::rig::detach(*player);
-        lookPerspective.store(current.getOptions().getPlayerViewPerspective());
-        current.getOptions().setPlayerViewPerspective(lookStartPerspective.load());
+        auto saved = currentPerspective(current);
+        if (!saved)
+            throw std::runtime_error("Could not read the current perspective");
+        lookPerspective.store(*saved);
+        if (!setPerspective(current, lookStartPerspective.load()))
+            throw std::runtime_error("Perspective switch did not reach the requested mode");
     } catch (...) {
         cancelLook();
         wantLook = false;
@@ -346,11 +332,6 @@ void CameraSessions::syncLookCameras(LocalPlayer& player) {
 void CameraSessions::pressFreeCamera(IClientInstance& current) {
 #ifdef LAMIUM_INPUT_UPDATE_PROBE
     (void)current;
-    return;
-#elif defined(LAMIUM_DISABLE_DETACHED_CAMERAS)
-    (void)current;
-    Runtime::instance().self().getLogger().warn(
-        "FreeCamera is unavailable on SDK 26.20.7 until its movement input adapter is updated");
     return;
 #endif
     // A Hold activation wants the camera only until its key is released.
@@ -374,37 +355,35 @@ bool CameraSessions::startFreeCamera(IClientInstance& current) {
     auto* player = current.getLocalPlayer();
     if (!player) return false;
     freePerspective.store(-1);
-    if (!ensureFirstPerson(current, *player)) return true; // Travel completes it.
+    if (!ensureFirstPerson(current, *player)) {
+        if (pendingFreeCamera.load()) return true;
+        wantFree = false;
+        return false;
+    }
     if (beginFreeCameraSession(current, *player)) return true;
     wantFree = false;
     return false;
 }
 bool CameraSessions::ensureFirstPerson(IClientInstance& current, LocalPlayer& player) {
-#if defined(LAMIUM_INPUT_UPDATE_PROBE) || defined(LAMIUM_DISABLE_DETACHED_CAMERAS)
+#ifdef LAMIUM_INPUT_UPDATE_PROBE
     (void)current;
     (void)player;
     return false;
 #else
+    using Mode = SharedTypes::v1_21_100::PlayerViewMode;
+    auto saved = currentPerspective(current);
+    if (!saved) return false;
     try {
-        if (camera::rig::firstPerson(player)) return true;
+        if (*saved == static_cast<int>(Mode::FirstPerson) && camera::rig::firstPerson(player)) return true;
     } catch (...) {}
-    // Travel: set first person directly (no cycle through front-third); the
-    // frame listener completes activation once the rig arrives. No session
-    // exists yet, so nothing is locked.
-    freePerspective.store(-1);
+    freePerspective.store(*saved);
     client = &current;
+    if (!setPerspective(current, static_cast<int>(Mode::FirstPerson))) {
+        restoreFreePerspective(current);
+        return false;
+    }
     pendingFreeCamera.store(true);
-    {
-        std::lock_guard lock{freeInputMutex};
-        freeTravelStart = std::chrono::steady_clock::now();
-    }
-    try {
-        using Mode = SharedTypes::v1_21_100::PlayerViewMode;
-        freePerspective.store(current.getOptions().getPlayerViewPerspective());
-        current.getOptions().setPlayerViewPerspective(static_cast<int>(Mode::FirstPerson));
-    } catch (...) {
-        pendingFreeCamera.store(false);
-    }
+    { std::lock_guard lock{freeInputMutex}; freeTravelStart = std::chrono::steady_clock::now(); }
     return false;
 #endif
 }
@@ -441,16 +420,17 @@ void CameraSessions::pollFreeTravel() {
     }
     bool settled = false;
     try {
+        auto mode = currentPerspective(*current);
+        if (!mode || *mode != static_cast<int>(SharedTypes::v1_21_100::PlayerViewMode::FirstPerson)) {
+            abortPendingTravel();
+            return;
+        }
         settled = camera::rig::firstPerson(*current->getLocalPlayer());
     } catch (...) { abortPendingTravel(); return; }
     auto now = std::chrono::steady_clock::now();
     if (now - start > std::chrono::seconds(3)) {
-        // Blend never settled; begin anyway.
-        pendingFreeCamera.store(false);
-        if (!beginFreeCameraSession(*current, *current->getLocalPlayer())) {
-            wantFree = false;
-            restoreFreePerspective(*current);
-        }
+        // Never detach against a view mode that did not finish switching.
+        abortPendingTravel();
         return;
     }
     if (!settled) return;
@@ -472,22 +452,21 @@ void CameraSessions::abortPendingTravel() {
     wantFree = false;
 }
 void CameraSessions::restoreFreePerspective(IClientInstance& current) {
-#if defined(LAMIUM_INPUT_UPDATE_PROBE) || defined(LAMIUM_DISABLE_DETACHED_CAMERAS)
+#ifdef LAMIUM_INPUT_UPDATE_PROBE
     (void)current;
     freePerspective.store(-1);
 #else
-    int saved = freePerspective.load();
-    freePerspective.store(-1);
+    int saved = freePerspective.exchange(-1);
     if (saved < 0) return;
-    try { current.getOptions().setPlayerViewPerspective(saved); } catch (...) {}
+    try {
+        if (!setPerspective(current, saved))
+            Runtime::instance().self().getLogger().error("FreeCamera could not restore the saved perspective");
+    } catch (...) {
+        Runtime::instance().self().getLogger().error("FreeCamera failed while restoring the saved perspective");
+    }
 #endif
 }
 bool CameraSessions::beginFreeCameraSession(IClientInstance& current, LocalPlayer& player) {
-#ifdef LAMIUM_DISABLE_DETACHED_CAMERAS
-    (void)current;
-    (void)player;
-    return false;
-#else
     if (!running || ui::ownsInput() || !gameplayScreen(current.getScreenName()))
         return false;
     if (!canDetachLook(player)) return false;
@@ -527,7 +506,6 @@ bool CameraSessions::beginFreeCameraSession(IClientInstance& current, LocalPlaye
         return false;
     }
     return true;
-#endif
 }
 bool CameraSessions::blocksPerspective() const {
     // Input-thread safe: atomics and a mutex-guarded snapshot only.
@@ -540,17 +518,18 @@ void CameraSessions::releaseLookKey() {
     wantLook = false;
     reconcile();
 }
-void CameraSessions::consumeFreeCameraInput(MoveInputComponent const& input, RawMoveInputComponent& raw) {
+void CameraSessions::consumeFreeCameraInput(MoveInputComponent& input) {
     // Only the FreeCamera owner loses movement; Freelook keeps vanilla motion.
     if (lookOwner.load() != DetachedOwner::FreeCamera || !look.snapshot()) return;
     auto* current = client.load();
     if (!running || !current) return;
     // The extraction runs once per local player; ignore other viewports.
     if (ClientMoveInputHandler::getMoveInput(*current) != &input) return;
-    // Read the stash before consumption clears the extracted flags.
-    auto axes = camera::freecameraInputAxes(raw);
-    bool sprint = camera::freecameraSprintHeld(raw);
-    camera::consumeMovement(raw);
+    // Capture the post-update component, then suppress both raw and processed
+    // player movement before the next movement and packet stages consume it.
+    bool sprint = input.mRawInputState->mFlagValues->test(
+        static_cast<size_t>(MoveInputState::Flag::SprintDown));
+    auto axes = camera::consumeMovement(input);
     std::lock_guard lock{freeInputMutex};
     freeCameraInput = axes;
     freeCameraSprint.update(axes[2], sprint, !ui::ownsInput() && gameplayScreen(current->getScreenName()));
@@ -703,10 +682,15 @@ void CameraSessions::endLookCamera() {
     }
 #endif
     camera::rig::restore(current ? current->getLocalPlayer() : nullptr);
-#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_DISABLE_DETACHED_CAMERAS)
+#ifndef LAMIUM_INPUT_UPDATE_PROBE
     int saved = lookPerspective.exchange(-1);
     if (current && saved >= 0) {
-        try { current->getOptions().setPlayerViewPerspective(saved); } catch (...) {}
+        try {
+            if (!setPerspective(*current, saved))
+                Runtime::instance().self().getLogger().error("Freelook could not restore the saved perspective");
+        } catch (...) {
+            Runtime::instance().self().getLogger().error("Freelook failed while restoring the saved perspective");
+        }
     }
 #endif
 }

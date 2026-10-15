@@ -42,6 +42,17 @@ bool eligible(IClientInstance& client) {
         && !player->isSleeping() && !player->getVehicle()
         && !CameraSessions::instance().blocksLookInteraction(*player);
 }
+void captureDetachedCameraInput(IClientInstance const* client, MoveInputComponent& input) {
+    try {
+        auto current = ll::service::getClientInstance();
+        if (current && &*current == client)
+            CameraSessions::instance().consumeFreeCameraInput(input);
+    } catch (std::exception const& error) {
+        Runtime::instance().self().getLogger().error("FreeCamera input capture failed: {}", error.what());
+    } catch (...) {
+        Runtime::instance().self().getLogger().error("FreeCamera input capture failed unexpectedly");
+    }
+}
 LL_TYPE_INSTANCE_HOOK(ApplyAutomationInput, ll::memory::HookPriority::Normal, ClientInputHandler,
     &ClientInputHandler::updatePlayerState, void,
     gsl::not_null<IClientInstance const*> client, MovementAbilitiesComponent const& abilities,
@@ -63,6 +74,7 @@ LL_TYPE_INSTANCE_HOOK(ApplyAutomationInput, ll::memory::HookPriority::Normal, Cl
     bool sprint = sprintIntent.active() && ready;
     if (!sneak && !sprint) {
         origin(client, abilities, effects, flags, input, riding, inWater);
+        captureDetachedCameraInput(client.get(), input);
         return;
     }
     auto& raw = *input.mRawInputState;
@@ -79,6 +91,7 @@ LL_TYPE_INSTANCE_HOOK(ApplyAutomationInput, ll::memory::HookPriority::Normal, Cl
     if (sprint)
         rawFlags->set(static_cast<size_t>(MoveInputState::Flag::SprintDown));
     origin(client, abilities, effects, flags, input, riding, inWater);
+    captureDetachedCameraInput(client.get(), input);
     if (sneak && input.checkFlag(MoveInputComponent::Flag::Sneaking) && rawSneak < 1000) ++rawSneak;
 }
 LL_TYPE_INSTANCE_HOOK(SneakDimensionChange, ll::memory::HookPriority::Normal, LevelRendererPlayer,

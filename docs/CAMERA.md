@@ -1,7 +1,8 @@
 # Detached camera implementation notes
 
-Freelook and FreeCamera are disabled and unbound by default. FreeCamera remains
-experimental. Both passed local runtime checks. Current product behavior is in
+Freelook and FreeCamera are unbound by default. FreeCamera remains experimental.
+Both passed local runtime checks on the earlier 26.51 SDK; the re-enabled
+26.20.7 adapters below still need in-game validation. Current product behavior is in
 [DESIGN.md](DESIGN.md#camera-decided-2026-09-26-unless-noted); current coverage
 and remaining checks are in [VALIDATION.md](VALIDATION.md). This file records
 the native integration and its evolution. Dated checkpoints retain earlier
@@ -9,12 +10,12 @@ cancellation rules and limitations; later L-26/L-76/L-77/L-78 entries and
 DESIGN define the current behavior. The SDK/probe sections at the end are
 earlier research, not instructions to replace the working camera path.
 
-The SDK 26.20.7 adaptation temporarily disables Freelook and FreeCamera.
-FreeCamera's movement consumption relied on the removed
-`ClientInputUpdateSystem::extractRawHIDInput` hook, and the SDK no longer
-exposes the perspective option setter used by Freelook. Zoom remains available.
-The detached sessions will stay unavailable until replacement input and
-perspective paths can be validated in game.
+The SDK 26.20.7 adapter captures and suppresses movement from the processed
+`MoveInputComponent` after `ClientInputHandler::updatePlayerState`, and switches
+perspective through the vanilla perspective-toggle callback with bounded
+verification. These replacement paths compile-time adapt to the SDK but are
+not yet confirmed in Minecraft 1.26.20.x; see [VALIDATION.md](VALIDATION.md).
+Zoom remains available.
 
 ## Freelook camera detachment
 
@@ -164,10 +165,13 @@ FreeCamera (experimental, unbound Toggle) reuses Freelook's detached session
 and adds position. Verified in game 2026-09-24 on build 31323b8 (trace build):
 
 - Rotation: the same detachment as Freelook; the two never run together.
-- Movement: after `ClientInputUpdateSystem::extractRawHIDInput`, axes are read
-  from the direction flags (analog vector as controller fallback) and then
-  consumed, so the player stays still. Attack/use are blocked by the
-  interaction guard, including the SurvivalMode mirrors.
+- Movement: on the historical 26.51 path, axes were read after
+  `ClientInputUpdateSystem::extractRawHIDInput`. The 26.20.7 adapter instead
+  captures direction flags and the processed move vector after
+  `ClientInputHandler::updatePlayerState`, then clears raw and processed
+  movement before later stages; this adapter still needs in-game verification.
+  Attack/use are blocked by the interaction guard, including the SurvivalMode
+  mirrors.
 - Position: `DetachedCameraMotion` advances once per rendered frame (fixed 20
   blocks/s, basis from the fresh vanilla view) and the displacement is written
   into the detached camera entity's `CameraOffsetComponent::mEntityOffset`
@@ -176,10 +180,11 @@ and adds position. Verified in game 2026-09-24 on build 31323b8 (trace build):
   distance stay ungenerated.
 - Perspective: FreeCamera always flies in first person and adds
   `CameraRenderPlayerModelComponent` (an empty tag: test it with `all_of`, not
-  `try_get`) so the body is visible. Starting in third person sets first
-  person with `setPlayerViewPerspective`, waits until the render eye stops
-  moving, and restores the saved perspective on exit. F5 is ignored while
-  active.
+  `try_get`) so the body is visible. The historical 26.51 path set the view
+  directly; on 26.20.7 the adapter cycles the vanilla perspective callback
+  with bounded state checks, waits until the render eye stops moving, and
+  restores the saved perspective on exit. F5 is ignored while active. The
+  26.20.7 path still needs in-game verification.
 - Exits: toggle, settings, death, focus loss and world re-entry verified.
   Dimension change could not be exercised with the camera alone.
 
