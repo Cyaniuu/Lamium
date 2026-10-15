@@ -55,6 +55,9 @@ bool verifiedGameExecutable() {
 #endif
 }
 paused::Level pausedLevel(std::string_view feature) {
+    // FreeCamera's session remains usable when optional rendering adapters
+    // are gated; their individual statuses remain available in diagnostics.
+    if (feature == "freecamera") return paused::Level::No;
     return static_cast<paused::Level>(capabilities::featureImpact(feature,
         [](capabilities::Id id) { return capabilities::registry().status(id); }));
 }

@@ -22,6 +22,8 @@
 #include "mc/client/game/MinecraftGame.h"
 #include "mc/client/input/ClientMoveInputHandler.h"
 #include "mc/client/player/LocalPlayer.h"
+#include "mc/world/actor/Actor.h"
+#include "mc/world/actor/Mob.h"
 #include "mc/entity/components/MoveInputComponent.h"
 #include "mc/input/MoveInputState.h"
 #include "mc/client/renderer/game/LevelRendererPlayer.h"
@@ -45,6 +47,12 @@ bool canDetachLook(LocalPlayer const& player) {
     // release it on the player's behalf when entering a detached camera.
     return player.isAlive() && !player.isSleeping() && !player.getVehicle()
         && player.hasRuntimeID() && !player.getStatusFlag(ActorFlags::Usingitem);
+}
+bool freeCameraOwns(Actor const& actor) {
+    auto current = ll::service::getClientInstance();
+    auto* player = current ? current->getLocalPlayer() : nullptr;
+    return player && static_cast<Actor const*>(player) == &actor
+        && CameraSessions::instance().blocksPerspective();
 }
 std::optional<int> currentPerspective(IClientInstance& current) {
     auto value = static_cast<int>(VanillaCameraAPI(current).getPlayerViewPerspectiveOption());
@@ -114,6 +122,31 @@ LL_TYPE_INSTANCE_HOOK(TurnHook, ll::memory::HookPriority::Normal, LocalPlayer,
     }
     origin(applied);
 }
+LL_TYPE_INSTANCE_HOOK(FreeCameraJump, ll::memory::HookPriority::Highest, Mob,
+    &Mob::jumpFromGround, void) {
+    if (freeCameraOwns(*this)) return;
+    origin();
+}
+LL_TYPE_INSTANCE_HOOK(FreeCameraJumpState, ll::memory::HookPriority::Highest, Actor,
+    &Actor::setJumping, void, bool jumping) {
+    if (freeCameraOwns(*this)) {
+        origin(false);
+        return;
+    }
+    origin(jumping);
+}
+LL_TYPE_INSTANCE_HOOK(FreeCameraSneakState, ll::memory::HookPriority::Highest, LocalPlayer,
+    &LocalPlayer::$setSneaking, void, bool sneaking) {
+    if (freeCameraOwns(*this)) {
+        origin(false);
+        return;
+    }
+    origin(sneaking);
+}
+LL_TYPE_INSTANCE_HOOK(FreeCameraSneakFlag, ll::memory::HookPriority::Highest, Actor,
+    &Actor::setStatusFlag, void, ActorFlags flag, bool value) {
+    origin(flag, freeCameraOwns(*this) && flag == ActorFlags::Sneaking ? false : value);
+}
 LL_TYPE_INSTANCE_HOOK(DimensionHook, ll::memory::HookPriority::Normal, LevelRendererPlayer,
     &LevelRendererPlayer::$onWillChangeDimension, void, Player& player) {
     CameraSessions::instance().reset(true);
@@ -141,6 +174,10 @@ HookEntry hooks[] = {
     {PerspectiveLockHook::hook, PerspectiveLockHook::unhook},
     {FreeCameraSetupHook::hook, FreeCameraSetupHook::unhook},
     {FreeCameraInterpolatedPosition::hook, FreeCameraInterpolatedPosition::unhook},
+    {FreeCameraJump::hook, FreeCameraJump::unhook},
+    {FreeCameraJumpState::hook, FreeCameraJumpState::unhook},
+    {FreeCameraSneakState::hook, FreeCameraSneakState::unhook},
+    {FreeCameraSneakFlag::hook, FreeCameraSneakFlag::unhook},
     {TurnHook::hook, TurnHook::unhook},
     {DimensionHook::hook, DimensionHook::unhook},
     {FocusHook::hook, FocusHook::unhook}

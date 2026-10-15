@@ -54,20 +54,34 @@ int main() try {
         && raw.mRawInput->mAnalogMoveVector->x == 0 && raw.mRawInput->mAnalogMoveVector->z == 0,
         "both extracted movement vectors must be suppressed");
     for (size_t i = 0; i < static_cast<size_t>(Flag::Count); ++i) {
-        bool preserved = i == static_cast<size_t>(Flag::BlockSelectDown) || i == static_cast<size_t>(Flag::LookCenter);
+        bool preserved = i == static_cast<size_t>(Flag::BlockSelectDown)
+            || i == static_cast<size_t>(Flag::LookCenter)
+            || i == static_cast<size_t>(Flag::SneakInputCurrentlyDown)
+            || i == static_cast<size_t>(Flag::JumpInputCurrentlyDown);
         check(flags.test(i) == preserved, "movement flags cleared while unrelated flags remain");
         check(original.mRawInput->mFlagValues->test(i), "copy must not share physical input flag storage");
     }
-    check(raw.mRawInput->mLookSlightDirField == 1 && raw.mRawInput->mLookNormalDirField == 2
+        flags.set(static_cast<size_t>(Flag::JumpInputCurrentlyDown), false);
+        flags.set(static_cast<size_t>(Flag::SneakInputCurrentlyDown), false);
+        check(raw.mRawInput->mLookSlightDirField == 1 && raw.mRawInput->mLookNormalDirField == 2
         && raw.mRawInput->mLookSmoothDirField == 3, "keyboard look fields preserved");
     check(original.mRawMove->x == .25f && original.mRawInput->mAnalogMoveVector->x == .5f,
           "consumption must not mutate other input snapshots");
     flags.set(static_cast<size_t>(Flag::JumpDown));
     check(lamium::camera::consumeMovement(raw)[1] == 1, "jump ascends the camera");
+    flags.set(static_cast<size_t>(Flag::JumpInputCurrentlyDown));
+    check(lamium::camera::consumeMovement(raw)[1] == 1
+        && flags.test(static_cast<size_t>(Flag::JumpInputCurrentlyDown)),
+        "held jump state remains available for continuous camera ascent after clearing the jump edge");
+    flags.set(static_cast<size_t>(Flag::JumpInputCurrentlyDown), false);
     flags.set(static_cast<size_t>(Flag::SneakToggleDown));
     check(lamium::camera::consumeMovement(raw)[1] == 0, "persistent sneak must not move the camera");
     flags.set(static_cast<size_t>(Flag::SneakDown));
     check(lamium::camera::consumeMovement(raw)[1] == -1, "held sneak descends the camera");
+    flags.set(static_cast<size_t>(Flag::SneakInputCurrentlyDown));
+    check(lamium::camera::consumeMovement(raw)[1] == -1
+        && flags.test(static_cast<size_t>(Flag::SneakInputCurrentlyDown)),
+        "held sneak state remains available for continuous camera descent after clearing the sneak edge");
     RawMoveInputComponent keys{};
     check(!lamium::camera::freecameraSprintHeld(keys), "sprint is off without a held native sprint input");
     keys.mRawInput->mFlagValues->set(static_cast<size_t>(Flag::SprintDown));
@@ -96,6 +110,7 @@ int main() try {
     move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::Up));
     move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::Right));
     move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::JumpDown));
+    move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::JumpInputCurrentlyDown));
     move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::SprintDown));
     move.mInputState->mFlagValues->set(static_cast<size_t>(Flag::Up));
     move.mFlagValues->set(static_cast<size_t>(MoveInputComponent::Flag::Sprinting));
@@ -112,14 +127,30 @@ int main() try {
         && !move.mFlagValues->test(static_cast<size_t>(MoveInputComponent::Flag::PersistSneak))
         && move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::SprintDown))
         && move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::Up))
+        && move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::Right))
+        && !move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::JumpDown))
+        && move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::JumpInputCurrentlyDown))
         && !move.mInputState->mFlagValues->test(static_cast<size_t>(Flag::Up)),
-        "26.20 movement is captured, processed player movement is suppressed, and held raw input is preserved");
+        "26.20 movement is captured, player vertical actions are suppressed, and horizontal raw input is preserved");
     *move.mMove = Vec2{1, 1};
     move.mInputState->mFlagValues->set(static_cast<size_t>(Flag::Up));
-    check(lamium::camera::consumeMovement(move) == lamium::DetachedCameraMotion::Vector{1, 1, 1}
+    check(lamium::camera::freecameraInputAxes(move) == lamium::DetachedCameraMotion::Vector{1, 1, 1}
+        && lamium::camera::consumeMovement(move) == lamium::DetachedCameraMotion::Vector{1, 1, 1}
         && move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::Up))
+        && !move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::JumpDown))
+        && move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::JumpInputCurrentlyDown))
         && !move.mInputState->mFlagValues->test(static_cast<size_t>(Flag::Up)),
-        "a held movement input is available again on the next update without reaching player movement");
+        "held vertical input drives continuous camera movement while player action edges stay cleared");
+    move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::JumpInputCurrentlyDown), false);
+    move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::SneakInputCurrentlyDown));
+    move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::SneakDown));
+    move.mRawInputState->mFlagValues->set(static_cast<size_t>(Flag::SneakToggleDown));
+    check(lamium::camera::freecameraInputAxes(move) == lamium::DetachedCameraMotion::Vector{1, -1, 1}
+        && lamium::camera::consumeMovement(move) == lamium::DetachedCameraMotion::Vector{1, -1, 1}
+        && move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::SneakInputCurrentlyDown))
+        && !move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::SneakDown))
+        && !move.mRawInputState->mFlagValues->test(static_cast<size_t>(Flag::SneakToggleDown)),
+        "held sneak state drives continuous camera descent while player sneak edges stay cleared");
     MoveInputComponent touch{};
     *touch.mMove = Vec2{.5f, -.25f};
     check(lamium::camera::freecameraInputAxes(touch) == lamium::DetachedCameraMotion::Vector{.5, 0, -.25},

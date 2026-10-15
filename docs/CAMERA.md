@@ -2,11 +2,12 @@
 
 Freelook and FreeCamera are unbound by default. FreeCamera remains experimental.
 Both passed local runtime checks on the earlier 26.51 SDK. On 26.20.7, the
-maintainer confirmed Freelook works. FreeCamera preserves held raw device state
-for continuous flight. WASD no longer moves the body, but jump and sneak still
-do; the input update now masks these controls while vanilla processes them,
-and the server-bound player input is filtered separately. This adjustment
-awaits an in-game retest.
+maintainer confirmed Freelook works and, on 2026-10-16, confirmed FreeCamera
+movement and body isolation: continuous horizontal and vertical camera flight
+works without moving, jumping or sneaking the player. The session toggle and
+settings row do not show an aggregate "partly paused" label for FreeCamera;
+individual optional rendering adapter compatibility states remain visible in
+capability diagnostics.
 Current product behavior is in
 [DESIGN.md](DESIGN.md#camera-decided-2026-09-26-unless-noted); current coverage
 and remaining checks are in [VALIDATION.md](VALIDATION.md). This file records

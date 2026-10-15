@@ -23,8 +23,8 @@ DetachedCameraMotion::Vector freecameraInputAxes(RawMoveInputComponent const& ra
         x = raw.mRawMove->x;
         z = raw.mRawMove->z;
     }
-    double y = static_cast<double>(held(Flag::JumpDown) || held(Flag::Ascend))
-        - static_cast<double>(held(Flag::SneakDown) || held(Flag::Descend));
+    double y = static_cast<double>(held(Flag::JumpDown) || held(Flag::JumpInputCurrentlyDown) || held(Flag::Ascend))
+        - static_cast<double>(held(Flag::SneakDown) || held(Flag::SneakInputCurrentlyDown) || held(Flag::Descend));
     return {std::clamp(x, -1.0, 1.0), y, std::clamp(z, -1.0, 1.0)};
 }
 DetachedCameraMotion::Vector consumeMovement(RawMoveInputComponent& raw) {
@@ -35,8 +35,8 @@ DetachedCameraMotion::Vector consumeMovement(RawMoveInputComponent& raw) {
     // Vertical flight uses momentary jump/sneak, not the persisted sneak toggle.
     DetachedCameraMotion::Vector axes{
         raw.mRawMove->x,
-        static_cast<double>(down(Flag::JumpDown) || down(Flag::Ascend))
-            - static_cast<double>(down(Flag::SneakDown) || down(Flag::Descend)),
+        static_cast<double>(down(Flag::JumpDown) || down(Flag::JumpInputCurrentlyDown) || down(Flag::Ascend))
+            - static_cast<double>(down(Flag::SneakDown) || down(Flag::SneakInputCurrentlyDown) || down(Flag::Descend)),
         raw.mRawMove->z,
     };
     *raw.mRawMove = Vec2{};
@@ -48,8 +48,8 @@ DetachedCameraMotion::Vector consumeMovement(RawMoveInputComponent& raw) {
         Flag::UpLeft, Flag::UpRight, Flag::DownLeft, Flag::DownRight,
         Flag::Up, Flag::Down, Flag::Left, Flag::Right,
         Flag::Ascend, Flag::Descend, Flag::ChangeHeight,
-        Flag::SneakInputCurrentlyDown, Flag::SneakInputWasReleased, Flag::SneakInputWasPressed,
-        Flag::JumpInputWasReleased, Flag::JumpInputWasPressed, Flag::JumpInputCurrentlyDown,
+        Flag::SneakInputWasReleased, Flag::SneakInputWasPressed,
+        Flag::JumpInputWasReleased, Flag::JumpInputWasPressed,
     });
     for (auto flag : movementFlags) flags.set(static_cast<size_t>(flag), false);
     return axes;
@@ -68,22 +68,31 @@ DetachedCameraMotion::Vector freecameraInputAxes(MoveInputComponent const& input
             z = input.mRawInputState->mAnalogMoveVector->z;
         }
     }
-    double y = static_cast<double>(held(Flag::JumpDown) || held(Flag::Ascend))
-        - static_cast<double>(held(Flag::SneakDown) || held(Flag::Descend));
+    double y = static_cast<double>(held(Flag::JumpDown) || held(Flag::JumpInputCurrentlyDown) || held(Flag::Ascend))
+        - static_cast<double>(held(Flag::SneakDown) || held(Flag::SneakInputCurrentlyDown) || held(Flag::Descend));
     return {std::clamp(x, -1.0, 1.0), y, std::clamp(z, -1.0, 1.0)};
 }
 DetachedCameraMotion::Vector consumeMovement(MoveInputComponent& input) {
     auto axes = freecameraInputAxes(input);
+    using InputFlag = MoveInputState::Flag;
+    constexpr auto verticalFlags = std::to_array<InputFlag>({
+        InputFlag::SneakDown, InputFlag::SneakToggleDown, InputFlag::WantDownSlow,
+        InputFlag::WantUpSlow, InputFlag::AscendBlock, InputFlag::DescendBlock,
+        InputFlag::JumpDown, InputFlag::Ascend, InputFlag::Descend, InputFlag::ChangeHeight,
+        InputFlag::SneakInputWasReleased, InputFlag::SneakInputWasPressed,
+        InputFlag::JumpInputWasReleased, InputFlag::JumpInputWasPressed,
+    });
+    for (auto flag : verticalFlags)
+        input.mRawInputState->mFlagValues->set(static_cast<size_t>(flag), false);
     auto clearProcessedState = [](MoveInputState& state) {
-        using InputFlag = MoveInputState::Flag;
         constexpr auto movementFlags = std::to_array<InputFlag>({
             InputFlag::SneakDown, InputFlag::SneakToggleDown, InputFlag::WantDownSlow, InputFlag::WantUpSlow,
             InputFlag::AscendBlock, InputFlag::DescendBlock, InputFlag::JumpDown, InputFlag::SprintDown,
             InputFlag::UpLeft, InputFlag::UpRight, InputFlag::DownLeft, InputFlag::DownRight,
             InputFlag::Up, InputFlag::Down, InputFlag::Left, InputFlag::Right,
             InputFlag::Ascend, InputFlag::Descend, InputFlag::ChangeHeight,
-            InputFlag::SneakInputCurrentlyDown, InputFlag::SneakInputWasReleased, InputFlag::SneakInputWasPressed,
-            InputFlag::JumpInputWasReleased, InputFlag::JumpInputWasPressed, InputFlag::JumpInputCurrentlyDown,
+            InputFlag::SneakInputWasReleased, InputFlag::SneakInputWasPressed,
+            InputFlag::JumpInputWasReleased, InputFlag::JumpInputWasPressed,
         });
         for (auto flag : movementFlags) state.mFlagValues->set(static_cast<size_t>(flag), false);
         *state.mAnalogMoveVector = Vec2{};
