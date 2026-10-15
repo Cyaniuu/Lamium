@@ -24,9 +24,23 @@ LL_TYPE_INSTANCE_HOOK(NetherLightHook, ll::memory::HookPriority::Normal, NetherL
     return data;
 }
 #endif
+#if defined(LAMIUM_SDK_26_20_7)
+LL_TYPE_INSTANCE_HOOK(NightVisionImageHook, ll::memory::HookPriority::Normal, BaseLightTextureImageBuilder,
+    &BaseLightTextureImageBuilder::$buildImage, bool, BaseLightData const& lightData, mce::Image* targetImage,
+    uint imageLength, float a, float ambientBoost, bool clampToMinimum) {
+    if (!NightVision::instance().enabled() || !versionSensitiveAllowed(capabilities::Id::NightVision))
+        return origin(lightData, targetImage, imageLength, a, ambientBoost, clampToMinimum);
+    BaseLightData adjusted{lightData};
+    NightVision::instance().apply(&adjusted);
+    return origin(adjusted, targetImage, imageLength, a, ambientBoost, clampToMinimum);
+}
+#endif
 bool baseInstalled = false;
 #if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
 bool netherInstalled = false;
+#endif
+#if defined(LAMIUM_SDK_26_20_7)
+bool imageInstalled = false;
 #endif
 }
 NightVision& NightVision::instance() { static NightVision instance; return instance; }
@@ -39,6 +53,10 @@ bool NightVision::start() {
 #if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
         if (!netherInstalled) netherInstalled = NetherLightHook::hook() == 0;
         if (!netherInstalled) { capabilities::hooks(capabilities::Id::NightVision, false); stop(); return false; }
+#endif
+#if defined(LAMIUM_SDK_26_20_7)
+        if (!imageInstalled) imageInstalled = NightVisionImageHook::hook() == 0;
+        if (!imageInstalled) { capabilities::hooks(capabilities::Id::NightVision, false); stop(); return false; }
 #endif
         running = true;
         capabilities::ready(capabilities::Id::NightVision);
@@ -56,10 +74,16 @@ void NightVision::stop() {
 #if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
     if (netherInstalled && NetherLightHook::unhook()) netherInstalled = false;
 #endif
+#if defined(LAMIUM_SDK_26_20_7)
+    if (imageInstalled && NightVisionImageHook::unhook()) imageInstalled = false;
+#endif
     if (baseInstalled && BaseLightHook::unhook()) baseInstalled = false;
     if (baseInstalled
 #if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
         || netherInstalled
+#endif
+#if defined(LAMIUM_SDK_26_20_7)
+        || imageInstalled
 #endif
     ) {
         capabilities::fail(capabilities::Id::NightVision,capabilities::Reason::RemovalFailed);

@@ -84,11 +84,20 @@ struct Environment {
 inline constexpr bool loaderSupported(int major, int minor, int patch) {
     return major == loaderMajor && minor == loaderMinor && patch >= minimumLoaderPatch;
 }
+inline constexpr bool legacy26_20_7Capability(Definition const& d) {
+    return d.id == Id::NightVision || d.id == Id::SchematicBlocks || d.id == Id::SchematicBlend;
+}
+inline constexpr bool legacy26_20_7Target(Definition const& d, Environment env) {
+    return legacy26_20_7Capability(d) && env.gameBuild[0] == 1 && env.gameBuild[1] == 26
+        && env.gameBuild[2] == 20 && env.major == 26 && env.minor == 20 && env.patch == 7;
+}
 inline constexpr Reason compatibility(Definition const& d, Environment env) {
     if (!d.gameSensitive) return Reason::None;
     bool verified = d.verifiedBuild[0] ? d.verifiedBuild == env.gameBuild : env.verifiedGame;
-    if (env.forceUnverified || !verified) return Reason::UnverifiedGame;
-    return loaderSupported(env.major,env.minor,env.patch) ? Reason::None : Reason::UnsupportedLoader;
+    bool legacy26_20_7 = legacy26_20_7Target(d, env);
+    if (env.forceUnverified || (!verified && !legacy26_20_7)) return Reason::UnverifiedGame;
+    return loaderSupported(env.major,env.minor,env.patch) || legacy26_20_7
+        ? Reason::None : Reason::UnsupportedLoader;
 }
 inline constexpr Reason compatibility(Id id, Environment env) { return compatibility(definition(id),env); }
 struct RuntimeStatus {

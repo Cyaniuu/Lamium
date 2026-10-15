@@ -25,6 +25,16 @@ AutomationInput sprintIntent;
 bool installed = false;
 bool dimensionInstalled = false;
 unsigned observed = 0, matched = 0, rawSneak = 0;
+struct RestoreRawFlags {
+    MoveInputState& state;
+    bool sneakDown;
+    bool sprintDown;
+    ~RestoreRawFlags() noexcept {
+        auto& flags = state.mFlagValues;
+        flags->set(static_cast<size_t>(MoveInputState::Flag::SneakDown), sneakDown);
+        flags->set(static_cast<size_t>(MoveInputState::Flag::SprintDown), sprintDown);
+    }
+};
 bool eligible(IClientInstance& client) {
     auto* player = client.getLocalPlayer();
     return Runtime::instance().enabled() && !ui::ownsInput()
@@ -55,15 +65,21 @@ LL_TYPE_INSTANCE_HOOK(ApplyAutomationInput, ll::memory::HookPriority::Normal, Cl
         origin(client, abilities, effects, flags, input, riding, inWater);
         return;
     }
-    auto augmented = input;
+    auto& raw = *input.mRawInputState;
+    auto& rawFlags = raw.mFlagValues;
+    RestoreRawFlags restore{
+        raw,
+        rawFlags->test(static_cast<size_t>(MoveInputState::Flag::SneakDown)),
+        rawFlags->test(static_cast<size_t>(MoveInputState::Flag::SprintDown))
+    };
     if (sneak) {
         if (matched < 1000) ++matched;
-        augmented.mRawInputState->mFlagValues->set(static_cast<size_t>(MoveInputState::Flag::SneakDown));
+        rawFlags->set(static_cast<size_t>(MoveInputState::Flag::SneakDown));
     }
     if (sprint)
-        augmented.mRawInputState->mFlagValues->set(static_cast<size_t>(MoveInputState::Flag::SprintDown));
-    origin(client, abilities, effects, flags, augmented, riding, inWater);
-    if (sneak && augmented.checkFlag(MoveInputComponent::Flag::Sneaking) && rawSneak < 1000) ++rawSneak;
+        rawFlags->set(static_cast<size_t>(MoveInputState::Flag::SprintDown));
+    origin(client, abilities, effects, flags, input, riding, inWater);
+    if (sneak && input.checkFlag(MoveInputComponent::Flag::Sneaking) && rawSneak < 1000) ++rawSneak;
 }
 LL_TYPE_INSTANCE_HOOK(SneakDimensionChange, ll::memory::HookPriority::Normal, LevelRendererPlayer,
     &LevelRendererPlayer::$onWillChangeDimension, void, Player& player) {

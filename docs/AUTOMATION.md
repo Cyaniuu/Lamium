@@ -284,11 +284,12 @@ and runtime disable also cancel. The checks above establish basic local-world
 consumption of the copied bit, not the remaining movement or multiplayer cases.
 
 The 26.20.7 SDK no longer declares `ClientInputUpdateSystem::extractRawHIDInput`.
-Permanent Sneak/Sprint now wrap `ClientInputHandler::updatePlayerState`, pass a
-transient `MoveInputComponent` copy with the requested raw input flags to
-vanilla, and leave the stored input untouched. This is a compile-time adapter,
-not yet verified in game; activation, physical-key overlap, and vanilla sprint
-eligibility still need checking on 26.20.7.
+Permanent Sneak/Sprint wrap `ClientInputHandler::updatePlayerState`, temporarily
+set the requested flags on its actual `MoveInputComponent`, and restore the
+original raw flags after vanilla runs. This avoids discarding in-place changes
+by running vanilla on a detached component copy, without persisting synthetic
+raw input. The 26.20.7 runtime behavior still needs checking, including
+physical-key overlap and vanilla sprint eligibility.
 
 The probe-only build option, `xmake f --input_update_probe=y`, traces the same
 method after its original call, including movement flags and riding/water

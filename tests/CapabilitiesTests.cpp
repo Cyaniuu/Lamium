@@ -113,6 +113,29 @@ void capabilitiesTests() {
     nextGame.forceUnverified = true;
     check(compatibility(reviewed,nextGame) == Reason::UnverifiedGame,
         "the forced-unverified build cannot be bypassed by a per-capability review");
+    Environment legacy2607{false,26,20,7,{1,26,20,0}};
+    check(compatibility(Id::NightVision,legacy2607) == Reason::None
+        && compatibility(Id::SchematicBlocks,legacy2607) == Reason::None
+        && compatibility(Id::SchematicBlend,legacy2607) == Reason::None
+        && compatibility(Id::ConnectedTextures,legacy2607) == Reason::UnverifiedGame,
+        "the reviewed 26.20.7 exception enables Night Vision and schematic geometry only");
+    auto otherLegacyBuild = legacy2607;
+    otherLegacyBuild.patch = 8;
+    otherLegacyBuild.verifiedGame = true;
+    check(compatibility(Id::NightVision,otherLegacyBuild) == Reason::UnsupportedLoader
+        && compatibility(Id::SchematicBlocks,otherLegacyBuild) == Reason::UnsupportedLoader
+        && compatibility(Id::SchematicBlend,otherLegacyBuild) == Reason::UnsupportedLoader,
+        "legacy exceptions require the exact 26.20.7 loader patch");
+    otherLegacyBuild = legacy2607;
+    otherLegacyBuild.gameBuild[2] = 21;
+    check(compatibility(Id::NightVision,otherLegacyBuild) == Reason::UnverifiedGame
+        && compatibility(Id::SchematicBlocks,otherLegacyBuild) == Reason::UnverifiedGame,
+        "legacy exceptions do not extend to another game series");
+    legacy2607.forceUnverified = true;
+    check(compatibility(Id::NightVision,legacy2607) == Reason::UnverifiedGame
+        && compatibility(Id::SchematicBlocks,legacy2607) == Reason::UnverifiedGame
+        && compatibility(Id::SchematicBlend,legacy2607) == Reason::UnverifiedGame,
+        "forced-unverified builds still disable legacy exceptions");
     r.fail(Id::HideParticles,Reason::NativeContract);
     check(r.fail(Id::HideParticles,Reason::RemovalFailed),
         "cleanup failure escalates an earlier contract failure so stale hooks cannot be retried");

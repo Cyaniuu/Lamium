@@ -12,6 +12,45 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## Restore automation input output and schematic ghost geometry on 26.20.7 (2026-10-16)
+
+The maintainer reported that Permanent Sneak and Permanent Sprint had no
+visible effect on the 26.20.7 build. The supplied stop counters showed 468
+eligible Sneak updates but no processed sneaking samples. The 26.20 adapter
+was passing a copied `MoveInputComponent` to `updatePlayerState`; it now calls
+vanilla on the component supplied by the game, temporarily adds the requested
+raw flags, and restores those raw flags after the update. This removes the
+detached-copy boundary, but the input flags' effect on the target runtime
+remains unverified.
+
+The maintainer also reported that schematic ghosts did not render. Source
+inspection found that the compatibility policy rejected the 26.20 target at
+the `SchematicBlocks` gate, which stops section tessellation; the existing
+legacy exception covered Night Vision only. A capability-scoped exception now
+allows schematic block and blended geometry only for Minecraft 1.26.20.x with
+LeviLamina 26.20.7. These changes have not yet been checked in game.
+
+`xmake build Lamium`, `xmake build LamiumTests`, `xmake run LamiumTests`,
+`xmake build LamiumNativeTests` and `xmake run LamiumNativeTests` passed.
+DLL SHA-256:
+`2521CEEC3037D5CCCB08B19738900F3409E4AB4AF2501CB7808402207E6FCE7F`
+(local `main` at `5a7c525` plus working-tree changes).
+
+## Restore Night Vision path for SDK 26.20.7 (2026-10-15)
+
+The Nether-specific light-data hook does not link with SDK 26.20.7, so that
+build uses the shared light-image builder hook and applies Night Vision to a
+copy of `BaseLightData` immediately before image generation. The compatibility
+exception remains limited to Minecraft 1.26.20.x with LeviLamina 26.20.7,
+Night Vision only; `--unverified_game=y` still disables it. The other SDK
+continues using its existing base and Nether data hooks.
+
+`xmake build Lamium` passed on SDK 26.20.7. `xmake build LamiumTests` and
+`xmake run LamiumTests` passed. DLL SHA-256:
+`8F4F7767A9512FB8F1822AA4A7DD448B86222B4056939051AC7F912BF3443F52`
+(local `main` at `5a7c525` plus working-tree changes). Night Vision has not
+yet been checked in game on Minecraft 1.26.20.x / LeviLamina 26.20.7.
+
 ## Localize keyboard binding names after removing RTTI cast (2026-10-15)
 
 Maintainer confirmed in game that settings pages now render without the RTTI
