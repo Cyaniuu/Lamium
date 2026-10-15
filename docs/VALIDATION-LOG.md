@@ -12,6 +12,21 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## Allow Connected Textures on SDK 26.20.7 (2026-10-16)
+
+The 26.20.7 compatibility policy previously kept Connected Textures vanilla
+because only Night Vision and schematic geometry had reviewed legacy
+exceptions. Added a capability-scoped exception for Minecraft 1.26.20.x with
+LeviLamina 26.20.7; other game-sensitive paths remain gated, and
+`--unverified_game=y` still disables the feature. The source already contains
+26.20 SDK adapters for texture UV sizing and hooked resource-pack lookups.
+
+`xmake build Lamium`, `xmake build LamiumTests` and `xmake run LamiumTests`
+passed. DLL SHA-256:
+`05EAD144F54C8D1E9F5C7D20D39ED9D58C3F34B748C9AC52EFBE5631EB6E3BF8`
+(local `main` at `034a62f` plus working-tree changes). Runtime on Minecraft
+1.26.20.x / LeviLamina 26.20.7 has not been checked.
+
 ## Restore automation input output and schematic ghost geometry on 26.20.7 (2026-10-16)
 
 The maintainer reported that Permanent Sneak and Permanent Sprint had no

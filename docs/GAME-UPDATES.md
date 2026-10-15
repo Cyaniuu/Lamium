@@ -37,10 +37,10 @@ adapter retains its target, ownership and contract checks.
 The shared verified Minecraft executable remains 1.26.51.01. An unverified
 executable or unsupported loader prevents probing and use of sensitive paths.
 The catalog can name a separately reviewed executable build per capability,
-without widening the others. Night Vision and schematic block/blended ghost
-geometry have narrow legacy exceptions for Minecraft 1.26.20.x with LeviLamina
-26.20.7 only. They do not enable other capabilities on that game or loader,
-and `--unverified_game=y` still disables them.
+without widening the others. Night Vision, Connected Textures, and schematic
+block/blended ghost geometry have narrow legacy exceptions for Minecraft
+1.26.20.x with LeviLamina 26.20.7 only. They do not enable other capabilities
+on that game or loader, and `--unverified_game=y` still disables them.
 `--unverified_game=y` forces all game-sensitive capabilities to stay vanilla,
 including reviewed exceptions; version-independent paths remain available.
 
@@ -78,7 +78,7 @@ the package/SDK loader-policy alignment in CI.
 | Capability (log name) | Where | Stays vanilla | Still works |
 |---|---|---|---|
 | FreeCamera terrain (native culler request) | `FreeCameraCulling.cpp` | underground terrain hidden as vanilla culls it | FreeCamera itself |
-| Connected Textures (chunk mesh vertices) | `ConnectedTexturesHooks.cpp`, `ConnectedSprites.cpp` | glass with borders | the setting (no effect) |
+| Connected Textures (chunk mesh vertices) | `ConnectedTexturesHooks.cpp`, `ConnectedSprites.cpp` | vanilla outside the verified 1.26.51.01 / 26.51.5+ target and the reviewed 1.26.20.x / 26.20.7 exception | the key and setting when its compatibility gate is closed |
 | Night Vision (light texture data) | `NightVision.cpp` | vanilla light outside the verified 1.26.51.01 / 26.51.5+ target and the reviewed 1.26.20.x / 26.20.7 exception | the key and setting when its compatibility gate is closed |
 | Edge Guard (movement request) | `EdgeGuard.cpp` (movement request and move vector), `EdgeGuardHistory.cpp` (replay input capture) | vanilla movement and history capture | the setting (no effect) |
 | Edge Guard (replay capture) | `EdgeGuardHistory.cpp` | vanilla replay capture | ordinary movement guarding |
