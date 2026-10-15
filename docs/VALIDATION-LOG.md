@@ -12,6 +12,49 @@ Entries below that name 26.51.3 were verified on that release. After the
 26.51.5 update (commit 4a5b975) a brief in-game check found no regressions;
 it was not a full re-run of every entry.
 
+## Localize keyboard binding names after removing RTTI cast (2026-10-15)
+
+Maintainer confirmed in game that settings pages now render without the RTTI
+exception, but bound keyboard labels showed localization keys such as
+`keyboard.keyName.f3` (screenshot in the conversation), on the replacement
+DLL recorded below. `Keyboard::_shortKeyNames()` returns these resource keys,
+not display labels. The renderer now resolves them with Minecraft's current
+I18n locale and falls back to the numeric key code if a translation is absent.
+The new build (`19278c6` plus working-tree changes, DLL SHA-256
+`462ED89526E249AD853AF80477AA321C81B0EB7AA86C7B82E06E0432FFFF0C14`) passes
+`xmake build Lamium` and `xmake build LamiumTests; xmake run LamiumTests`. The
+maintainer has not yet checked the corrected labels in game.
+
+## Settings key labels hit Bedrock RTTI (2026-10-15)
+
+Maintainer report from Minecraft on SDK 26.20.7, using the immediately
+preceding build shared in chat (DLL SHA-256
+`95F274DEC31EE7A430C66BCB8C47A873BA6DE1B90079409508947E841D49761A`).
+Choosing All, Camera & View, HUD & Overlays, General or Hotkeys caused
+`std::__non_rtti_object` / `Access violation - no RTTI data!` in Lamium's
+`BeforeUIRenderEvent` listener, and the page text did not render. Map rendered
+normally. The common failing path was displaying a bound key: the settings
+code used `dynamic_cast` on Bedrock's `InputMappingFactory`, which has no RTTI.
+The cast was removed; bound keyboard keys now use Bedrock's short key-name
+table, while mouse and wheel labels keep their existing formatting. The
+replacement build (`19278c6` plus working-tree changes, DLL SHA-256
+`59BC5A5079753A0D6577661A64C45857857E155F3D447E289432045850D6FD3E`) builds
+and passes LamiumTests, but the maintainer has not yet checked it in game.
+
+## 26.20.7 input-update probe (2026-10-15)
+
+Maintainer-provided runtime log from the probe-only DLL built from the working
+tree at `19278c6` (DLL SHA-256
+`DDAAC8CFA967FD0E3842D2D50979087A303DDBC33C2F1FE70D536D5F736668D8`).
+The client and world details were not included with the excerpt. The
+`ClientInputHandler::updatePlayerState` hook was called roughly 20 times per
+second while idle and remained active while the inventory screen was open
+(inventory transfer and sort log entries occurred between probe samples).
+Every shown sample had `sneaking=false`, `sprinting=false`, `riding=false` and
+`inWater=false`. This confirms the candidate hook is reached in those states,
+but does not establish press/release behavior or the rider/water paths; the
+probe changes no input state.
+
 ## L-115 entity ghost models (2026-10-08)
 
 By the maintainer over about twenty probe and trace builds (`da315e7` to

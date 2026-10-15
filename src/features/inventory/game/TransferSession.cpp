@@ -442,23 +442,16 @@ void TransferSession::tick(ContainerScreenController& controller) {
         destination ? destination->collection + ":" + std::to_string(destination->index) : std::string("auto"),
         destination ? moved : transfer::amount(request.gesture, stack.mCount), static_cast<int>(stack.mCount),
         static_cast<int>(request.gesture), rest.has_value());
-    bool submitted = true;
     try {
         if (destination) {
             SlotData const src(source->collection, source->index);
             SlotData const dst(destination->collection, destination->index);
-            submitted = manager->handlePlaceAmount(src, moved, dst);
+            manager->handlePlaceAmount(src, moved, dst);
         } else controller._handleAutoPlace(transfer::amount(request.gesture, stack.mCount),
                                          source->collection, source->index);
     } catch (...) {
         cancelTransfer(*token);
         throw;
-    }
-    if (!submitted) {
-        cancelTransfer(*token);
-        queued.clear();
-        Runtime::instance().self().getLogger().info("Inventory transfer stopped: vanilla refused a destination");
-        return;
     }
     endTransfer(*token);
     if (rest) queued.push_front(std::move(*rest));

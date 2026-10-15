@@ -22,6 +22,10 @@
 #include "mc/deps/minecraft_renderer/renderer/TexturePtr.h"
 #include "mc/deps/minecraft_renderer/resources/ClientTexture.h"
 #include "mc/deps/minecraft_renderer/resources/ServerTexture.h"
+#include "mc/deps/minecraft_renderer/resources/UIActorOffscreenCaptureDescription.h"
+#include "mc/deps/minecraft_renderer/resources/UIThumbnailMeshOffscreenCaptureDescription.h"
+#include "mc/deps/minecraft_renderer/resources/UIMeshOffscreenCaptureDescription.h"
+#include "mc/deps/minecraft_renderer/resources/UIStructureVolumeOffscreenCaptureDescription.h"
 #include "mc/deps/minecraft_renderer/framebuilder/dragon/RenderMetadata.h"
 #include <atomic>
 #include <cmath>
@@ -92,14 +96,20 @@ bool overlayMesh(mce::MaterialPtr const& material, MeshTexture const& texture) n
         return true;
     } catch (...) { return false; }
 }
+using CaptureDescription = std::variant<
+    std::monostate,
+    UIActorOffscreenCaptureDescription,
+    UIThumbnailMeshOffscreenCaptureDescription,
+    UIMeshOffscreenCaptureDescription,
+    UIStructureVolumeOffscreenCaptureDescription>;
 using MeshRender = void (mce::Mesh::*)(mce::MeshContext&, mce::MaterialPtr const&, MeshTexture const&,
-    uint, uint, OffscreenCaptureDescription const&, mce::IndexBufferContainer const*) const;
+    uint, uint, CaptureDescription const&, mce::IndexBufferContainer const*) const;
 using MetadataMeshRender = void (mce::Mesh::*)(mce::MeshContext&, dragon::RenderMetadata const&,
     mce::MaterialPtr const&, MeshTexture const&, uint, uint, mce::IndexBufferContainer const*) const;
 LL_TYPE_INSTANCE_HOOK(NauseaMeshVisibility, ll::memory::HookPriority::Normal, mce::Mesh,
     static_cast<MeshRender>(&mce::Mesh::renderMesh), void, mce::MeshContext& context,
     mce::MaterialPtr const& material, MeshTexture const& texture, uint startOffset, uint count,
-    OffscreenCaptureDescription const& capture, mce::IndexBufferContainer const* indices) {
+    CaptureDescription const& capture, mce::IndexBufferContainer const* indices) {
     if (overlayMesh(material,texture)) return;
     origin(context,material,texture,startOffset,count,capture,indices);
 }

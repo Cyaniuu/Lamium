@@ -12,6 +12,8 @@
 #include "features/interaction/PermanentSneak.h"
 #include "features/map/Minimap.h"
 #include "features/map/WaypointSession.h"
+#include "mc/client/gui/GuiData.h"
+#include "ui/VanillaHudVisibility.h"
 #include "features/map/WaypointMarkers.h"
 #include "app/Runtime.h"
 #include "ui/HudElement.h"
@@ -159,7 +161,7 @@ void logPlacement(HotbarLookup const& hotbar, std::optional<offhand::Box> const&
 // the bottom-right of the 18x18 cell, one unit lower, with the label's shadow.
 // drawText ignores renderShadow, so the shadow is a darker copy one unit away.
 void slotCount(MinecraftUIRenderContext& context, offhand::Box icon, float unit, int count) {
-    auto const& handle = context.mClient.getMinecraftGame_DEPRECATED().getFontRepository()->getFontFromFontType("default");
+    FontHandle const handle = context.mClient.getFontHandle();
     Bedrock::NotNullNonOwnerPtr<FontHandle const> const fontRef{Bedrock::NonOwnerPointer<FontHandle const>{handle}};
     TextMeasureData const textData{unit, 0.0f, false, false, false, ::ui::TextAlignment::Right};
     CaretMeasureData const caret{-1, false};
@@ -167,8 +169,8 @@ void slotCount(MinecraftUIRenderContext& context, offhand::Box icon, float unit,
     glm::vec2 size = context.getMeasureStrategy().measureText(fontRef, text, 1000, 1000, textData, caret).mSize;
     float right = icon.x + 17 * unit, bottom = icon.y + 18 * unit;
     auto draw = [&](float offset, mce::Color const& color) {
-        context.drawText(handle.getFont(), RectangleArea{right - size.x + offset, right + offset,
-                         bottom - size.y + offset, bottom + offset}, std::string(text), color, 1.0f,
+        context.drawText(handle.getFont(), RectangleArea{right - size.x + offset, bottom - size.y + offset,
+                         right + offset, bottom + offset, true}, std::string(text), color, 1.0f,
                          ::ui::TextAlignment::Right, textData, caret);
     };
     draw(unit, mce::Color{.25f, .25f, .25f, 1.f});
@@ -663,6 +665,7 @@ std::optional<DebugValues> collectDebugValues(IClientInstance& client, std::opti
     value.entities = counts.entities;
     value.chunks = counts.chunks;
     value.particles = counts.particles;
+#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
     auto const& options = client.getOptions();
     value.renderDistance = options.getViewDistanceChunks();
     value.maxRenderDistance = options.getMaxViewDistanceChunksRaw();
@@ -672,6 +675,7 @@ std::optional<DebugValues> collectDebugValues(IClientInstance& client, std::opti
     value.fancySkies = options.getFancySkies();
     value.fullscreen = options.getFullscreen();
     if (int maxFps = options.getDeferredTargetFrameRate(); maxFps > 0) value.maxFps = maxFps;
+#endif
     auto info = collectPlayerInfo(client, {true, true, true, true, true, true, true, true});
     if (info.present) {
         if (info.position) {
@@ -990,7 +994,12 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
     };
     // Vanilla Hide HUD (F1) hides every element; recording and death
     // tracking below keep running (L-107).
-    bool hidden = !preview && context.mClient.getOptions().getHideHud();
+    bool hidden = false;
+#if defined(LAMIUM_SDK_26_20_7) && !defined(LAMIUM_INPUT_UPDATE_PROBE)
+    hidden = !preview && ui::vanillaHudHidden(*context.mClient.getGuiData());
+#elif !defined(LAMIUM_INPUT_UPDATE_PROBE)
+    hidden = !preview && context.mClient.getOptions().getHideHud();
+#endif
     if (settings.debug && !hidden && !preview) {
         // No player, no panel: invented values would read as real ones.
         if (auto values = collectDebugValues(context.mClient, viewRay(settings.targetDistance))) {

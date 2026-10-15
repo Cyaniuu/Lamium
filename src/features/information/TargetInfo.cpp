@@ -122,6 +122,12 @@ TargetIcon entityIcon(IClientInstance& client, std::string const& identifier) {
 // Blocks without an item (portal, fire, ...) draw their own texture; the uv
 // keeps one animation frame instead of the whole vertical strip.
 TargetIcon blockIcon(BlockSource& source, BlockPos const& pos, Block const& block) {
+#if defined(LAMIUM_INPUT_UPDATE_PROBE) || defined(LAMIUM_SDK_26_20_7)
+    (void)source;
+    (void)pos;
+    (void)block;
+    return {};
+#else
     std::string pick;
     short aux = 0;
     try {
@@ -191,6 +197,7 @@ TargetIcon blockIcon(BlockSource& source, BlockPos const& pos, Block const& bloc
     icon.u1 = u1;
     icon.v1 = v1;
     return icon;
+#endif
 }
 // A dropped stack shows the item it holds; its own identifier is
 // "minecraft:item", which names no item of its own.

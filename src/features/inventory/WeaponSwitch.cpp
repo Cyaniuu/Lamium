@@ -126,18 +126,18 @@ void hit(Player const& player, bool result) {
     if (result && client && client->getLocalPlayer() == &player) lastHit = Clock::now();
 }
 LL_TYPE_INSTANCE_HOOK(WeaponAttack, ll::memory::HookPriority::Normal, GameMode,
-    &GameMode::$attack, bool, Actor& entity, Vec3 const& hit) {
+    &GameMode::$attack, bool, Actor& entity) {
     attacking(mPlayer,entity);
-    bool result = origin(entity,hit);
+    bool result = origin(entity);
     weapons::hit(mPlayer,result);
     return result;
 }
 // SurvivalMode overrides attack; choosing twice is harmless (the second
 // call finds the best weapon already held).
 LL_TYPE_INSTANCE_HOOK(WeaponSurvivalAttack, ll::memory::HookPriority::Normal, SurvivalMode,
-    &SurvivalMode::$attack, bool, Actor& entity, Vec3 const& hit) {
+    &SurvivalMode::$attack, bool, Actor& entity) {
     attacking(mPlayer,entity);
-    bool result = origin(entity,hit);
+    bool result = origin(entity);
     weapons::hit(mPlayer,result);
     return result;
 }

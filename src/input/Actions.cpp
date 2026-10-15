@@ -24,8 +24,8 @@
 #include "features/schematic/Selection.h"
 #include "ui/Localization.h"
 #include "mc/client/game/ClientInstance.h"
-#include "mc/client/input/KeyboardRemappingLayout.h"
-#include "mc/client/options/IOptionRegistry.h"
+#include "mc/deps/input/Keyboard.h"
+#include "mc/locale/I18n.h"
 
 namespace lamium {
 namespace {
@@ -103,14 +103,22 @@ void toggleSession(IClientInstance& client, std::string_view feature) {
     else if (feature == "permanentSprint") interaction::sprint::toggle(client);
 }
 std::string bindingChordName(IClientInstance& client, input::Chord const& chord) {
-    auto layout = client.getOptions().getCurrentKeyboardRemapping();
     if (chord.empty()) return ui::translated("unbound");
+    (void)client;
     std::string result;
     for (auto token : chord) {
         if (!result.empty()) result += " + ";
         if (token.device == input::Device::Wheel) result += ui::translated(token.code > 0 ? "wheelUp" : "wheelDown");
         else if (token.device == input::Device::Mouse) result += ui::translated("mouseButton", token.code);
-        else result += layout ? layout->getMappedKeyName(token.code) : std::to_string(token.code);
+        else if (token.code >= 0 && token.code < Keyboard::Count) {
+            auto name = Keyboard::_shortKeyNames()[static_cast<size_t>(token.code)];
+            if (name.empty()) {
+                result += std::to_string(token.code);
+            } else {
+                auto localized = getI18n().get(std::string(name), getI18n().getCurrentLanguage());
+                result += localized.empty() || localized == name ? std::to_string(token.code) : std::move(localized);
+            }
+        } else result += std::to_string(token.code);
     }
     return result;
 }

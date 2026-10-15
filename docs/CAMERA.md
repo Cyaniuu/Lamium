@@ -9,6 +9,13 @@ cancellation rules and limitations; later L-26/L-76/L-77/L-78 entries and
 DESIGN define the current behavior. The SDK/probe sections at the end are
 earlier research, not instructions to replace the working camera path.
 
+The SDK 26.20.7 adaptation temporarily disables Freelook and FreeCamera.
+FreeCamera's movement consumption relied on the removed
+`ClientInputUpdateSystem::extractRawHIDInput` hook, and the SDK no longer
+exposes the perspective option setter used by Freelook. Zoom remains available.
+The detached sessions will stay unavailable until replacement input and
+perspective paths can be validated in game.
+
 ## Freelook camera detachment
 
 L-39 (verified by the maintainer in game 2026-09-27, commit b585411, DLL

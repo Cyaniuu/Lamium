@@ -33,6 +33,12 @@ option("research_trace")
     set_description("Enable bounded diagnostics for research items L-36, L-37, L-40, L-44, L-49 and L-58")
 option_end()
 
+option("input_update_probe")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Build a diagnostic-only input probe with detached cameras, Permanent Sneak/Sprint, offhand attachable filtering, block texture icons and option-dependent HUD details disabled")
+option_end()
+
 option("icon_trace")
     set_default(false)
     set_showmenu(true)
@@ -128,10 +134,15 @@ if not has_config("vs_runtime") then
 end
 
 target("Lamium")
+    -- SDK 26.20.7 removed the raw-input hook and perspective option setter
+    -- used by detached camera sessions.
+    add_defines("LAMIUM_SDK_26_20_7")
+    add_defines("LAMIUM_DISABLE_DETACHED_CAMERAS")
     if has_config("effects_trace") then add_defines("LAMIUM_EFFECTS_TRACE") end
     if has_config("automation_trace") then add_defines("LAMIUM_AUTOMATION_TRACE") end
     if has_config("restock_trace") then add_defines("LAMIUM_RESTOCK_TRACE") end
     if has_config("camera_trace") or has_config("camera_probe") or has_config("camera_position_probe") then add_defines("LAMIUM_CAMERA_TRACE") end
+    if has_config("input_update_probe") then add_defines("LAMIUM_INPUT_UPDATE_PROBE") end
     if has_config("camera_probe") then add_defines("LAMIUM_CAMERA_PROBE") end
     if has_config("camera_position_probe") then add_defines("LAMIUM_CAMERA_POSITION_PROBE") end
     if has_config("shape_trace") then add_defines("LAMIUM_SHAPE_TRACE") end
@@ -219,4 +230,3 @@ target("LamiumNativeTests")
         add_cxflags("/utf-8", "/W4")
         set_toolchains("clang-cl")
     end
-

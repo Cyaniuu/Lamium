@@ -74,16 +74,14 @@ void guard(StrictEntityContext const& entity, AABBShapeComponent const& shape, M
 LL_STATIC_HOOK(EdgeGuardHook, ll::memory::HookPriority::Normal, &MoveCollisionSystem::fetchCollisionShapes, void,
     StrictEntityContext const& entity, AABBShapeComponent const& aabb, MaxAutoStepComponent const& autoStep,
     Optional<CollidableMobNearFlagComponent const> collidableMobNear, MoveRequestComponent& request,
-    Optional<MinecartFlagComponent const> isMinecart,
     ViewT<StrictEntityContext, Include<CollidableMobFlagComponent>, AABBShapeComponent const> const& collidableMobs,
-    ViewT<StrictEntityContext, AABBShapeComponent const, ActorDataFlagComponent const> const& stackableView,
     ViewT<StrictEntityContext, Include<FallingBlockFlagComponent>> const& fallingBlocks, IConstBlockSource const& region,
     LocalSpatialEntityFetcher& fetcher, GetCollisionShapeInterface const& collisionShape,
     std::vector<BlockSourceVisitor::CollisionShape>& tempCollisionShapes,
     std::vector<BlockSourceVisitor::CollisionShape>& scratchCollisionShapes, std::vector<AABB>& tempShapes) {
     try { guard(entity, aabb, request, region, collisionShape); } catch (...) {}
-    origin(entity, aabb, autoStep, collidableMobNear, request, isMinecart, collidableMobs, stackableView, fallingBlocks,
-        region, fetcher, collisionShape, tempCollisionShapes, scratchCollisionShapes, tempShapes);
+    origin(entity, aabb, autoStep, collidableMobNear, request, collidableMobs, fallingBlocks, region, fetcher,
+        collisionShape, tempCollisionShapes, scratchCollisionShapes, tempShapes);
 }
 }
 void start() {

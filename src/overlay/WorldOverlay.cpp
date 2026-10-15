@@ -18,10 +18,8 @@
 #include "mc/client/renderer/BaseActorRenderContext.h"
 #include "mc/client/renderer/Tessellator.h"
 #include "mc/client/renderer/RenderMaterialGroup.h"
-#include "mc/client/renderer/SupplementaryFieldAutoGenerationMode.h"
 #include "mc/client/gui/screens/ScreenContext.h"
 #include "mc/client/game/IClientInstance.h"
-#include "mc/client/options/IOptionRegistry.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/world/level/dimension/Dimension.h"
 #include "mc/world/level/Level.h"
@@ -36,7 +34,6 @@
 #include "mc/deps/minecraft_renderer/renderer/TexturePtr.h"
 #include "mc/deps/minecraft_renderer/resources/ClientTexture.h"
 #include "mc/deps/minecraft_renderer/resources/ServerTexture.h"
-#include "mc/deps/minecraft_renderer/resources/OffscreenCaptureDescription.h"
 #include "mc/common/client/renderer/helpers/MeshHelpers.h"
 #include "mc/deps/renderer/Camera.h"
 #include "mc/deps/renderer/MatrixStack.h"
@@ -128,6 +125,10 @@ struct ShapeMesh {
 };
 } // namespace
 FaceMaterial faceMaterial(IClientInstance& client) {
+#if defined(LAMIUM_INPUT_UPDATE_PROBE) || defined(LAMIUM_SDK_26_20_7)
+    (void)client;
+    return {mce::MaterialPtr(mce::RenderMaterialGroup::common(), HashedString{"lightning"}), 1, false, .13f, false};
+#else
     auto mode = client.getOptions().getGraphicsMode();
     static std::atomic<int> reported{-1};
     if (reported.exchange(static_cast<int>(mode)) != static_cast<int>(mode)) {
@@ -138,11 +139,14 @@ FaceMaterial faceMaterial(IClientInstance& client) {
     }
     if (mode == GraphicsMode::Fancy) {
         mce::MaterialPtr hologram(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"});
-        if (hologram.mRenderMaterialInfoPtr) return {std::move(hologram), 0, true, .28f, false};
+        if (hologram.mRenderMaterialInfoPtr)
+            return {mce::MaterialPtr(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"}), 0, true,
+                    .28f, false};
     }
-    mce::MaterialPtr lightning(mce::RenderMaterialGroup::common(), HashedString{"lightning"});
-    if (mode == GraphicsMode::Simple) return {std::move(lightning), 1, false, .13f, false};
-    return {std::move(lightning), 2, false, .13f, true};
+    if (mode == GraphicsMode::Simple)
+        return {mce::MaterialPtr(mce::RenderMaterialGroup::common(), HashedString{"lightning"}), 1, false, .13f, false};
+    return {mce::MaterialPtr(mce::RenderMaterialGroup::common(), HashedString{"lightning"}), 2, false, .13f, true};
+#endif
 }
 namespace {
 std::map<ShapeId, ShapeMesh> shapeMeshes;
@@ -188,7 +192,8 @@ void buildShapeMesh(ScreenContext& screen, ShapeMesh& mesh, ManagedShape const& 
             // The reverse winding keeps faces visible from inside the shape.
             if (twoSided) for (auto it = corners.rbegin(); it != corners.rend(); ++it) relative(batch, *it);
         }
-        mesh.faces.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium shape faces", SupplementaryFieldAutoGenerationMode{}));
+        mesh.faces.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium shape faces",
+            Tessellator::SupplementaryFieldAutoGenerationMode::None));
         mesh.faceVertices = static_cast<uint32_t>(shape.faces.size()*4*sides);
     }
     if (!shape.lines.empty()) {
@@ -197,7 +202,8 @@ void buildShapeMesh(ScreenContext& screen, ShapeMesh& mesh, ManagedShape const& 
         // Faces carry a faint outline so the block grid stays readable.
         batch.color(r, g, b, faces && !material.strongLines ? .45f : 1.f);
         for (auto const& line : shape.lines) { relative(batch, line.from); relative(batch, line.to); }
-        mesh.lines.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium shape lines", SupplementaryFieldAutoGenerationMode{}));
+        mesh.lines.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium shape lines",
+            Tessellator::SupplementaryFieldAutoGenerationMode::None));
         mesh.lineVertices = static_cast<uint32_t>(shape.lines.size()*2);
     }
 }
@@ -208,7 +214,7 @@ void buildShapeMesh(ScreenContext& screen, ShapeMesh& mesh, ManagedShape const& 
 template <class Draw>
 void withTowardEye(BaseActorRenderContext& context, Cell origin, Draw&& draw, float towardEye = depth::facePull) {
     ScreenContext& screen = context.mScreenContext;
-    Vec3 const camera = context.mImpl->mCameraPosition;
+    Vec3 const camera = context.mCameraPosition;
     auto ref = screen.camera.worldMatrixStack->push(false);
     ref.stack->_isDirty = true;
     glm::vec3 offset{static_cast<float>(origin.x - camera.x), static_cast<float>(origin.y - camera.y),
@@ -225,7 +231,6 @@ void withTowardEye(BaseActorRenderContext& context, Cell origin, Draw&& draw, fl
 }
 void drawShape(BaseActorRenderContext& context, FaceMaterial const& faceMaterial, ShapeId id,
                ManagedShape const& shape, bool draft) {
-    if (!context.mImpl) return;
     ScreenContext& screen = context.mScreenContext;
     auto& mesh = shapeMeshes[id];
     if (mesh.revision != shape.revision || mesh.variant != faceMaterial.variant
@@ -235,16 +240,16 @@ void drawShape(BaseActorRenderContext& context, FaceMaterial const& faceMaterial
     withTowardEye(context, mesh.origin, [&] {
         if (mesh.faces && faceMaterial.material.mRenderMaterialInfoPtr)
             mesh.faces->renderMesh(screen, faceMaterial.material, gsl::span<mce::ClientTexture const*>{}, 0, mesh.faceVertices,
-                OffscreenCaptureDescription{}, nullptr);
+                std::monostate{}, nullptr);
         if (mesh.lines && lineMaterial.mRenderMaterialInfoPtr)
             mesh.lines->renderMesh(screen, lineMaterial, gsl::span<mce::ClientTexture const*>{}, 0, mesh.lineVertices,
-                OffscreenCaptureDescription{}, nullptr);
+                std::monostate{}, nullptr);
     });
 }
 // Per-batch colors so one frame can carry Java-style color coding.
 struct LineBatch { std::span<Line const> lines; float r, g, b, a = 1; };
 void drawLines(BaseActorRenderContext& context, std::span<LineBatch const> batches) {
-    if (batches.empty() || !context.mImpl) return;
+    if (batches.empty()) return;
     ScreenContext& screen = context.mScreenContext;
     Tessellator& shared = screen.tessellator;
     // Own the temporary tessellation state. Never reset or reuse a partially
@@ -254,18 +259,19 @@ void drawLines(BaseActorRenderContext& context, std::span<LineBatch const> batch
     if (!count) return;
     Tessellator batch(shared.mBufferResourceService);
     batch.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(count * 2), false);
-    Vec3 const camera = context.mImpl->mCameraPosition;
+    Vec3 const camera = context.mCameraPosition;
     for (auto const& group : batches) {
         batch.color(group.r, group.g, group.b, group.a);
         for (auto const& line : group.lines) for (auto p : {line.from, line.to})
             batch.vertex(static_cast<float>(p.x - camera.x), static_cast<float>(p.y - camera.y),
                 static_cast<float>(p.z - camera.z));
     }
-    auto mesh = batch.end(Tessellator::UploadMode::Buffered, "Lamium world lines", SupplementaryFieldAutoGenerationMode{});
+    auto mesh = batch.end(Tessellator::UploadMode::Buffered, "Lamium world lines",
+        Tessellator::SupplementaryFieldAutoGenerationMode::None);
     mce::MaterialPtr material(mce::RenderMaterialGroup::common(), HashedString{"debug"});
     if (!material.mRenderMaterialInfoPtr) return;
     mesh.renderMesh(screen, material, gsl::span<mce::ClientTexture const*>{}, 0,
-        static_cast<uint>(count * 2), OffscreenCaptureDescription{}, nullptr);
+        static_cast<uint>(count * 2), std::monostate{}, nullptr);
 }
 void drawLines(BaseActorRenderContext& context, std::span<Line const> lines, bool hitboxes = false) {
     LineBatch single{lines, 1, 1, 1};
@@ -340,7 +346,8 @@ void buildLightMesh(ScreenContext& screen, LightChunk& chunk, Cell origin, Light
                 if (sides == 2) for (auto it = quad.corners.rbegin(); it != quad.corners.rend(); ++it) relative(batch, *it);
             }
         }
-        mesh.emplace(batch.end(Tessellator::UploadMode::Buffered, name, SupplementaryFieldAutoGenerationMode{}));
+        mesh.emplace(batch.end(Tessellator::UploadMode::Buffered, name,
+            Tessellator::SupplementaryFieldAutoGenerationMode::None));
         vertices = static_cast<uint32_t>(quads * 4 * sides);
     };
     build({Group{&always, .88f, .31f, .22f, tint}, Group{&night, 1.f, .76f, .29f, tint}},
@@ -352,16 +359,16 @@ void buildLightMesh(ScreenContext& screen, LightChunk& chunk, Cell origin, Light
         batch.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(lines.size() * 2), false);
         batch.color(1.f, 1.f, 1.f, 1.f);
         for (auto const& line : lines) { relative(batch, line.from); relative(batch, line.to); }
-        chunk.lines.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium light lines", SupplementaryFieldAutoGenerationMode{}));
+        chunk.lines.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium light lines",
+            Tessellator::SupplementaryFieldAutoGenerationMode::None));
         chunk.lineVertices = static_cast<uint32_t>(lines.size() * 2);
     }
 }
 void drawLightOverlay(BaseActorRenderContext& context, IClientInstance& client, LocalPlayer& player,
                       Settings::Overlays const& preferences) {
-    if (!context.mImpl) return;
     // Like Chunk Borders, follow the rendered view while the camera is detached.
     Vec3 position = player.getFeetPos();
-    if (CameraSessions::instance().detachedCameraActive()) position = context.mImpl->mCameraPosition;
+    if (CameraSessions::instance().detachedCameraActive()) position = context.mCameraPosition;
     Cell center{checkedCoordinate(std::floor(position.x)), checkedCoordinate(std::floor(position.y)),
                 checkedCoordinate(std::floor(position.z))};
     int radius = static_cast<int>(preferences.lightRange);
@@ -438,7 +445,7 @@ void drawLightOverlay(BaseActorRenderContext& context, IClientInstance& client, 
             if (!mesh || !material.material.mRenderMaterialInfoPtr) return;
             withTowardEye(context, origin, [&] {
                 mesh->renderMesh(screen, material.material, gsl::span<mce::ClientTexture const*>{}, 0,
-                    vertices, OffscreenCaptureDescription{}, nullptr);
+                    vertices, std::monostate{}, nullptr);
             }, towardEye);
         };
         faces(chunk.tints, chunk.tintVertices, depth::facePull);
@@ -446,7 +453,7 @@ void drawLightOverlay(BaseActorRenderContext& context, IClientInstance& client, 
         if (chunk.lines && lineMaterial.mRenderMaterialInfoPtr)
             withTowardEye(context, origin, [&] {
                 chunk.lines->renderMesh(screen, lineMaterial, gsl::span<mce::ClientTexture const*>{}, 0,
-                    chunk.lineVertices, OffscreenCaptureDescription{}, nullptr);
+                    chunk.lineVertices, std::monostate{}, nullptr);
             }, depth::linePull);
     }
 }
@@ -516,8 +523,8 @@ LL_TYPE_INSTANCE_HOOK(WorldLines, ll::memory::HookPriority::Normal, LevelRendere
             Point center{position.x, position.y, position.z};
             // A detached camera looks from away from the body; center the
             // borders on the rendered view instead of the player chunk.
-            if (context.mImpl && CameraSessions::instance().detachedCameraActive()) {
-                Vec3 const camera = context.mImpl->mCameraPosition;
+            if (CameraSessions::instance().detachedCameraActive()) {
+                Vec3 const camera = context.mCameraPosition;
                 center = {camera.x, camera.y, camera.z};
             }
             thread_local ChunkBorderCache borders;
@@ -529,8 +536,8 @@ LL_TYPE_INSTANCE_HOOK(WorldLines, ll::memory::HookPriority::Normal, LevelRendere
                                                {groups.teal, chunkTeal[0], chunkTeal[1], chunkTeal[2]}}};
             drawLines(context, colored);
         }
-        if (preferences.hitboxes && context.mImpl) {
-            Vec3 const camera = context.mImpl->mCameraPosition;
+        if (preferences.hitboxes) {
+            Vec3 const camera = context.mCameraPosition;
             int const dimensionId = static_cast<int>(player->getDimensionId());
             if (eyeDimension != dimensionId) { eyeTracks.clear(); eyeDimension = dimensionId; }
             uint64_t const tick = player->getLevel().getCurrentTick().tickID;

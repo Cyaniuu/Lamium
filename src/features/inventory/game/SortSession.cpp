@@ -296,11 +296,9 @@ void SortSession::tick(ContainerScreenController& controller) {
         cancel();
         return;
     }
-    bool success = false;
     try {
-        success = op.kind == sort::OpKind::Move
-            ? manager->handlePlaceAmount(source, op.count, destination)
-            : manager->handleSwap(source, destination);
+        if (op.kind == sort::OpKind::Move) manager->handlePlaceAmount(source, op.count, destination);
+        else manager->handleSwap(source, destination);
     } catch (...) {
         // An exceptional transfer may have invalidated the game's request
         // manager. Discard capture without inspecting its pending batch.
@@ -309,11 +307,6 @@ void SortSession::tick(ContainerScreenController& controller) {
     }
     if (pending != currentJob) return;
     endTransfer(*job.transfer);
-    if (!success) {
-        logger.warn("Sort stopped: vanilla refused a transfer");
-        cancel();
-        return;
-    }
     job.state = std::move(expected);
     job.waiting = true;
 }

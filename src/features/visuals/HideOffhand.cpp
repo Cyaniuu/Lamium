@@ -4,7 +4,9 @@
 #include "ll/api/service/TargetedBedrock.h"
 #include "mc/client/game/ClientInstance.h"
 #include "mc/client/model/models/DataDrivenModel.h"
+#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
 #include "mc/client/options/IOptionRegistry.h"
+#endif
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/client/renderer/game/ItemInHandRenderer.h"
 #include "mc/world/actor/animation/AttachableSlotIndex.h"
@@ -33,10 +35,16 @@ LL_TYPE_INSTANCE_HOOK(OffhandVisibility, ll::memory::HookPriority::Normal, ItemI
 // player's offhand slot only while the view is first person, so other
 // players and the third-person views keep it.
 bool skipAttachable(AttachableSlotIndex slot, Actor& actor) {
+#if defined(LAMIUM_INPUT_UPDATE_PROBE) || defined(LAMIUM_SDK_26_20_7)
+    (void)slot;
+    (void)actor;
+    return false;
+#else
     if (slot != AttachableSlotIndex::OffhandItem || !hidden()) return false;
     auto client = ll::service::getClientInstance();
     if (!client || client->getLocalPlayer() != &actor) return false;
     try { return client->getOptions().getPlayerViewPerspective() == 0; } catch (...) { return false; }
+#endif
 }
 LL_TYPE_INSTANCE_HOOK(OffhandAttachable, ll::memory::HookPriority::Normal, DataDrivenModel,
     &DataDrivenModel::renderAttachable, void, ItemStack const& item, AttachableSlotIndex const& slot,

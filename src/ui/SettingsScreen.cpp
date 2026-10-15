@@ -34,6 +34,7 @@
 #include "ui/SearchQuery.h"
 #include "ui/NumberInput.h"
 #include "ui/Widgets.h"
+#include "ui/VanillaHudVisibility.h"
 #include "overlay/ShapeSession.h"
 #include "ui/Localization.h"
 #include "app/Runtime.h"
@@ -1515,7 +1516,11 @@ void drawShapesBody(MinecraftUIRenderContext& context, ShapesLayout const& l, gl
     bool shortFooter = l.docked || displayed.shortFooter;
     // Simple graphics draw faces poorly (additive, order dependent); say so
     // rather than tuning that mode further.
+#if defined(LAMIUM_INPUT_UPDATE_PROBE) || defined(LAMIUM_SDK_26_20_7)
+    bool simple = false;
+#else
     bool simple = client && client->getOptions().getGraphicsMode() == GraphicsMode::Simple;
+#endif
     bool warn = !error.empty() || simple;
     std::string text = !error.empty() ? error : simple && shortFooter ? translated("shape.simpleWarning") : shapeDescription(definition);
     if (shortFooter) label(context,textLeft,l.footerTop+3,available,std::move(text),warn ? palette::warning : palette::text);
@@ -3869,10 +3874,17 @@ void render(ll::event::UIRenderEvent& event) {
         if (gameplayScreen(current.getScreenName()) && hudView(view)) {
             auto const& settings = Runtime::instance().preferences().information;
             information::drawHud(context,size.x,size.y,settings);
+#if defined(LAMIUM_SDK_26_20_7) && !defined(LAMIUM_INPUT_UPDATE_PROBE)
+            if (!vanillaHudHidden(*current.getGuiData())) {
+                information::drawOffhandSlot(context,view,settings);
+                information::drawSaturation(context,view,settings);
+            }
+#elif !defined(LAMIUM_INPUT_UPDATE_PROBE)
             if (!current.getOptions().getHideHud()) {
                 information::drawOffhandSlot(context,view,settings);
                 information::drawSaturation(context,view,settings);
             }
+#endif
 #ifdef LAMIUM_HUNGER_TRACE
             information::traceHunger(context,view);
 #endif

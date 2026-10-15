@@ -402,11 +402,11 @@ LL_TYPE_INSTANCE_HOOK(CaptureHud, ll::memory::HookPriority::Normal, ClientInstan
     auto result = origin(); reset(); hud = result; return result;
 }
 LL_TYPE_INSTANCE_HOOK(Use, ll::memory::HookPriority::Normal, GameMode,
-    &GameMode::$useItem, bool, ItemStack& item, HandSlot hand) {
+    &GameMode::$useItem, bool, ItemStack& item) {
     // The secondary callback after placement must fail without another count
     // change. A successful/new use cancels the old observation instead.
     auto previous = pending;
-    bool secondary = previous && !previous->callbackActive && hand == HandSlot::Mainhand
+    bool secondary = previous && !previous->callbackActive
         && previous->evidence.beginSecondaryCallback(tickSerial);
     std::optional<RestockSnapshot> beforeSecondary;
     if (secondary) try {
@@ -417,7 +417,7 @@ LL_TYPE_INSTANCE_HOOK(Use, ll::memory::HookPriority::Normal, GameMode,
     if (secondary) {
         trace("secondary-callback");
         bool result;
-        try { result = origin(item,hand); }
+        try { result = origin(item); }
         catch (...) { cancel(); throw; }
         try {
             auto* player = eligible(); auto controller = previous->controller.lock();
@@ -427,15 +427,15 @@ LL_TYPE_INSTANCE_HOOK(Use, ll::memory::HookPriority::Normal, GameMode,
         } catch (...) { failure(); }
         return result;
     }
-    auto op = beginUse(mPlayer,hand,false);
-    try { bool result = origin(item,hand); finishUse(op,restockUseStarted(result,op && op->evidence.timed)); return result; }
+    auto op = beginUse(mPlayer,HandSlot::Mainhand,false);
+    try { bool result = origin(item); finishUse(op,restockUseStarted(result,op && op->evidence.timed)); return result; }
     catch (...) { if (op && pending == op) cancel(); throw; }
 }
 LL_TYPE_INSTANCE_HOOK(UseOn, ll::memory::HookPriority::Normal, GameMode,
     &GameMode::$useItemOn, InteractionResult, ItemStack& item, BlockPos const& pos, uchar face,
-    Vec3 const& hit, HandSlot hand, Block const* target, bool first) {
-    auto op = beginUse(mPlayer,hand,true);
-    try { auto result = origin(item,pos,face,hit,hand,target,first); finishUse(op,result.mSuccess); return result; }
+    Vec3 const& hit, Block const* target, bool first) {
+    auto op = beginUse(mPlayer,HandSlot::Mainhand,true);
+    try { auto result = origin(item,pos,face,hit,target,first); finishUse(op,result.mSuccess); return result; }
     catch (...) { if (op && pending == op) cancel(); throw; }
 }
 LL_TYPE_INSTANCE_HOOK(StartUse, ll::memory::HookPriority::Normal, Player,
@@ -492,7 +492,7 @@ LL_TYPE_INSTANCE_HOOK(ComplexSend, ll::memory::HookPriority::Normal, LocalPlayer
             bool sameSlot = false;
             if (transaction && transaction->mType == ComplexInventoryTransaction::Type::ItemUseTransaction) {
                 auto const& use = static_cast<ItemUseInventoryTransaction const&>(*transaction);
-                sameSlot = use.mHand == HandSlot::Mainhand && use.mSlot == op->before.selected;
+                sameSlot = use.mSlot == op->before.selected;
                 if (use.mActionType == ItemUseInventoryTransaction::ActionType::Place) send = RestockUseSend::Place;
                 if (use.mActionType == ItemUseInventoryTransaction::ActionType::Use) send = RestockUseSend::Use;
             } else if (transaction && transaction->mType == ComplexInventoryTransaction::Type::ItemReleaseTransaction) {

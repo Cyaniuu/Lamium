@@ -33,7 +33,7 @@ namespace {
 constexpr mce::Color white{1.f,1.f,1.f,1.f};
 mce::Color color(Rgb value) { return {value.r, value.g, value.b, 1.f}; }
 Font& defaultFont(MinecraftUIRenderContext& context) {
-    return context.mClient.getMinecraftGame_DEPRECATED().getFontRepository()->getFontFromFontType("default").getFont();
+    return context.mClient.getMinecraftGame_DEPRECATED().getUIFontHandle()->getFont();
 }
 }
 float textWidth(MinecraftUIRenderContext& context, std::string_view text) {
@@ -45,7 +45,7 @@ float textWidthScaled(MinecraftUIRenderContext& context, std::string_view text, 
 }
 void fill(MinecraftUIRenderContext& context, float x, float y, float width, float height, Rgb value, float opacity) {
     if (width <= 0 || height <= 0) return;
-    context.fillRectangle(RectangleArea{x,x+width,y,y+height}, color(value), std::clamp(opacity,0.f,1.f));
+    context.fillRectangle(RectangleArea{x,y,x+width,y+height,true}, color(value), std::clamp(opacity,0.f,1.f));
     context.flushImages(white,1,HashedString{"ui_fillColor"});
 }
 void frame(MinecraftUIRenderContext& context, float x, float y, float width, float height, Rgb value, float opacity) {
@@ -69,7 +69,7 @@ void drawRun(MinecraftUIRenderContext& context, Font& font, float x, float y, fl
              ::ui::TextAlignment align, float size) {
     TextMeasureData const measure{size, 0.0f, false, false, false, align};
     CaretMeasureData const caret{-1, false};
-    context.drawText(font, RectangleArea{x,x+width,y,y+14*size}, std::move(text), color(value), size, align, measure, caret);
+    context.drawText(font, RectangleArea{x,y,x+width,y+14*size,true}, std::move(text), color(value), size, align, measure, caret);
 }
 }
 float boxTextInset() { return japaneseLocale() ? 0.f : 1.f; }

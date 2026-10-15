@@ -1,11 +1,12 @@
 #include "features/research/ResearchTrace.h"
-#ifdef LAMIUM_RESEARCH_TRACE
+#if defined(LAMIUM_RESEARCH_TRACE) || defined(LAMIUM_INPUT_UPDATE_PROBE)
 #include "app/Runtime.h"
 #include "features/camera/CameraSessions.h"
 #include "ll/api/memory/Hook.h"
 #include "ll/api/service/TargetedBedrock.h"
 #include "mc/client/game/ClientInstance.h"
 #include "mc/client/game/IClientInstance.h"
+#include "mc/client/input/ClientInputHandler.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/client/renderer/game/LevelRendererPlayer.h"
 #include "mc/deps/ecs/gamerefs_entity/EntityContext.h"
@@ -13,8 +14,11 @@
 #include "mc/client/entity/systems/ClientInputUpdateSystem.h"
 #include "mc/deps/core/math/Vec2.h"
 #include "mc/entity/components/MoveInputComponent.h"
+#include "mc/entity/components/MobEffectsComponent.h"
 #include "mc/entity/components/RawMoveInputComponent.h"
 #include "mc/entity/components/SneakingComponent.h"
+#include "mc/deps/vanilla_components/ActorDataFlagComponent.h"
+#include "mc/deps/vanilla_components/MovementAbilitiesComponent.h"
 #include "mc/entity/systems/move_collision_system/MoveCollisionSystem.h"
 #include "mc/deps/vanilla_components/MoveRequestComponent.h"
 #include "mc/deps/ecs/gamerefs_entity/EntityRegistry.h"
@@ -31,6 +35,7 @@
 #include <format>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <tuple>
 
@@ -82,6 +87,38 @@ struct Sample {
 Sample previous[2];
 Clock::time_point lastSample[2]{Clock::now() - std::chrono::hours(1), Clock::now() - std::chrono::hours(1)};
 unsigned sampleLines = 0;
+#ifdef LAMIUM_INPUT_UPDATE_PROBE
+struct InputSample {
+    bool sneaking, sprinting, riding, inWater;
+    bool operator==(InputSample const&) const = default;
+};
+unsigned inputUpdateCalls = 0;
+unsigned inputUpdateLines = 0;
+std::optional<InputSample> previousInputSample;
+void sampleInputUpdate(MoveInputComponent const& input, bool riding, bool inWater) {
+    ++inputUpdateCalls;
+    InputSample current{
+        input.checkFlag(MoveInputComponent::Flag::Sneaking),
+        input.checkFlag(MoveInputComponent::Flag::Sprinting),
+        riding,
+        inWater
+    };
+    if (previousInputSample == current || inputUpdateLines >= 24) return;
+    previousInputSample = current;
+    ++inputUpdateLines;
+    log("input-update probe calls={} sneaking={} sprinting={} riding={} inWater={}",
+        inputUpdateCalls, current.sneaking, current.sprinting, current.riding, current.inWater);
+}
+LL_TYPE_INSTANCE_HOOK(InputUpdateProbeHook, ll::memory::HookPriority::Low, ClientInputHandler,
+    &ClientInputHandler::updatePlayerState, void,
+    gsl::not_null<IClientInstance const*> client, MovementAbilitiesComponent const& abilities,
+    MobEffectsComponent const& effects, ActorDataFlagComponent const& flags,
+    MoveInputComponent& input, bool riding, bool inWater) {
+    origin(client, abilities, effects, flags, input, riding, inWater);
+    try { sampleInputUpdate(input, riding, inWater); } catch (...) {}
+}
+bool inputProbeInstalled = false;
+#endif
 void sample(LevelRendererPlayer& renderer, bool variable, float fov) {
     auto& client = static_cast<IClientInstance&>(renderer.mClientInstance);
     auto* player = client.getLocalPlayer();
@@ -120,15 +157,33 @@ LL_TYPE_INSTANCE_HOOK(FovSampleHook, ll::memory::HookPriority::Low, LevelRendere
 bool fovInstalled = false;
 }
 void start() {
+#ifdef LAMIUM_INPUT_UPDATE_PROBE
+    inputProbeInstalled = InputUpdateProbeHook::hook(true) == 0;
+    if (!inputProbeInstalled) {
+        stop();
+        throw std::runtime_error("Could not install input update probe");
+    }
+#endif
     fovInstalled = FovSampleHook::hook(true) == 0;
     if (!fovInstalled) {
         stop();
         throw std::runtime_error("Could not install research diagnostics");
     }
+#ifdef LAMIUM_INPUT_UPDATE_PROBE
+    Runtime::instance().self().getLogger().warn(
+        "Input update probe enabled; detached cameras, Permanent Sneak/Sprint, offhand attachable filtering, block texture icons, and option-dependent HUD details are disabled");
+#else
     Runtime::instance().self().getLogger().warn("Research diagnostics enabled (culler and FOV samples only)");
+#endif
 }
 void stop() {
     if (fovInstalled && FovSampleHook::unhook(true)) fovInstalled = false;
+#ifdef LAMIUM_INPUT_UPDATE_PROBE
+    if (inputProbeInstalled && InputUpdateProbeHook::unhook(true)) {
+        inputProbeInstalled = false;
+        log("input-update probe stopped after {} calls", inputUpdateCalls);
+    }
+#endif
 }
 }
 #else

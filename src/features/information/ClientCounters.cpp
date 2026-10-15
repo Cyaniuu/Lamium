@@ -37,7 +37,7 @@ ClientCounters read(IClientInstance& client) {
         if (auto* renderer = client.getLevelRenderer()) {
             std::uint64_t total = 0;
             auto& engine = renderer->getParticleEngine();
-            for (auto n : static_cast<uint const(&)[105]>(engine.particleCount)) total += n;
+            for (auto n : engine.particleCount) total += n;
             if (auto systems = static_cast<Bedrock::NonOwnerPointer<ParticleSystemEngine> const&>(renderer->mParticleSystemEngine))
                 total += static_cast<std::uint64_t const&>(systems->mTotalParticleCount);
             out.particles = clamped(total);

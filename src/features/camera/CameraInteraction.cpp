@@ -27,43 +27,43 @@ LL_TYPE_INSTANCE_HOOK(LookFinishBreak, ll::memory::HookPriority::Highest, GameMo
     return origin(pos, face);
 }
 LL_TYPE_INSTANCE_HOOK(LookStartBuild, ll::memory::HookPriority::Highest, GameMode,
-    &GameMode::$startBuildBlock, void, BlockPos const& pos, uchar face, HandSlot hand) {
-    if (!blocked(mPlayer)) origin(pos, face, hand);
+    &GameMode::$startBuildBlock, void, BlockPos const& pos, uchar face) {
+    if (!blocked(mPlayer)) origin(pos, face);
 }
 LL_TYPE_INSTANCE_HOOK(LookContinueBuild, ll::memory::HookPriority::Highest, GameMode,
-    &GameMode::$continueBuildBlock, void, BlockPos const& pos, uchar face, HandSlot hand) {
-    if (!blocked(mPlayer)) origin(pos, face, hand);
+    &GameMode::$continueBuildBlock, void, BlockPos const& pos, uchar face) {
+    if (!blocked(mPlayer)) origin(pos, face);
 }
 LL_TYPE_INSTANCE_HOOK(LookBuild, ll::memory::HookPriority::Highest, GameMode,
-    &GameMode::$buildBlock, bool, BlockPos const& pos, uchar face, HandSlot hand, bool simTick) {
+    &GameMode::$buildBlock, bool, BlockPos const& pos, uchar face, bool simTick) {
     if (blocked(mPlayer)) return false;
-    return origin(pos, face, hand, simTick);
+    return origin(pos, face, simTick);
 }
 LL_TYPE_INSTANCE_HOOK(LookUse, ll::memory::HookPriority::Highest, GameMode,
-    &GameMode::$useItem, bool, ItemStack& item, HandSlot hand) {
+    &GameMode::$useItem, bool, ItemStack& item) {
     if (blocked(mPlayer)) return false;
-    return origin(item, hand);
+    return origin(item);
 }
 LL_TYPE_INSTANCE_HOOK(LookUseAttack, ll::memory::HookPriority::Highest, GameMode,
-    &GameMode::$useItemAsAttack, bool, ItemStack& item, Vec3 const& direction, HandSlot hand) {
+    &GameMode::$useItemAsAttack, bool, ItemStack& item, Vec3 const& direction) {
     if (blocked(mPlayer)) return false;
-    return origin(item, direction, hand);
+    return origin(item, direction);
 }
 LL_TYPE_INSTANCE_HOOK(LookUseOn, ll::memory::HookPriority::Highest, GameMode,
     &GameMode::$useItemOn, InteractionResult, ItemStack& item, BlockPos const& pos, uchar face,
-    Vec3 const& hit, HandSlot hand, Block const* target, bool first) {
+    Vec3 const& hit, Block const* target, bool first) {
     if (blocked(mPlayer)) return InteractionResult{false, false};
-    return origin(item, pos, face, hit, hand, target, first);
+    return origin(item, pos, face, hit, target, first);
 }
 LL_TYPE_INSTANCE_HOOK(LookInteract, ll::memory::HookPriority::Highest, GameMode,
-    &GameMode::$interact, bool, Actor& entity, Vec3 const& location, HandSlot hand) {
+    &GameMode::$interact, bool, Actor& entity, Vec3 const& location) {
     if (blocked(mPlayer)) return false;
-    return origin(entity, location, hand);
+    return origin(entity, location);
 }
 LL_TYPE_INSTANCE_HOOK(LookAttack, ll::memory::HookPriority::Highest, GameMode,
-    &GameMode::$attack, bool, Actor& entity, Vec3 const& hit) {
+    &GameMode::$attack, bool, Actor& entity) {
     if (blocked(mPlayer)) return false;
-    return origin(entity, hit);
+    return origin(entity);
 }
 // SurvivalMode overrides the GameMode virtuals above with its own bodies, so
 // the base hooks never fire in survival mode. Mirror the same predicate for
@@ -79,39 +79,39 @@ LL_TYPE_INSTANCE_HOOK(SurvivalFinishBreak, ll::memory::HookPriority::Highest, Su
     return origin(pos, face);
 }
 LL_TYPE_INSTANCE_HOOK(SurvivalStartBuild, ll::memory::HookPriority::Highest, SurvivalMode,
-    &SurvivalMode::$startBuildBlock, void, BlockPos const& pos, uchar face, HandSlot hand) {
-    if (!blocked(mPlayer)) origin(pos, face, hand);
+    &SurvivalMode::$startBuildBlock, void, BlockPos const& pos, uchar face) {
+    if (!blocked(mPlayer)) origin(pos, face);
 }
 LL_TYPE_INSTANCE_HOOK(SurvivalBuild, ll::memory::HookPriority::Highest, SurvivalMode,
-    &SurvivalMode::$buildBlock, bool, BlockPos const& pos, uchar face, HandSlot hand, bool simTick) {
+    &SurvivalMode::$buildBlock, bool, BlockPos const& pos, uchar face, bool simTick) {
     if (blocked(mPlayer)) return false;
-    return origin(pos, face, hand, simTick);
+    return origin(pos, face, simTick);
 }
 LL_TYPE_INSTANCE_HOOK(SurvivalUse, ll::memory::HookPriority::Highest, SurvivalMode,
-    &SurvivalMode::$useItem, bool, ItemStack& item, HandSlot hand) {
+    &SurvivalMode::$useItem, bool, ItemStack& item) {
     if (blocked(mPlayer)) return false;
-    return origin(item, hand);
+    return origin(item);
 }
 LL_TYPE_INSTANCE_HOOK(SurvivalUseAttack, ll::memory::HookPriority::Highest, SurvivalMode,
-    &SurvivalMode::$useItemAsAttack, bool, ItemStack& item, Vec3 const& direction, HandSlot hand) {
+    &SurvivalMode::$useItemAsAttack, bool, ItemStack& item, Vec3 const& direction) {
     if (blocked(mPlayer)) return false;
-    return origin(item, direction, hand);
+    return origin(item, direction);
 }
 LL_TYPE_INSTANCE_HOOK(SurvivalUseOn, ll::memory::HookPriority::Highest, SurvivalMode,
     &SurvivalMode::$useItemOn, InteractionResult, ItemStack& item, BlockPos const& pos, uchar face,
-    Vec3 const& hit, HandSlot hand, Block const* target, bool first) {
+    Vec3 const& hit, Block const* target, bool first) {
     if (blocked(mPlayer)) return InteractionResult{false, false};
-    return origin(item, pos, face, hit, hand, target, first);
+    return origin(item, pos, face, hit, target, first);
 }
 LL_TYPE_INSTANCE_HOOK(SurvivalInteract, ll::memory::HookPriority::Highest, SurvivalMode,
-    &SurvivalMode::$interact, bool, Actor& entity, Vec3 const& location, HandSlot hand) {
+    &SurvivalMode::$interact, bool, Actor& entity, Vec3 const& location) {
     if (blocked(mPlayer)) return false;
-    return origin(entity, location, hand);
+    return origin(entity, location);
 }
 LL_TYPE_INSTANCE_HOOK(SurvivalAttack, ll::memory::HookPriority::Highest, SurvivalMode,
-    &SurvivalMode::$attack, bool, Actor& entity, Vec3 const& hit) {
+    &SurvivalMode::$attack, bool, Actor& entity) {
     if (blocked(mPlayer)) return false;
-    return origin(entity, hit);
+    return origin(entity);
 }
 // Stop/release operations must still reach vanilla to clean up existing actions.
 struct Hook { int (*install)(bool); bool (*remove)(bool); bool installed = false; };

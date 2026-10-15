@@ -43,12 +43,15 @@
 #include "ll/api/mod/RegisterHelper.h"
 #include "ll/api/io/FileSink.h"
 #include "ll/api/io/PatternFormatter.h"
+#if __has_include("ll/api/io/RotatePolicy.h")
 #include "ll/api/io/RotatePolicy.h"
+#endif
 
 namespace lamium {
 Runtime& Runtime::instance() { static Runtime value; return value; }
 bool Runtime::load() {
     try {
+#if __has_include("ll/api/io/RotatePolicy.h")
         ll::io::RotatePolicy rotation;
         rotation.maxFileSize = 4 * 1024 * 1024;
         rotation.maxFiles = 7;
@@ -57,6 +60,11 @@ bool Runtime::load() {
         auto sink = std::make_shared<ll::io::FileSink>(
             mod.getModDir() / "logs" / "lamium.log",
             ll::makePolymorphic<ll::io::PatternFormatter>("[{3:.3%F %T.} {2}][{1}] {0}", false), rotation);
+#else
+        auto sink = std::make_shared<ll::io::FileSink>(
+            mod.getModDir() / "logs" / "lamium.log",
+            ll::makePolymorphic<ll::io::PatternFormatter>("[{3:.3%F %T.} {2}][{1}] {0}", false));
+#endif
         sink->setFlushLevel(ll::io::LogLevel::Info);
         mod.getLogger().addSink(std::move(sink));
     } catch (std::exception const& error) {

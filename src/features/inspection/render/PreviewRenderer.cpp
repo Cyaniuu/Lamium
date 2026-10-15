@@ -65,7 +65,11 @@ constexpr float kCountFontSize     = 1.0f;
 constexpr float kCountOffsetY      = 1.0f;
 constexpr int   kCountMeasureLimit = 1000; // no wrapping/clipping for a few digits
 
-RectangleArea toArea(Rect const& r) { return RectangleArea{r.x0, r.x1, r.y0, r.y1}; }
+RectangleArea toArea(Rect const& r) {
+    RectangleArea area;
+    area.set(r.x0, r.y0, r.x1, r.y1);
+    return area;
+}
 
 } // namespace
 
@@ -187,7 +191,7 @@ void PreviewRenderer::render(
     // 4. Stack counts, laid out like vanilla's stack_count_label: the font a
     //    "default" UI label resolves to (locale and font overrides included),
     //    measured by the UI's own strategy, anchored bottom-right of the cell.
-    auto const& fontHandle = client.getMinecraftGame_DEPRECATED().getFontRepository()->getFontFromFontType("default");
+    FontHandle  fontHandle = client.getFontHandle();
     Font&       font       = fontHandle.getFont();
     Bedrock::NotNullNonOwnerPtr<FontHandle const> const fontRef{Bedrock::NonOwnerPointer<FontHandle const>{fontHandle}};
     TextMeasureData const  textData{kCountFontSize, 0.0f, true, false, false, ::ui::TextAlignment::Right};

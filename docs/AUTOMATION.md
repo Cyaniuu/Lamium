@@ -283,6 +283,24 @@ state. Common input invalidation cancels its session intent; dimension changes
 and runtime disable also cancel. The checks above establish basic local-world
 consumption of the copied bit, not the remaining movement or multiplayer cases.
 
+The 26.20.7 SDK no longer declares `ClientInputUpdateSystem::extractRawHIDInput`.
+Permanent Sneak/Sprint now wrap `ClientInputHandler::updatePlayerState`, pass a
+transient `MoveInputComponent` copy with the requested raw input flags to
+vanilla, and leave the stored input untouched. This is a compile-time adapter,
+not yet verified in game; activation, physical-key overlap, and vanilla sprint
+eligibility still need checking on 26.20.7.
+
+The probe-only build option, `xmake f --input_update_probe=y`, traces the same
+method after its original call, including movement flags and riding/water
+state. Runtime traces confirmed repeated calls while idle and with the
+inventory open, and later samples included changing movement/riding/water
+states. This verifies the method is reached and those values can change, but
+does not establish the correct injection boundary for every input or prove the
+Permanent Sneak/Sprint adapter works. To keep idle time from consuming the
+trace limit, probe builds log the initial state and state changes only, up to
+24 lines. The diagnostic build also bypasses other APIs absent from this SDK;
+do not use it as a normal gameplay build.
+
 Use the vanilla local input path rather than constructing attack/use packets
 or modifying authoritative actor state directly. The SDK exposes separate
 `MoveInputState`, `MoveInputComponent`, and local sneak state; selecting the

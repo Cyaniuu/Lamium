@@ -22,7 +22,6 @@
 #include "mc/client/gui/FontRepository.h"
 #include "mc/client/renderer/BaseActorRenderContext.h"
 #include "mc/client/renderer/RenderMaterialGroup.h"
-#include "mc/client/renderer/SupplementaryFieldAutoGenerationMode.h"
 #include "mc/client/renderer/Tessellator.h"
 #include "mc/client/renderer/block/BlockTessellator.h"
 #include "mc/client/renderer/blockactor/BlockActorRenderDispatcher.h"
@@ -36,7 +35,6 @@
 #include "mc/deps/minecraft_renderer/renderer/Mesh.h"
 #include "mc/deps/minecraft_renderer/renderer/TexturePtr.h"
 #include "mc/deps/minecraft_renderer/resources/ClientTexture.h"
-#include "mc/deps/minecraft_renderer/resources/OffscreenCaptureDescription.h"
 #include "mc/deps/minecraft_renderer/resources/ServerTexture.h"
 #include "mc/deps/nbt/CompoundTag.h"
 #include "mc/deps/renderer/Camera.h"
@@ -535,7 +533,8 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
         for (auto& p : batch.mMeshData->mPositions.get()) p -= out.origin;
         finishColors(batch, .62f, .85f, 1.f);
         out.faceVertices = batch.mCount;
-        out.faces.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium schematic ghosts", SupplementaryFieldAutoGenerationMode{}));
+        out.faces.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium schematic ghosts",
+            Tessellator::SupplementaryFieldAutoGenerationMode::None));
     }
     if (!marks.empty()) {
         // Mistakes mark whole cells. Where marks of one color touch, the
@@ -576,7 +575,8 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
         }
         out.markVertices = vertices;
         // Ended either way, so the tessellator never stays open.
-        auto mesh = quads.end(Tessellator::UploadMode::Buffered, "Lamium schematic mistakes", SupplementaryFieldAutoGenerationMode{});
+        auto mesh = quads.end(Tessellator::UploadMode::Buffered, "Lamium schematic mistakes",
+            Tessellator::SupplementaryFieldAutoGenerationMode::None);
         if (vertices) out.marks.emplace(std::move(mesh));
     }
     if (!outlines.empty()) {
@@ -590,7 +590,8 @@ void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& 
             for (auto [i, j] : edges) { lines.vertex(c[i].x, c[i].y, c[i].z); lines.vertex(c[j].x, c[j].y, c[j].z); }
         }
         out.lineVertices = static_cast<std::uint32_t>(outlines.size() * 24);
-        out.lines.emplace(lines.end(Tessellator::UploadMode::Buffered, "Lamium schematic outlines", SupplementaryFieldAutoGenerationMode{}));
+        out.lines.emplace(lines.end(Tessellator::UploadMode::Buffered, "Lamium schematic outlines",
+            Tessellator::SupplementaryFieldAutoGenerationMode::None));
     }
 }
 
@@ -1043,8 +1044,8 @@ void drawSelection(ScreenContext& screen, Vec3 const& camera, int dimension) {
     }
     translated(screen, glm::vec3{0}, [&] {
         if (faceMaterial.mRenderMaterialInfoPtr && faces.mCount)
-            MeshHelpers::renderMeshImmediately(screen, faces, faceMaterial, OffscreenCaptureDescription{});
-        MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
+            MeshHelpers::renderMeshImmediately(screen, faces, faceMaterial, std::monostate{});
+        MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, std::monostate{});
     });
 }
 
@@ -1088,8 +1089,8 @@ void drawWaitingColumns(ScreenContext& screen, Vec3 const& camera) {
         for (int k = 3; k >= 0; --k) faces.vertex(floor[k].x, floor[k].y + .02f, floor[k].z);
     }
     translated(screen, glm::vec3{0}, [&] {
-        if (faceMaterial.mRenderMaterialInfoPtr) MeshHelpers::renderMeshImmediately(screen, faces, faceMaterial, OffscreenCaptureDescription{});
-        MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
+        if (faceMaterial.mRenderMaterialInfoPtr) MeshHelpers::renderMeshImmediately(screen, faces, faceMaterial, std::monostate{});
+        MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, std::monostate{});
     });
 }
 
@@ -1134,7 +1135,7 @@ void drawPlacementFrames(ScreenContext& screen, session::Snapshot const& snapsho
     }
     if (!count) return;
     translated(screen, glm::vec3{0}, [&] {
-        MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
+        MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, std::monostate{});
     });
 }
 // Missing entities: their game model with part outlines (L-115), or a dashed
@@ -1192,7 +1193,7 @@ void drawEntities(ScreenContext& screen, IClientInstance& client, session::Snaps
             }
         }
     }
-    translated(screen, glm::vec3{0}, [&] { MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{}); });
+    translated(screen, glm::vec3{0}, [&] { MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, std::monostate{}); });
 }
 
 // The names of missing entities like a named entity's tag: a dark plate with
@@ -1207,8 +1208,9 @@ void drawNameTags(ScreenContext& screen, IClientInstance& client, BlockSource& r
     auto view = *screen.camera.viewMatrixStack->top()._m;
     // The view's rotation rows are the camera axes.
     glm::vec3 right{view[0][0], view[1][0], view[2][0]}, up{view[0][1], view[1][1], view[2][1]};
-    glm::vec3 across = glm::cross(right, -up);
-    auto& font = client.getMinecraftGame_DEPRECATED().getFontRepository()->getFontFromFontType("default").getFont();
+    glm::vec3 across{view[0][2], view[1][2], view[2][2]};
+    auto fontHandle = client.getFontHandle();
+    auto& font = fontHandle.getFont();
     auto background = BaseActorRenderer::NAME_TAG_BACKGROUND_COLOR();
     for (auto const& [at, name] : labels) {
         // Not through walls: a block between the camera and the tag hides it.
@@ -1231,10 +1233,10 @@ void drawNameTags(ScreenContext& screen, IClientInstance& client, BlockSource& r
         glm::vec2 quad[4]{{x0, y0}, {x0, y1}, {x1, y1}, {x1, y0}};
         for (int k = 0; k < 4; ++k) plate.vertex(quad[k].x, quad[k].y, .01f);
         for (int k = 3; k >= 0; --k) plate.vertex(quad[k].x, quad[k].y, .01f);
-        MeshHelpers::renderMeshImmediately(screen, plate, backgroundMaterial, OffscreenCaptureDescription{});
+        MeshHelpers::renderMeshImmediately(screen, plate, backgroundMaterial, std::monostate{});
         mce::Color white{1.f, 1.f, 1.f, 1.f}, black{0.f, 0.f, 0.f, 1.f};
         font.drawCached(screen, name, -width / 2, 0, white, false, false, false, &textMaterial, -1, false, 0, white, black, 0, 0,
-            OffscreenCaptureDescription{}, false);
+            std::monostate{}, false);
         ref.stack->_isDirty = true;
         if (ref.stack->sortOrigin->has_value() && (ref.stack->stack->size() - 1) <= ref.stack->sortOrigin->value())
             ref.stack->sortOrigin->reset();
@@ -1291,7 +1293,7 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
         builtDimension = dimension;
     }
     ScreenContext& screen = context.mScreenContext;
-    Vec3 const camera = context.mImpl->mCameraPosition;
+    Vec3 const camera = context.mCameraPosition;
     auto& region = player.getDimensionBlockSource();
     // When the camera moves to another cell, rebuild the sections around
     // the old and the new cells (which ghosts are drawn whole changes).
@@ -1463,23 +1465,24 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
                 full.block->mValue = 15;
                 ActorShaderManager::setupShaderParameters(screen, region, full, glm::vec4{1, 1, 1, 1}, 1.f, true,
                     *lightTexture, Vec2{1, 1}, Vec4{0, 0, 1, 1});
-                section.faces->renderMesh(screen, faces, texture, 0, section.faceVertices, OffscreenCaptureDescription{}, nullptr);
+                section.faces->renderMesh(screen, faces, texture, 0, section.faceVertices, std::monostate{}, nullptr);
             }
             if (section.marks && markMaterial.mRenderMaterialInfoPtr)
                 section.marks->renderMesh(screen, markMaterial, gsl::span<mce::ClientTexture const*>{}, 0, section.markVertices,
-                    OffscreenCaptureDescription{}, nullptr);
+                    std::monostate{}, nullptr);
             if (section.lines && lineMaterial.mRenderMaterialInfoPtr)
                 section.lines->renderMesh(screen, lineMaterial, gsl::span<mce::ClientTexture const*>{}, 0, section.lineVertices,
-                    OffscreenCaptureDescription{}, nullptr);
+                    std::monostate{}, nullptr);
         });
         for (auto const& [pos, block] : section.entities) {
+            auto type = block->getBlockEntityType();
+            if (type == BlockActorType::Undefined) continue;
             auto& actor = actors[{pos.x, pos.y, pos.z, block}];
-            if (!actor) actor = VanillaBlockActorFactory::createBlockActor(pos, block->getBlockType());
-            auto* component = *actor ? (*actor)->_getRenderComponent() : nullptr;
-            if (!component) continue;
+            if (!actor) actor = VanillaBlockActorFactory::createBlockActor(type, pos, block->getBlockType());
+            if (!actor || !*actor) continue;
             Vec3 renderPos{static_cast<float>(pos.x - camera.x), static_cast<float>(pos.y - camera.y), static_cast<float>(pos.z - camera.z)};
             mce::MaterialPtr none(mce::RenderMaterialGroup::common(), HashedString{"lamium_no_forced_material"});
-            dispatcher.render(context, region, *component, *block, renderPos, pos, false, none, nullptr, 0, std::nullopt);
+            dispatcher.render(context, region, **actor, *block, renderPos, pos, false, none, nullptr, 0, std::nullopt);
         }
     }
     drawPlacementFrames(screen, snapshot, dimension, camera);
@@ -1521,7 +1524,7 @@ void drawPoint(ScreenContext& screen, Vec3 const& camera) {
             for (int k = 0; k < 4; ++k) faces.vertex(quad[k].x, quad[k].y, quad[k].z);
             for (int k = 3; k >= 0; --k) faces.vertex(quad[k].x, quad[k].y, quad[k].z);
         }
-        translated(screen, offset, [&] { MeshHelpers::renderMeshImmediately(screen, faces, faceMaterial, OffscreenCaptureDescription{}); });
+        translated(screen, offset, [&] { MeshHelpers::renderMeshImmediately(screen, faces, faceMaterial, std::monostate{}); });
     }
     if (!lineMaterial.mRenderMaterialInfoPtr) return;
     Tessellator lines(screen.tessellator.mBufferResourceService);
@@ -1533,7 +1536,7 @@ void drawPoint(ScreenContext& screen, Vec3 const& camera) {
     for (auto [i, j] : edges) { lines.vertex(c[i].x, c[i].y, c[i].z); lines.vertex(c[j].x, c[j].y, c[j].z); }
     lines.vertex(.5f, 1.f, .5f);
     lines.vertex(.5f, beam, .5f);
-    translated(screen, offset, [&] { MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{}); });
+    translated(screen, offset, [&] { MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, std::monostate{}); });
 }
 
 LL_TYPE_INSTANCE_HOOK(GhostPass, ll::memory::HookPriority::Normal, LevelRendererPlayer,
@@ -1541,7 +1544,7 @@ LL_TYPE_INSTANCE_HOOK(GhostPass, ll::memory::HookPriority::Normal, LevelRenderer
     origin(context);
     auto& runtime = Runtime::instance();
     if (releaseRequested.exchange(false)) { release(); stopSave(); }
-    if (!runtime.enabled() || !runtime.snapshot()->schematic.enabled || !context.mImpl) {
+    if (!runtime.enabled() || !runtime.snapshot()->schematic.enabled) {
         stopSave();
         if (!sections.empty() || !resolved.empty()) release();
         return;
@@ -1551,10 +1554,10 @@ LL_TYPE_INSTANCE_HOOK(GhostPass, ll::memory::HookPriority::Normal, LevelRenderer
     if (!player) return;
     try {
         drawPlacements(context, client, *player);
-        drawPoint(context.mScreenContext, context.mImpl->mCameraPosition);
+        drawPoint(context.mScreenContext, context.mCameraPosition);
         stepSave(player->getDimensionBlockSource(), *player);
-        drawSelection(context.mScreenContext, context.mImpl->mCameraPosition, static_cast<int>(player->getDimensionId()));
-        drawWaitingColumns(context.mScreenContext, context.mImpl->mCameraPosition);
+        drawSelection(context.mScreenContext, context.mCameraPosition, static_cast<int>(player->getDimensionId()));
+        drawWaitingColumns(context.mScreenContext, context.mCameraPosition);
     } catch (std::exception const& error) {
         static bool reported = false;
         if (!std::exchange(reported, true)) log(std::string("drawing failed: ") + error.what());

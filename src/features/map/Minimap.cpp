@@ -484,22 +484,17 @@ bool upload(IClientInstance& client, int pixels) {
     auto start = now();
     state.textureSize = pixels;
     mce::Image image(pixels, pixels, mce::ImageFormat::RGBA8Unorm, mce::ImageUsage::SRGB);
-    image.mAlphaUsage = mce::AlphaUsage::Transparent;
     image.setRawImage(mce::Blob(reinterpret_cast<std::uint8_t const*>(state.image.data()),
                                 state.image.size() * sizeof(std::uint32_t)));
     cg::ImageBuffer buffer(std::move(image));
     if (state.uploaded) {
-        if (!group->updateTextureInPlace(textureLocation(), std::move(buffer))) {
-            state.uploaded = false;
-            state.diagnostics.log("in-place update refused; uploading again");
-            return false;
-        }
-    } else {
-        group->uploadTexture(textureLocation(), std::move(buffer));
-        state.uploaded = true;
-        if (!state.everUploaded) state.diagnostics.log(std::format("texture uploaded in {:.2f} ms", (now() - start) * 1000));
-        state.everUploaded = true;
+        group->unloadTexture(textureLocation(), false);
+        state.uploaded = false;
     }
+    group->uploadTexture(textureLocation(), std::move(buffer));
+    state.uploaded = true;
+    if (!state.everUploaded) state.diagnostics.log(std::format("texture uploaded in {:.2f} ms", (now() - start) * 1000));
+    state.everUploaded = true;
     state.diagnostics.uploadSeconds += now() - start;
     ++state.diagnostics.uploads;
     return true;

@@ -129,10 +129,10 @@ LL_STATIC_HOOK(HandleBuild, ll::memory::HookPriority::Low, &ClientInputCallbacks
 
 #define USE_HOOK(Name, Mode) \
 LL_TYPE_INSTANCE_HOOK(Name, ll::memory::HookPriority::Low, Mode, \
-    &Mode::$useItem, bool, ItemStack& item, HandSlot hand) { \
+    &Mode::$useItem, bool, ItemStack& item) { \
     bool const observe = local(&mPlayer); \
-    if (observe) log(useBudget, #Mode "-use-enter", static_cast<int>(hand)); \
-    bool result = origin(item, hand); \
+    if (observe) log(useBudget, #Mode "-use-enter", 0); \
+    bool result = origin(item); \
     if (observe) log(useBudget, #Mode "-use-exit", result); \
     return result; \
 }
@@ -143,10 +143,10 @@ USE_HOOK(SurvivalUse, SurvivalMode)
 #define ON_HOOK(Name, Mode) \
 LL_TYPE_INSTANCE_HOOK(Name, ll::memory::HookPriority::Low, Mode, \
     &Mode::$useItemOn, InteractionResult, ItemStack& item, BlockPos const& pos, uchar face, \
-    Vec3 const& hit, HandSlot hand, Block const* target, bool first) { \
+    Vec3 const& hit, Block const* target, bool first) { \
     bool const observe = local(&mPlayer); \
-    if (observe) log(onBudget, #Mode "-on-enter", static_cast<int>(hand)); \
-    auto result = origin(item, pos, face, hit, hand, target, first); \
+    if (observe) log(onBudget, #Mode "-on-enter", 0); \
+    auto result = origin(item, pos, face, hit, target, first); \
     if (observe) log(onBudget, #Mode "-on-exit", static_cast<bool>(result.mSuccess)); \
     return result; \
 }
@@ -156,10 +156,10 @@ ON_HOOK(SurvivalUseOn, SurvivalMode)
 
 #define INTERACT_HOOK(Name, Mode) \
 LL_TYPE_INSTANCE_HOOK(Name, ll::memory::HookPriority::Low, Mode, \
-    &Mode::$interact, bool, Actor& actor, Vec3 const& location, HandSlot hand) { \
+    &Mode::$interact, bool, Actor& actor, Vec3 const& location) { \
     bool const observe = local(&mPlayer); \
-    if (observe) log(interactBudget, #Mode "-interact-enter", static_cast<int>(hand)); \
-    bool result = origin(actor, location, hand); \
+    if (observe) log(interactBudget, #Mode "-interact-enter", 0); \
+    bool result = origin(actor, location); \
     if (observe) log(interactBudget, #Mode "-interact-exit", result); \
     return result; \
 }

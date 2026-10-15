@@ -1,6 +1,7 @@
 #include "features/inspection/preview/BundlePreviewProvider.h"
 
 #include "mc/client/gui/screens/controllers/BundleHelper.h"
+#include "mc/client/gui/screens/controllers/ContainerScreenController.h"
 #include "mc/deps/nbt/CompoundTag.h"
 #include "mc/deps/nbt/ListTag.h"
 #include "mc/deps/nbt/Tag.h"
@@ -90,7 +91,7 @@ BundlePreviewProvider::extract(ItemStackBase const& item, ContainerScreenControl
         source = "dynamic-container";
 #endif
         for (int index = 0; index < BundleGrid::kMaxSlots; ++index) {
-            ItemStack const& stack = BundleHelper::getItemStackFromBundle(*controller, item, index);
+            ItemStack const& stack = controller->mBundleHelper->getItemStackFromBundle(*controller, item, index);
             if (stack.isNull()) {
                 continue;
             }

@@ -79,7 +79,6 @@ bool upload(IClientInstance& client, Outline& outline) {
     }
     auto pixels = sat::outline(storage.data(), width, height, outline.color, outline.part);
     mce::Image result(width, height, mce::ImageFormat::RGBA8Unorm, mce::ImageUsage::SRGB);
-    result.mAlphaUsage = mce::AlphaUsage::Transparent;
     result.setRawImage(mce::Blob(reinterpret_cast<std::uint8_t const*>(pixels.data()), pixels.size() * sizeof(std::uint32_t)));
     group->uploadTexture(*outline.location, cg::ImageBuffer(std::move(result)));
     outline.uploaded = true;

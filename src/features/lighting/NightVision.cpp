@@ -14,6 +14,7 @@ LL_TYPE_INSTANCE_HOOK(BaseLightHook, ll::memory::HookPriority::Normal, BaseLight
     NightVision::instance().apply(data.get());
     return data;
 }
+#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
 LL_TYPE_INSTANCE_HOOK(NetherLightHook, ll::memory::HookPriority::Normal, NetherLightTextureImageBuilder,
     &NetherLightTextureImageBuilder::$createBaseLightTextureData, std::unique_ptr<BaseLightData>,
     IClientInstance* client, BaseLightData const& previous) {
@@ -21,8 +22,11 @@ LL_TYPE_INSTANCE_HOOK(NetherLightHook, ll::memory::HookPriority::Normal, NetherL
     NightVision::instance().apply(data.get());
     return data;
 }
+#endif
 bool baseInstalled = false;
+#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
 bool netherInstalled = false;
+#endif
 }
 NightVision& NightVision::instance() { static NightVision instance; return instance; }
 bool NightVision::start() {
@@ -30,8 +34,10 @@ bool NightVision::start() {
     try {
         if (!baseInstalled) baseInstalled = BaseLightHook::hook() == 0;
         if (!baseInstalled) { stop(); return false; }
+#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
         if (!netherInstalled) netherInstalled = NetherLightHook::hook() == 0;
         if (!netherInstalled) { stop(); return false; }
+#endif
         running = true;
         return true;
     } catch (std::exception const& error) {
@@ -42,9 +48,15 @@ bool NightVision::start() {
 }
 void NightVision::stop() {
     running = false;
+#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
     if (netherInstalled && NetherLightHook::unhook()) netherInstalled = false;
+#endif
     if (baseInstalled && BaseLightHook::unhook()) baseInstalled = false;
-    if (baseInstalled || netherInstalled)
+    if (baseInstalled
+#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
+        || netherInstalled
+#endif
+    )
         Runtime::instance().self().getLogger().error("Could not remove a lighting hook");
 }
 void NightVision::apply(BaseLightData* data) const {

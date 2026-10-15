@@ -6,14 +6,16 @@
 #include "ui/SettingsScreen.h"
 #include "ll/api/memory/Hook.h"
 #include "ll/api/service/TargetedBedrock.h"
-#include "mc/client/entity/systems/ClientInputUpdateSystem.h"
-#include "mc/client/input/ClientMoveInputHandler.h"
+#include "mc/client/input/ClientInputHandler.h"
 #include "mc/client/game/IClientInstance.h"
 #include "mc/client/game/ClientInstance.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/client/renderer/game/LevelRendererPlayer.h"
 #include "mc/entity/components/MoveInputComponent.h"
-#include "mc/entity/components/RawMoveInputComponent.h"
+#include "mc/entity/components/MobEffectsComponent.h"
+#include "mc/deps/vanilla_components/ActorDataFlagComponent.h"
+#include "mc/deps/vanilla_components/MovementAbilitiesComponent.h"
+#include "mc/input/MoveInputState.h"
 #include <stdexcept>
 
 namespace lamium::interaction::sneak {
@@ -30,38 +32,38 @@ bool eligible(IClientInstance& client) {
         && !player->isSleeping() && !player->getVehicle()
         && !CameraSessions::instance().blocksLookInteraction(*player);
 }
-LL_STATIC_HOOK(ExtractSneakInput, ll::memory::HookPriority::Normal,
-    &ClientInputUpdateSystem::extractRawHIDInput, void,
-    MovementAbilitiesComponent const& abilities, MoveInputComponent const& input,
-    ActorDataFlagComponent const& flags, RawMoveInputComponent& raw,
-    Optional<SneakingComponent const> sneaking, Optional<WasInWaterFlagComponent const> water) {
-    auto client = ll::service::getClientInstance();
-    if (intent.active() && observed < 1000) ++observed;
+LL_TYPE_INSTANCE_HOOK(ApplyAutomationInput, ll::memory::HookPriority::Normal, ClientInputHandler,
+    &ClientInputHandler::updatePlayerState, void,
+    gsl::not_null<IClientInstance const*> client, MovementAbilitiesComponent const& abilities,
+    MobEffectsComponent const& effects, ActorDataFlagComponent const& flags,
+    MoveInputComponent& input, bool riding, bool inWater) {
+    auto current = ll::service::getClientInstance();
+    if (!current || &*current != client.get()) {
+        origin(client, abilities, effects, flags, input, riding, inWater);
+        return;
+    }
+    if ((intent.active() || sprintIntent.active()) && observed < 1000) ++observed;
     // Sneak and Sprint survive menus and focus changes; they only pause while
     // ineligible and end on death (dimension change and world exit cancel
     // them elsewhere).
-    auto* player = client ? client->getLocalPlayer() : nullptr;
+    auto* player = current ? current->getLocalPlayer() : nullptr;
     if (player && !player->isAlive()) { intent.cancel(); sprintIntent.cancel(); }
-    bool ready = client && eligible(*client);
+    bool ready = current && eligible(*current);
     bool sneak = intent.active() && ready;
     bool sprint = sprintIntent.active() && ready;
-    if ((!sneak && !sprint) || !client
-        || ClientMoveInputHandler::getMoveInput(*client) != &input) {
-        origin(abilities, input, flags, raw, sneaking, water);
+    if (!sneak && !sprint) {
+        origin(client, abilities, effects, flags, input, riding, inWater);
         return;
     }
-    // Feed vanilla a transient copy. Never leave synthetic bits in the user's
-    // stored HID state, so cancelling cannot clear a physically held key.
     auto augmented = input;
     if (sneak) {
         if (matched < 1000) ++matched;
         augmented.mRawInputState->mFlagValues->set(static_cast<size_t>(MoveInputState::Flag::SneakDown));
     }
-    // Vanilla still decides whether sprinting starts (forward input, food, blindness).
     if (sprint)
         augmented.mRawInputState->mFlagValues->set(static_cast<size_t>(MoveInputState::Flag::SprintDown));
-    origin(abilities, augmented, flags, raw, sneaking, water);
-    if (rawSneak < 1000 && raw.mRawInput->mFlagValues->test(static_cast<size_t>(MoveInputState::Flag::SneakDown))) ++rawSneak;
+    origin(client, abilities, effects, flags, augmented, riding, inWater);
+    if (sneak && augmented.checkFlag(MoveInputComponent::Flag::Sneaking) && rawSneak < 1000) ++rawSneak;
 }
 LL_TYPE_INSTANCE_HOOK(SneakDimensionChange, ll::memory::HookPriority::Normal, LevelRendererPlayer,
     &LevelRendererPlayer::$onWillChangeDimension, void, Player& player) {
@@ -72,20 +74,30 @@ LL_TYPE_INSTANCE_HOOK(SneakDimensionChange, ll::memory::HookPriority::Normal, Le
 }
 void cancel() {
     if (intent.active()) Runtime::instance().self().getLogger().info(
-        "Permanent Sneak stopped: extractionCalls={} localMatches={} rawSneakSamples={}", observed, matched, rawSneak);
+        "Permanent Sneak stopped: updateCalls={} injectedUpdates={} sneakingSamples={}", observed, matched, rawSneak);
     intent.cancel();
 }
 void toggle(IClientInstance&) {
+#ifdef LAMIUM_INPUT_UPDATE_PROBE
+    Runtime::instance().self().getLogger().warn("Permanent Sneak is disabled in the input update probe build");
+#else
     if (intent.active()) cancel();
     else { observed = matched = rawSneak = 0; intent.arm(); }
     Runtime::instance().self().getLogger().info("Permanent Sneak: {}", intent.active() ? "on" : "off");
+#endif
 }
 bool active(IClientInstance& client) { return intent.active() && eligible(client); }
-bool armed() { return intent.active(); }
+bool armed() {
+#ifdef LAMIUM_INPUT_UPDATE_PROBE
+    return false;
+#else
+    return intent.active();
+#endif
+}
 void start() {
     try {
         if (!installed) {
-            if (ExtractSneakInput::hook(true) != 0) throw std::runtime_error("Could not install sneak input hook");
+            if (ApplyAutomationInput::hook(true) != 0) throw std::runtime_error("Could not install automation input hook");
             installed = true;
         }
         if (!dimensionInstalled) {
@@ -98,7 +110,7 @@ void stop() {
     cancel();
     sprint::cancel();
     if (dimensionInstalled && SneakDimensionChange::unhook(true)) dimensionInstalled = false;
-    if (installed && ExtractSneakInput::unhook(true)) installed = false;
+    if (installed && ApplyAutomationInput::unhook(true)) installed = false;
 }
 }
 namespace lamium::interaction::sprint {
@@ -107,10 +119,27 @@ void cancel() {
     sneak::sprintIntent.cancel();
 }
 void toggle(IClientInstance&) {
+#ifdef LAMIUM_INPUT_UPDATE_PROBE
+    Runtime::instance().self().getLogger().warn("Permanent Sprint is disabled in the input update probe build");
+#else
     if (sneak::sprintIntent.active()) cancel();
     else sneak::sprintIntent.arm();
     Runtime::instance().self().getLogger().info("Permanent Sprint: {}", sneak::sprintIntent.active() ? "on" : "off");
+#endif
 }
-bool active(IClientInstance& client) { return sneak::sprintIntent.active() && sneak::eligible(client); }
-bool armed() { return sneak::sprintIntent.active(); }
+bool active(IClientInstance& client) {
+#ifdef LAMIUM_INPUT_UPDATE_PROBE
+    (void)client;
+    return false;
+#else
+    return sneak::sprintIntent.active() && sneak::eligible(client);
+#endif
+}
+bool armed() {
+#ifdef LAMIUM_INPUT_UPDATE_PROBE
+    return false;
+#else
+    return sneak::sprintIntent.active();
+#endif
+}
 }

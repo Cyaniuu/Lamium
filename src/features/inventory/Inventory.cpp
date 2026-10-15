@@ -9,7 +9,7 @@
 #include "features/inventory/game/InventoryMove.h"
 #include "app/Runtime.h"
 #include "mc/client/game/IClientInstance.h"
-#include "mc/client/multiplayer/ClientLevel.h"
+#include "mc/client/multiplayer/MultiPlayerLevel.h"
 #include "mc/world/item/registry/CreativeItemRegistry.h"
 #include "mc/world/item/registry/ItemRegistryRef.h"
 

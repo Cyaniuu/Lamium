@@ -24,7 +24,6 @@
 #include "mc/deps/minecraft_renderer/renderer/TexturePtr.h"
 #include "mc/deps/minecraft_renderer/resources/ClientTexture.h"
 #include "mc/deps/minecraft_renderer/resources/ServerTexture.h"
-#include "mc/deps/minecraft_renderer/resources/OffscreenCaptureDescription.h"
 #include "mc/deps/renderer/Camera.h"
 #include "mc/deps/renderer/MatrixStack.h"
 #include "mc/world/level/BlockPos.h"
@@ -177,7 +176,7 @@ void drawOutlines(ScreenContext& screen, glm::vec3 offset, std::vector<Outline> 
         for (int i = 0; i < 8; ++i) c[i] = {i & 1 ? high.x : low.x, i & 2 ? high.y : low.y, i & 4 ? high.z : low.z};
         for (auto [a, z] : edges) { lines.vertex(c[a].x, c[a].y, c[a].z); lines.vertex(c[z].x, c[z].y, c[z].z); }
     }
-    translated(screen, offset, [&] { MeshHelpers::renderMeshImmediately(screen, lines, material, OffscreenCaptureDescription{}); });
+    translated(screen, offset, [&] { MeshHelpers::renderMeshImmediately(screen, lines, material, std::monostate{}); });
 }
 
 // The in-world mesh may lack light UVs when a block has none; the shader reads them.
@@ -344,7 +343,7 @@ void draw(BaseActorRenderContext& context, ScreenContext& screen, IClientInstanc
     sortQuads(batch, eye);
     translated(screen, -eye, [&] {
         setupLight(screen, client, region);
-        MeshHelpers::renderMeshImmediately(screen, batch, material, atlas, OffscreenCaptureDescription{});
+        MeshHelpers::renderMeshImmediately(screen, batch, material, atlas, std::monostate{});
     });
 }
 

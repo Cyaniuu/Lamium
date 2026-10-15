@@ -264,8 +264,14 @@ LL_TYPE_INSTANCE_HOOK(EffectResolvedFogTrace, ll::memory::HookPriority::Normal, 
     } catch (...) {}
 }
 using MeshTexture = std::variant<std::monostate, mce::TexturePtr, mce::ClientTexture, mce::ServerTexture>;
+using CaptureDescription = std::variant<
+    std::monostate,
+    UIActorOffscreenCaptureDescription,
+    UIThumbnailMeshOffscreenCaptureDescription,
+    UIMeshOffscreenCaptureDescription,
+    UIStructureVolumeOffscreenCaptureDescription>;
 using MeshRender = void (mce::Mesh::*)(mce::MeshContext&, mce::MaterialPtr const&, MeshTexture const&,
-    uint, uint, OffscreenCaptureDescription const&, mce::IndexBufferContainer const*) const;
+    uint, uint, CaptureDescription const&, mce::IndexBufferContainer const*) const;
 using MetadataMeshRender = void (mce::Mesh::*)(mce::MeshContext&, dragon::RenderMetadata const&,
     mce::MaterialPtr const&, MeshTexture const&, uint, uint, mce::IndexBufferContainer const*) const;
 void meshRoute(mce::Mesh const& mesh, mce::MaterialPtr const& material, MeshTexture const& texture, uint count,
@@ -312,7 +318,7 @@ void meshRoute(mce::Mesh const& mesh, mce::MaterialPtr const& material, MeshText
 LL_TYPE_INSTANCE_HOOK(EffectMeshTrace, ll::memory::HookPriority::Normal, mce::Mesh,
     static_cast<MeshRender>(&mce::Mesh::renderMesh), void, mce::MeshContext& context,
     mce::MaterialPtr const& material, MeshTexture const& texture, uint startOffset, uint count,
-    OffscreenCaptureDescription const& capture, mce::IndexBufferContainer const* indices) {
+    CaptureDescription const& capture, mce::IndexBufferContainer const* indices) {
     meshRoute(*this, material, texture, count);
     origin(context, material, texture, startOffset, count, capture, indices);
 }
@@ -324,12 +330,12 @@ LL_TYPE_INSTANCE_HOOK(EffectMetadataMeshTrace, ll::memory::HookPriority::Normal,
     origin(context, metadata, material, texture, startOffset, count, indices);
 }
 using SpanMeshRender = void (mce::Mesh::*)(mce::MeshContext&, mce::MaterialPtr const&,
-    gsl::span<mce::ClientTexture const*>, uint, uint, OffscreenCaptureDescription const&,
+    gsl::span<mce::ClientTexture const*>, uint, uint, CaptureDescription const&,
     mce::IndexBufferContainer const*) const;
 LL_TYPE_INSTANCE_HOOK(EffectSpanMeshTrace, ll::memory::HookPriority::Normal, mce::Mesh,
     static_cast<SpanMeshRender>(&mce::Mesh::renderMesh), void, mce::MeshContext& context,
     mce::MaterialPtr const& material, gsl::span<mce::ClientTexture const*> textures, uint startOffset, uint count,
-    OffscreenCaptureDescription const& capture, mce::IndexBufferContainer const* indices) {
+    CaptureDescription const& capture, mce::IndexBufferContainer const* indices) {
     entry(64,"spanMesh");
     meshRoute(*this,material,MeshTexture{},count,textures.size());
     origin(context,material,textures,startOffset,count,capture,indices);

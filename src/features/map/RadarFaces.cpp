@@ -51,10 +51,9 @@ bool upload(IClientInstance& client) {
     auto group = client.getTextureGroup();
     if (!group) return false;
     mce::Image image(faceAtlasSide, faceAtlasSide, mce::ImageFormat::RGBA8Unorm, mce::ImageUsage::SRGB);
-    image.mAlphaUsage = mce::AlphaUsage::Transparent;
     image.setRawImage(mce::Blob(reinterpret_cast<std::uint8_t const*>(atlas.data()), atlas.size() * sizeof(std::uint32_t)));
     cg::ImageBuffer buffer(std::move(image));
-    if (atlasUploaded) return group->updateTextureInPlace(atlasLocation(), std::move(buffer));
+    if (atlasUploaded) group->unloadTexture(atlasLocation(), false);
     group->uploadTexture(atlasLocation(), std::move(buffer));
     return true;
 }

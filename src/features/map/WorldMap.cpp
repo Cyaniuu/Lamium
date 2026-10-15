@@ -91,10 +91,9 @@ bool upload(IClientInstance& client, ResourceLocation const& location, std::vect
     auto group = client.getTextureGroup();
     if (!group) return false;
     mce::Image image(side, side, mce::ImageFormat::RGBA8Unorm, mce::ImageUsage::SRGB);
-    image.mAlphaUsage = mce::AlphaUsage::Transparent;
     image.setRawImage(mce::Blob(reinterpret_cast<std::uint8_t const*>(pixels.data()), pixels.size() * sizeof(std::uint32_t)));
     cg::ImageBuffer buffer(std::move(image));
-    if (replace) return group->updateTextureInPlace(location, std::move(buffer));
+    if (replace) group->unloadTexture(location, false);
     group->uploadTexture(location, std::move(buffer));
     return true;
 }

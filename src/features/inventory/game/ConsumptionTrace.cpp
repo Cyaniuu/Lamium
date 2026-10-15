@@ -56,29 +56,29 @@ bool sameItem(ItemStack const& before, ItemStack const& after) {
 }
 
 LL_TYPE_INSTANCE_HOOK(UseItem, ll::memory::HookPriority::Low, GameMode,
-    &GameMode::$useItem, bool, ItemStack& item, HandSlot hand) {
+    &GameMode::$useItem, bool, ItemStack& item) {
     ItemStack before = item;
     int heldBefore = -1;
     auto* player = localPlayer();
     bool local = isLocal(&mPlayer);
     if (local) heldBefore = heldCount(*player);
-    bool result = origin(item, hand);
-    if (local) log("cb=use-item hand={} item={}->{} itemChanged={} held={}->{} result={}",
-        static_cast<int>(hand), static_cast<int>(before.mCount), static_cast<int>(item.mCount),
+    bool result = origin(item);
+    if (local) log("cb=use-item hand=0 item={}->{} itemChanged={} held={}->{} result={}",
+        static_cast<int>(before.mCount), static_cast<int>(item.mCount),
         !sameItem(before, item), heldBefore, heldCount(*player), result);
     return result;
 }
 LL_TYPE_INSTANCE_HOOK(UseItemOn, ll::memory::HookPriority::Low, GameMode,
     &GameMode::$useItemOn, InteractionResult, ItemStack& item, BlockPos const& pos, uchar face,
-    Vec3 const& hit, HandSlot hand, Block const* target, bool first) {
+    Vec3 const& hit, Block const* target, bool first) {
     ItemStack before = item;
     int heldBefore = -1;
     auto* player = localPlayer();
     bool local = isLocal(&mPlayer);
     if (local) heldBefore = heldCount(*player);
-    auto result = origin(item, pos, face, hit, hand, target, first);
-    if (local) log("cb=use-item-on hand={} item={}->{} itemChanged={} held={}->{} success={}",
-        static_cast<int>(hand), static_cast<int>(before.mCount), static_cast<int>(item.mCount),
+    auto result = origin(item, pos, face, hit, target, first);
+    if (local) log("cb=use-item-on hand=0 item={}->{} itemChanged={} held={}->{} success={}",
+        static_cast<int>(before.mCount), static_cast<int>(item.mCount),
         !sameItem(before, item), heldBefore, heldCount(*player), static_cast<bool>(result.mSuccess));
     return result;
 }

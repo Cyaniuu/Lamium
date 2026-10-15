@@ -20,7 +20,7 @@ namespace {
 bool empty(ItemStack const& stack) { return stack.isNull() || !stack.mItem || stack.mCount <= 0; }
 // The item's own offhand flag (allow_off_hand). The inventory screen's
 // validation is not exported for direct use.
-bool fitsOffhand(ItemStack const& item) { return item.mItem->mAllowOffhand == Item::OffhandAllowed::Yes; }
+bool fitsOffhand(ItemStack const& item) { return item.mItem->mAllowOffhand; }
 // Items sent to the Fake Offhand slot, logged once per kind so the flag can be
 // checked against the game's own offhand rule (L-94, not yet checked).
 std::set<std::string> logged;

@@ -34,6 +34,12 @@ parts and hiding during FreeCamera on `775c8c0` (2026-10-07).
 The minimap and other Lamium HUD elements also follow F1 (L-107); map
 recording and death tracking continue while hidden (checked on `18e2cc8`).
 
+26.20.7 compatibility is compile-checked only: `TextureGroup` no longer
+declares `updateTextureInPlace`, so replacement map textures currently unload
+and upload again. Texture continuity and upload cost have not been rechecked
+in game. The input-update diagnostic build also bypasses the old Hide HUD
+lookup; do not use it to validate marker visibility.
+
 ## Technical entry points
 
 - `src/features/map/Minimap.cpp`: bounded scanning, terrain colors, cave

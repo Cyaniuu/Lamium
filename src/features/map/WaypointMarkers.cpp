@@ -4,6 +4,7 @@
 #include "app/Runtime.h"
 #include "ui/Localization.h"
 #include "ui/Widgets.h"
+#include "ui/VanillaHudVisibility.h"
 #include "ll/api/memory/Hook.h"
 #include "mc/client/game/IClientInstance.h"
 #include "mc/client/gui/GuiData.h"
@@ -70,8 +71,7 @@ LL_TYPE_INSTANCE_HOOK(CameraPositionHook, ll::memory::HookPriority::Normal, Leve
     &LevelRendererPlayer::$renderEntityEffects, void, BaseActorRenderContext& context) {
     origin(context);
     try {
-        if (!context.mImpl) return;
-        Vec3 position = context.mImpl->mCameraPosition;
+        Vec3 position = context.mCameraPosition;
         if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) return;
         std::lock_guard lock(mutex);
         cameraWorld = position;
@@ -116,7 +116,11 @@ std::optional<CameraView> lastCamera() {
 }
 void draw(MinecraftUIRenderContext& context, float width, float height, Settings::Map const& settings) {
     if (!settings.waypoints || !worldMarkersShown(settings.waypointsWorld, held.load())) return;
+#if defined(LAMIUM_SDK_26_20_7) && !defined(LAMIUM_INPUT_UPDATE_PROBE)
+    if (ui::vanillaHudHidden(*context.mClient.getGuiData())) return;
+#elif !defined(LAMIUM_INPUT_UPDATE_PROBE)
     if (context.mClient.getOptions().getHideHud()) return;
+#endif
     auto* player = context.mClient.getLocalPlayer();
     if (!player) return;
     auto view = lastCamera();

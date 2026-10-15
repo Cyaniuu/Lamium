@@ -8,7 +8,11 @@
 #include "mc/client/gui/screens/ScreenContext.h"
 #include "mc/client/gui/controls/renderers/HoverTextRenderer.h"
 #include "mc/client/renderer/screen/MinecraftUIRenderContext.h"
-#include "mc/deps/minecraft_renderer/resources/OffscreenCaptureDescription.h"
+#include <variant>
+#include "mc/deps/minecraft_renderer/resources/UIActorOffscreenCaptureDescription.h"
+#include "mc/deps/minecraft_renderer/resources/UIMeshOffscreenCaptureDescription.h"
+#include "mc/deps/minecraft_renderer/resources/UIStructureVolumeOffscreenCaptureDescription.h"
+#include "mc/deps/minecraft_renderer/resources/UIThumbnailMeshOffscreenCaptureDescription.h"
 #include "mc/world/item/components/IFoodItemComponent.h"
 #include <string_view>
 #include <vector>
@@ -99,7 +103,12 @@ LL_TYPE_INSTANCE_HOOK(TooltipFontDraw, ll::memory::HookPriority::Normal, Font, &
     bool ignoreColorFormatting, bool darken, bool drawColorSymbol, mce::MaterialPtr const* optionalMat,
     int caretPosition, bool shadow, float linePadding, mce::Color const& resetColorOverride,
     mce::Color const& shaderDarkColor, float outlineWidth, float yCaretOffset,
-    OffscreenCaptureDescription const& offscreenCaptureDescription, bool autoGenNormalsAndTangents) {
+    std::variant<
+        std::monostate,
+        UIActorOffscreenCaptureDescription,
+        UIThumbnailMeshOffscreenCaptureDescription,
+        UIMeshOffscreenCaptureDescription,
+        UIStructureVolumeOffscreenCaptureDescription> const& offscreenCaptureDescription, bool autoGenNormalsAndTangents) {
     if (tooltipRendering && !glyphDraw)
         if (auto run = tooltip::findGlyphRun(str)) {
             auto const* icons = foodFor(str);

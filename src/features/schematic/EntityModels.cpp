@@ -12,13 +12,16 @@
 #include "mc/client/renderer/Tessellator.h"
 #include "mc/client/renderer/actor/ActorRenderDispatcher.h"
 #include "mc/client/renderer/actor/DataDrivenRenderer.h"
+#include "mc/deps/minecraft_renderer/resources/UIActorOffscreenCaptureDescription.h"
+#include "mc/deps/minecraft_renderer/resources/UIThumbnailMeshOffscreenCaptureDescription.h"
+#include "mc/deps/minecraft_renderer/resources/UIMeshOffscreenCaptureDescription.h"
+#include "mc/deps/minecraft_renderer/resources/UIStructureVolumeOffscreenCaptureDescription.h"
 #include "mc/common/client/renderer/helpers/MeshHelpers.h"
 #include "mc/deps/core_graphics/enums/PrimitiveMode.h"
 #include "mc/deps/minecraft_renderer/renderer/MaterialPtr.h"
 #include "mc/deps/minecraft_renderer/renderer/MeshData.h"
 #include "mc/deps/minecraft_renderer/renderer/TexturePtr.h"
 #include "mc/deps/minecraft_renderer/resources/ClientTexture.h"
-#include "mc/deps/minecraft_renderer/resources/OffscreenCaptureDescription.h"
 #include "mc/deps/minecraft_renderer/resources/ServerTexture.h"
 #include "mc/util/molang/ExpressionNode.h"
 #include "mc/world/actor/animation/ActorAnimationGroup.h"
@@ -382,9 +385,9 @@ std::vector<bool> draw(ScreenContext& screen, IClientInstance& client, Vec3 cons
         using Texture = std::variant<std::monostate, mce::TexturePtr, mce::ClientTexture, mce::ServerTexture>;
         Texture texture{static_cast<mce::TexturePtr const&>(model.renderer->mDefaultSkin)};
         inWorld([&] {
-            if (model.tinted) MeshHelpers::renderMeshImmediately(screen, faces, tintMaterial, OffscreenCaptureDescription{});
-            else MeshHelpers::renderMeshImmediately(screen, faces, material, texture, OffscreenCaptureDescription{});
-            if (lineMaterial.mRenderMaterialInfoPtr) MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
+            if (model.tinted) MeshHelpers::renderMeshImmediately(screen, faces, tintMaterial, std::monostate{});
+            else MeshHelpers::renderMeshImmediately(screen, faces, material, texture, std::monostate{});
+            if (lineMaterial.mRenderMaterialInfoPtr) MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, std::monostate{});
         });
         drawn[i] = true;
         ++count;

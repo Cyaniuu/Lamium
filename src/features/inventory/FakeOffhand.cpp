@@ -330,15 +330,15 @@ LL_TYPE_INSTANCE_HOOK(BuildAction, ll::memory::HookPriority::Normal, ClientInsta
 }
 
 LL_TYPE_INSTANCE_HOOK(ReportUse, ll::memory::HookPriority::High, GameMode,
-    &GameMode::$useItem, bool, ItemStack& item, HandSlot hand) {
-    reportBorrow(mPlayer, hand);
-    return origin(item, hand);
+    &GameMode::$useItem, bool, ItemStack& item) {
+    reportBorrow(mPlayer, HandSlot::Mainhand);
+    return origin(item);
 }
 LL_TYPE_INSTANCE_HOOK(ReportOn, ll::memory::HookPriority::High, GameMode,
     &GameMode::$useItemOn, InteractionResult, ItemStack& item, BlockPos const& pos, uchar face,
-    Vec3 const& hit, HandSlot hand, Block const* block, bool first) {
-    reportBorrow(mPlayer, hand);
-    return origin(item, pos, face, hit, hand, block, first);
+    Vec3 const& hit, Block const* block, bool first) {
+    reportBorrow(mPlayer, HandSlot::Mainhand);
+    return origin(item, pos, face, hit, block, first);
 }
 int selectedSlot() {
     auto client = ll::service::getClientInstance();

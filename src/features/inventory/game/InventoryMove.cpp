@@ -36,7 +36,7 @@ ContainerID container(Place place) {
 }
 void set(LocalPlayer& player, Location at, ItemStack const& item) {
     switch (at.place) {
-    case Place::Inventory: player.getInventory().$setItem(at.slot,item); break;
+    case Place::Inventory: player.getInventory().setItem(at.slot,item); break;
     case Place::Offhand: player.setOffhandSlot(item); break;
     case Place::Armor: player.setArmor(static_cast<SharedTypes::Legacy::ArmorSlot>(at.slot),item); break;
     }
