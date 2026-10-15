@@ -41,6 +41,40 @@ inline CellState classify(PaletteBlock const* expected, std::string_view expecte
     return world->key == expectedKey ? CellState::Correct : CellState::State;
 }
 
+// The second layer (water in a waterlogged block), judged once the block
+// itself is right: the file's liquid there and the world's must be the same
+// (none on both sides included). Any difference is a state mistake, like
+// any other differing state (strict check, decided 2026-10-09).
+inline CellState withLiquid(CellState block, bool liquidMatches) {
+    return block == CellState::Correct && !liquidMatches ? CellState::State : block;
+}
+
+// What the client reads at a placement's cell, compared by the glue: `same`
+// and `sameType` against the expected block, or against the file's liquid
+// where the file has air with a liquid in the second layer.
+struct CellReading {
+    bool placeholder = false; // the client's stand-in block while a chunk arrives
+    bool expectsAir = false, expectsLiquid = false;
+    bool known = true;        // the expected block is a known game block
+    bool same = false, sameType = false, actualAir = false;
+    bool liquidsMatch = true; // the file's liquid and the world's are the same (none on both included)
+};
+// A loaded cell's state. Air with a liquid in the second layer is water
+// standing there, judged against the liquid; any other block is judged
+// first, then its waterlogging (withLiquid).
+inline CellState classifyReading(CellReading const& r, bool countExtras) {
+    CellState state;
+    if (r.placeholder) state = CellState::Unknown;
+    else if (r.expectsAir && r.expectsLiquid)
+        return r.same ? CellState::Correct : r.actualAir ? CellState::Missing : r.sameType ? CellState::State : CellState::Wrong;
+    else if (r.expectsAir) state = r.actualAir ? CellState::Correct : countExtras ? CellState::Extra : CellState::Ignored;
+    else if (!r.known) state = CellState::Unknown;
+    else if (r.same) state = CellState::Correct;
+    else if (r.actualAir) state = CellState::Missing;
+    else state = r.sameType ? CellState::State : CellState::Wrong;
+    return r.expectsAir ? state : withLiquid(state, r.liquidsMatch);
+}
+
 // For a block of the right kind in the wrong state: which states differ, in
 // key order, at most `limit` of them. A state only one side has shows "-".
 struct StateDifference {
@@ -65,6 +99,19 @@ inline std::vector<StateDifference> stateDifferences(std::map<std::string, std::
     return result;
 }
 
+// The row naming a waterlogging difference in a mistake's state list.
+inline StateDifference liquidDifference(bool expected, bool actual) {
+    return {"waterlogged", expected ? "true" : "false", actual ? "true" : "false"};
+}
+
+// The row naming a shulker box's opening (block entity data, L-179); faces
+// in the game's order: down, up, north, south, west, east.
+inline StateDifference faceDifference(int expected, int actual) {
+    constexpr char const* names[6] = {"down", "up", "north", "south", "west", "east"};
+    auto name = [&](int face) { return face >= 0 && face < 6 ? std::string(names[face]) : std::to_string(face); };
+    return {"facing", name(expected), name(actual)};
+}
+
 struct Tally {
     std::uint64_t correct = 0, missing = 0, wrong = 0, state = 0, extra = 0, unknown = 0;
     // Blocks the schematic asks for (air excluded): what "correct / total" counts.
@@ -84,19 +131,21 @@ struct Tally {
 };
 
 // Entities are checked by type and place only: one of the same type standing
-// near the spot counts, and each entity in the world counts for one spot.
+// at the spot counts, and each entity in the world counts for one spot.
+// "At" is within half a block across (a neighbor on the next block is
+// another spot) and a block up or down (slabs, carpets).
 struct EntitySpot {
     std::string_view identifier;
     double x = 0, y = 0, z = 0;
 };
-inline constexpr double entityReach = 1.0;
+inline constexpr double entityReach = 1.0, entityReachAcross = .5;
 inline std::vector<bool> matchEntities(std::span<EntitySpot const> expected, std::span<EntitySpot const> actual,
                                        double reach = entityReach) {
     std::vector<bool> placed(expected.size()), used(actual.size());
     for (size_t i = 0; i < expected.size(); ++i) {
         auto const& want = expected[i];
         size_t best = actual.size();
-        double bestDistance = reach * reach;
+        double bestDistance = entityReachAcross * entityReachAcross;
         for (size_t j = 0; j < actual.size(); ++j) {
             auto const& have = actual[j];
             if (used[j] || have.identifier != want.identifier || std::abs(have.y - want.y) > reach) continue;

@@ -8,6 +8,34 @@ of truth.
 
 ## Current foundation
 
+Local follow-up on `f8c714b` (2026-10-15) passed the compact translucent
+description panel and chat-return checks. The maintainer then replaced the
+description interaction with in-place footer expansion (L-197), which
+passed its focused local check on `c4b8f01`; it was then simplified to a
+fixed two-line footer that scrolls.
+
+L-202 (2026-10-15, local normal-build smoke passed on `d5978e2`): settings
+suffixes/header, version
+tooltip, full descriptions and failure notices now read the shared capability
+registry. They include actual hook/contract failures on the verified game,
+with the same typed reason used by execution and logs. Initial native context
+is shown as waiting in help, without a paused warning or repeated toast.
+User settings do not clear failures. Requested affected features notify on
+join or a changed failure; unchanged frames and unrelated readiness changes
+stay quiet. English, Japanese and Simplified Chinese have capability names
+and reasons. Local normal-feature smoke passed with the L-197/L-203 follow-ups.
+Server, forced-unverified and injected-failure presentation checks remain open.
+
+L-197 (latest decision 2026-10-15): the footer keeps two description lines
+and scrolls longer text with the wheel over it or its scrollbar, shown only
+while the text overflows. The expansion button and its in-place growth
+(passed locally on `c4b8f01`) were removed afterwards: overflow occurs only
+at very small layouts, and a fixed footer keeps the list from changing
+height. Numeric descriptions show their own help and range; their controls
+replace the footer hint while the row is selected. Pure tests cover the
+footer geometry, scrollbar reach and UTF-8 wrapping. The scrolling footer
+passed locally on `bc078fa`.
+
 The settings foundation is integrated and has been exercised in Minecraft:
 
 - `L` opens Lamium Settings. The owned native dialog provides focus while
@@ -74,6 +102,24 @@ were confirmed together in game on 2026-09-28.
 
 Do not add a second advanced keybind-settings system; matching mode remains an
 action property.
+
+## Settings key feedback (2026-10-14)
+
+[L-188](BACKLOG.md): the configured settings shortcut (default L) now
+also closes Lamium Settings. Built, not checked in game.
+Rule proposed in chat 2026-10-14, built when the maintainer said to go
+ahead: when the
+Settings binding is a single key, pressing it on a settings page (the
+table, Shapes, Waypoints, Schematics) closes the screen like Esc. It does
+nothing special while text or a number is being edited, the search field
+has focus or a key is being captured (those get the key as before), and
+the world map, radial menu, HUD editor, prompts, calculator and language
+list keep their own keys. A binding on Backspace, Tab, Enter, Esc, Space or
+an arrow keeps the screen's meaning. Key repeats are ignored, including a
+key still held from opening the screen, so holding L does not flicker.
+Separately, [L-182](BACKLOG.md) tracks an intermittent
+crash when opening settings while checking a schematic; it needs an actual
+reproduction and is not solved merely by changing the toggle.
 
 ## Remaining UI/runtime gaps
 

@@ -3,6 +3,7 @@
 #include "app/Runtime.h"
 #include "features/inspection/preview/ContainerPreview.h"
 #include "features/inspection/render/DurabilityBar.h"
+#include "features/inspection/render/ItemIcon.h"
 #include "features/inspection/render/PreviewLayout.h"
 
 #include "mc/client/game/IClientInstance.h"
@@ -27,6 +28,7 @@
 #include "mc/world/item/Item.h"
 
 #include <optional>
+#include <vector>
 #include <string>
 
 namespace lamium::inspection::render {
@@ -46,17 +48,6 @@ constexpr mce::Color kDurabilityBackground{0.0f, 0.0f, 0.0f, 1.0f};
 constexpr float kFrameAlpha = 0.92f;
 constexpr float kSlotAlpha  = 1.0f;
 constexpr int   kItemZOrder = 17;
-
-// renderGuiItemNew(foil = true) draws the additive glint overlay on its own,
-// outside the UI's InventoryItemGlint material pass, and comes out weaker than
-// vanilla's slot glint. Its `transparency` argument scales the overlay
-// linearly, so one pass at this value reproduces vanilla: frame-averaged
-// blue-minus-green over the item pixels of an enchanted book, measured in the
-// same frames as a vanilla inventory slot, was +4 at 1.0, +23 at 1.3, +38 at
-// 1.5 and +27.6 at 1.35 against vanilla's +27.7. Drawing the overlay several
-// times instead (the previous approach) over-tints: +30 for two passes, +58
-// for three, at 1.5-2x the CPU cost.
-constexpr float kGlintOverlayAlpha = 1.35f;
 
 // Vanilla's stack count is a plain UI label ("font_size": "normal", shadow,
 // anchored bottom-right of the 18x18 slot panel with offset [0, 1]); see
@@ -120,45 +111,24 @@ void PreviewRenderer::render(
     context.drawRectangle(toArea(layout.frame), kFrameBorder, 1.0f, 1);
     context.flushImages(kWhite, 1.0f, kFillMaterial);
 
-    // 2. Item icons, drawn immediately by the game's item renderer.
+    // 2. Item icons, drawn the way vanilla slots draw them, with the glint
+    //    overlay.
     IClientInstance& client       = context.mClient;
     ItemRenderer*    itemRenderer = client.getItemRenderer();
     if (itemRenderer) {
-        BaseActorRenderContext renderContext(context.mScreenContext, client, client.getMinecraftGame_DEPRECATED());
         Mob* const             holder = client.getLocalPlayer();
+        std::vector<IconAt>    icons;
+        std::vector<int>       frames(static_cast<size_t>(preview.slotCount()), 0);
         for (int slot = 0; slot < preview.slotCount(); ++slot) {
             ItemStack const& stack = preview.slots[static_cast<size_t>(slot)];
-            if (stack.isNull() || !stack.mItem) {
-                continue;
-            }
-            Item const& item = *stack.mItem;
-            Rect const  icon = layout.icon(slot);
+            if (stack.isNull() || !stack.mItem) continue;
             // Same frame source as a vanilla inventory slot: the item decides
             // (clock, compass, crossbow, ...); static items return 0.
-            int const frame = item.getAnimationFrameFor(holder, false, &stack, true);
-
-            // renderEnchantmentFoil selects the pass: false draws the item
-            // icon itself, true draws only the additive glint overlay.
-            itemRenderer
-                ->renderGuiItemNew(renderContext, stack, frame, icon.x0, icon.y0, false, 1.0f, 1.0f, 1.0f, kItemZOrder);
-            // Vanilla's glint predicate: Item::isGlint, which items override
-            // (enchanted books, enchanted golden apples, ...), not raw
-            // enchantment NBT.
-            if (item.isGlint(stack)) {
-                itemRenderer->renderGuiItemNew(
-                    renderContext,
-                    stack,
-                    frame,
-                    icon.x0,
-                    icon.y0,
-                    true,
-                    kGlintOverlayAlpha,
-                    1.0f,
-                    1.0f,
-                    kItemZOrder
-                );
-            }
+            frames[static_cast<size_t>(slot)] = stack.mItem->getAnimationFrameFor(holder, false, &stack, true);
+            Rect const icon = layout.icon(slot);
+            icons.push_back({&stack, icon.x0, icon.y0, 1.0f, frames[static_cast<size_t>(slot)], 1.0f, true});
         }
+        drawItemIcons(context, icons, kItemZOrder);
     }
 
     // 3. Durability bars, drawn after the icons and glint (as in vanilla, the

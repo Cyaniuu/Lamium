@@ -1,3 +1,4 @@
+#include "app/PausedFeatures.h"
 #include "settings/SettingsStore.h"
 #include "settings/Options.h"
 #include "features/inventory/FakeOffhandPlan.h"
@@ -17,6 +18,12 @@
 void check(bool, char const*);
 void settingsStoreTests() {
     using namespace lamium;
+    check(decodeSettings("{}").information.targetSchematic
+          && !decodeSettings(R"({"information":{"targetSchematic":false}})").information.targetSchematic,
+          "schematic information on the target card is on unless turned off");
+    check(!decodeSettings(R"({"information":{"targetSchematic":0}})").information.targetSchematic
+          && decodeSettings(R"({"information":{"targetSchematic":2}})").information.targetSchematic,
+          "a display mode number from a test build reads as on or off");
     {
         check(decodeSettings("{}").visuals.hideNausea
               && !decodeSettings(R"({"visuals":{"hideNausea":false}})").visuals.hideNausea,
@@ -86,6 +93,23 @@ void settingsStoreTests() {
         check(visibleMedium(CameraMedium{true, true, true, false}, waterBit) == CameraMedium{false, true, true, false},
               "a liquid that stays selected keeps the liquid flag");
         check(visibleMedium(CameraMedium{}, mediumBits) == CameraMedium{}, "outside any medium nothing changes");
+        check(decodeSettings("{}").visuals.hideDistanceFog && input::defaultChord(input::Action::HideDistanceFog).empty(),
+              "distance fog is selected by default like the other effects, with an unbound key");
+        check(effectMask(true, EffectSelection{.distanceFog = true}) == distanceFogBit
+              && (effectMask(true, all) & distanceFogBit) == 0,
+              "distance fog has its own bit, apart from the medium fogs");
+        check(hidesDistanceFog(distanceFogBit, CameraMedium{})
+              && hidesDistanceFog(distanceFogBit | waterBit, visibleMedium(water, waterBit))
+              && !hidesDistanceFog(distanceFogBit, water) && !hidesDistanceFog(distanceFogBit, snow)
+              && !hidesDistanceFog(mediumBits, CameraMedium{}),
+              "distance fog hides only where no medium fog is shown, and only for its own switch");
+        check(!hidesDistanceFog(distanceFogBit, CameraMedium{}, true), "distance fog stays vanilla under Vibrant Visuals");
+        check(farFog(FogRange{416, 512}) == FogRange{farFogStart, farFogEnd}
+              && farFog(FogRange{0, 24}) == FogRange{farFogStart, farFogEnd},
+              "air and weather fog move far beyond any render distance");
+        check(!farFog(FogRange{0, 40000}) && !farFog(FogRange{std::numeric_limits<float>::quiet_NaN(), 512})
+              && !farFog(FogRange{0, std::numeric_limits<float>::infinity()}),
+              "fog already farther away and unreadable values stay vanilla");
     }
     {
         check(decodeSettings("{}").visuals.hideBossBars
@@ -298,6 +322,9 @@ void settingsStoreTests() {
               "real-time display can include the date");
     }
     auto old = decodeSettings(R"({"version":1,"camera":{"zoom":true,"magnification":3.5,"wheelStep":0.5}})");
+    check(old.inventory.repeatTrades, "repeated trading defaults on in existing settings");
+    auto disabledTrading = decodeSettings(R"({"version":1,"inventory":{"repeatTrades":false}})");
+    check(!disabledTrading.inventory.repeatTrades, "repeated trading loads an explicit disabled setting");
     check(old.camera.magnification == 3.5f && !old.lighting.nightVision,
           "adding lighting must preserve existing camera settings");
     check(old.inventory.sorting && old.inventory.sortContainers && old.inventory.transfer
@@ -306,10 +333,73 @@ void settingsStoreTests() {
           "missing inventory transfer settings default to all gestures on");
     check(old.inventory.restockOffhand && !old.inventory.toolSwitchInventory
           && old.interaction.toolGuard && old.interaction.toolGuardStrict && !old.interaction.elytraSwap
-          && old.interaction.elytraFireworkJump && old.interaction.elytraReturnSeconds == 3,
+          && old.interaction.elytraFireworkJump && old.interaction.elytraRiptide && old.interaction.elytraReturnSeconds == 3,
           "offhand restock and tool protection default on; inventory tool fetch and auto elytra off");
     check(!old.map.minimap && old.map.zoom == map::defaultZoomIndex && !old.map.rotate && !old.map.round && old.map.debugHide
           && old.hud.minimap.anchor == ui::Anchor::TopRight, "the minimap starts off, at 128 blocks, top right");
+    check(!old.map.minimapShapes, "shapes stay off the minimap until turned on (L-139)");
+    check(old.camera.freeCameraHide == 1 && decodeSettings(R"({"camera":{"freeCameraHide":3}})").camera.freeCameraHide == 3
+              && decodeSettings(R"({"camera":{"freeCameraHide":8}})").camera.freeCameraHide == 3,
+          "FreeCamera hides the hand by default; the setting loads and is clamped (L-191)");
+    check(old.schematic.ghostTint == 70 && old.schematic.ghostLines == 1,
+          "ghosts default to a 70% tint and normal outlines (L-186)");
+    {
+        auto look = decodeSettings(R"({"schematic":{"ghostTintPercent":65,"ghostLines":2}})").schematic;
+        auto wild = decodeSettings(R"({"schematic":{"ghostTintPercent":190,"ghostLines":-3}})").schematic;
+        check(look.ghostTint == 65 && look.ghostLines == 2 && wild.ghostTint == 100 && wild.ghostLines == 0,
+              "the ghost tint and outline width load and are clamped");
+        check(decodeSettings(R"({"schematic":{"ghostTint":0}})").schematic.ghostTint == 100
+              && decodeSettings(R"({"schematic":{"ghostTint":1}})").schematic.ghostTint == 40
+              && decodeSettings(R"({"schematic":{"ghostTint":2}})").schematic.ghostTint == 0
+              && decodeSettings(R"({"schematic":{"ghostTint":2,"ghostTintPercent":55}})").schematic.ghostTint == 55,
+              "the earlier strong, weak and none choices become 100%, 40% and 0%");
+    }
+    check(decodeSettings(R"({"map":{"minimapShapes":true}})").map.minimapShapes, "shapes on the minimap load when saved on");
+    check(!old.map.worldMapNames && decodeSettings(R"({"map":{"worldMapNames":true}})").map.worldMapNames,
+          "world map names show on hover until Always is saved on");
+    check(old.map.worldMapWaypoints && old.map.worldMapSchematics && old.map.worldMapShapes
+              && !decodeSettings(R"({"map":{"worldMapShapes":false}})").map.worldMapShapes
+              && decodeSettings(R"({"map":{"worldMapShapes":false}})").map.worldMapSchematics,
+          "the world map's layer switches start on and load one by one (L-146)");
+    check(old.map.worldMapList == 0 && decodeSettings(R"({"map":{"worldMapList":2}})").map.worldMapList == 2
+              && decodeSettings(R"({"map":{"worldMapList":9}})").map.worldMapList == 2,
+          "the side panel's list starts on waypoints and loads clamped (L-204)");
+    check(!old.camera.zoomWideAngle && decodeSettings(R"({"camera":{"zoomWideAngle":true}})").camera.zoomWideAngle,
+          "Wide-angle view stays off until saved on (L-140)");
+    check(!old.visuals.skipServerPacks && decodeSettings(R"({"visuals":{"skipServerPacks":true}})").visuals.skipServerPacks,
+          "server resource packs apply until skipping is saved on (L-167)");
+    check(old.information.debugHideVanilla && !decodeSettings(R"({"information":{"debugHideVanilla":false}})").information.debugHideVanilla,
+          "Debug View hides the game's position and paper doll unless saved off");
+    check(old.information.hudHidePaperDoll && !decodeSettings(R"({"information":{"hudHidePaperDoll":false}})").information.hudHidePaperDoll,
+          "the Info HUD hides a covered paper doll unless saved off (L-145)");
+    {
+        // L-137: what players see of the gates on an unverified game.
+        using lamium::paused::Level;
+        for (auto feature : lamium::paused::gatedFeatures)
+            check(lamium::paused::onUnverified(feature) != Level::No, "every gated feature is marked paused");
+        check(lamium::paused::onUnverified("nightVision") == Level::Fully && lamium::paused::onUnverified("freecamera") == Level::Partly
+              && lamium::paused::onUnverified("zoom") == Level::No, "fully, partly or not paused");
+        lamium::Settings s;
+        s.inventory.repeatTrades = false;
+        s.inventory.transfer = false;
+        s.lighting.nightVision = true;
+        s.visuals.hideEffects = true;
+        s.visuals.hideWater = s.visuals.hideLava = s.visuals.hidePowderSnow = s.visuals.hideDistanceFog = false;
+        s.visuals.hidePortal = false;
+        s.visuals.hideWeather = s.visuals.hideNausea = false;
+        auto used = lamium::paused::inUse(s);
+        check(used.size() == 1 && used[0] == "nightVision", "the join toast names switched-on gated features, not particles alone");
+        s.visuals.hideWeather = true;
+        check(lamium::paused::inUse(s).size() == 2, "a gated hide effect counts");
+        s.inventory.repeatTrades = true;
+        check(lamium::paused::inUse(s).size() == 3
+              && lamium::paused::onUnverified("repeatTrades") == Level::Fully,
+              "repeated trades are named and fully paused on unverified games");
+        s.inventory.transfer = true;
+        check(lamium::paused::inUse(s).size() == 4
+              && lamium::paused::onUnverified("transfer") == Level::Partly,
+              "transfer native routes are partly paused while the old storage gestures remain usable");
+    }
     {
         auto loaded = decodeSettings(R"({"map":{"zoom":9,"rotate":true},"hud":{"minimap":{"dx":-30}}})");
         loaded.normalize();
@@ -419,6 +509,14 @@ void settingsStoreTests() {
         std::filesystem::path path;
         ~Cleanup() { std::error_code ignored; std::filesystem::remove(path, ignored); }
     } cleanup{path};
+    writeSettings(path, disabledTrading);
+    check(!readSettings(path).inventory.repeatTrades, "disabled repeated trading survives saving");
+    {
+        Settings target;
+        target.information.targetSchematic = false;
+        writeSettings(path, target);
+        check(!readSettings(path).information.targetSchematic, "hidden schematic information survives restart");
+    }
     {
         auto encoded = [&](Settings const& value) {
             writeSettings(path, value);
@@ -518,6 +616,12 @@ void settingsStoreTests() {
     old.inventory.transferWheelStack = false;
     old.inventory.transferDragStack = false;
     old.inventory.transferDragOne = false;
+    old.inventory.transferWheelMatching = false;
+    old.inventory.transferWheelAll = false;
+    old.inventory.transferClickMatching = false;
+    old.inventory.transferClickAll = false;
+    old.inventory.transferDragKeepOne = false;
+    old.inventory.transferDropMatching = false;
     old.ui.automationStatus = false;
     old.interaction.attackTicks = 12;
     old.camera.freelookToggle = true;
@@ -540,6 +644,17 @@ void settingsStoreTests() {
     check(!loaded.inventory.transferWheelOne && !loaded.inventory.transferWheelStack
           && !loaded.inventory.transferDragStack && !loaded.inventory.transferDragOne,
           "transfer gesture switches survive saves");
+    check(!loaded.inventory.transferWheelMatching && !loaded.inventory.transferWheelAll
+          && !loaded.inventory.transferClickMatching && !loaded.inventory.transferClickAll
+          && !loaded.inventory.transferDragKeepOne && !loaded.inventory.transferDropMatching
+          && loaded.inventory.transferDropOne, "new transfer switches survive saves");
+    auto legacyTransfer = decodeSettings(R"({"inventory":{"transfer":false,"transferDragOne":false}})");
+    check(!legacyTransfer.inventory.transfer && !legacyTransfer.inventory.transferDragOne
+          && legacyTransfer.inventory.transferWheelMatching && legacyTransfer.inventory.transferWheelAll
+          && legacyTransfer.inventory.transferClickMatching && legacyTransfer.inventory.transferClickAll
+          && legacyTransfer.inventory.transferDragKeepOne && legacyTransfer.inventory.transferCursorMatching
+          && legacyTransfer.inventory.transferDropOne && legacyTransfer.inventory.transferDropKeepOne
+          && legacyTransfer.inventory.transferDropAll && legacyTransfer.inventory.transferDropMatching, "older settings retain old choices and default new gestures on");
     check(!loaded.ui.automationStatus, "hidden automation status survives restart");
     auto contents = [&]() {
         std::ifstream file(path);

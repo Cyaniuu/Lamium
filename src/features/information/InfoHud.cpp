@@ -1,4 +1,6 @@
 #include "features/information/InfoHud.h"
+#include "features/camera/FreeCameraHide.h"
+#include "features/information/ChatPosition.h"
 #include "features/information/PlayerInfo.h"
 #include "features/information/FrameTiming.h"
 #include "features/information/NetworkInfo.h"
@@ -29,12 +31,23 @@
 #include "features/schematic/SchematicItems.h"
 #include "features/schematic/SchematicSession.h"
 #include "features/schematic/SchematicActions.h"
+#include "features/visuals/ServerPacks.h"
 #include "mc/world/item/ItemStack.h"
 #include "mc/world/item/Item.h"
+#include "mc/world/item/ItemInstance.h"
 #include "mc/deps/shared_types/legacy/actor/ArmorSlot.h"
 #include "features/information/DurabilityHud.h"
+#include "features/information/StatusEffects.h"
+#include "features/information/StatusEffectsVanilla.h"
+#include "mc/deps/ecs/gamerefs_entity/EntityContext.h"
+#include "mc/entity/components/MobEffectsComponent.h"
+#include "mc/world/effect/MobEffect.h"
+#include "mc/world/effect/MobEffectInstance.h"
 #include "features/information/ClientCounters.h"
 #include "features/information/OffhandSlot.h"
+#include "features/information/PaperDoll.h"
+#include "ui/TextFit.h"
+#include "features/information/DebugVanillaHud.h"
 #include "features/inspection/render/PreviewLayout.h"
 #include "mc/client/gui/CaretMeasureData.h"
 #include "mc/client/gui/Font.h"
@@ -51,6 +64,12 @@
 #include "mc/deps/core/utility/NonOwnerPointer.h"
 #include "mc/deps/input/RectangleArea.h"
 #include "features/inspection/render/DurabilityBar.h"
+#include "features/inspection/render/ItemIcon.h"
+#include "features/information/PlayerList.h"
+#include "features/information/InventoryHud.h"
+#include "mc/world/actor/player/Inventory.h"
+#include "mc/world/actor/player/PlayerInventory.h"
+#include "features/map/RadarFaces.h"
 #include "mc/client/options/IOptionRegistry.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/world/level/Level.h"
@@ -69,7 +88,7 @@ namespace {
 Toast activeToast;
 }
 void showToggleToast(std::string feature, bool on) { activeToast.show(std::move(feature), on, toastNow()); }
-void showMessageToast(std::string message) { activeToast.show(std::move(message), false, toastNow(), true); }
+void showMessageToast(std::string message, double seconds) { activeToast.show(std::move(message), false, toastNow(), true, seconds); }
 std::optional<Toast::Visible> currentToggleToast(double now) { return activeToast.current(now); }
 }
 namespace lamium::information {
@@ -145,6 +164,39 @@ HotbarLookup hotbarBox(ScreenView const& view) {
     }
     return {};
 }
+struct SeenHotbar { offhand::Box box; float screenW, screenH; };
+std::optional<SeenHotbar> seenHotbar;
+}
+void noteHotbar(ScreenView const& view) {
+    auto hotbar = hotbarBox(view);
+    if (!hotbar.box) return;
+    glm::vec2 screen = *view.mSize;
+    seenHotbar = SeenHotbar{*hotbar.box, screen.x, screen.y};
+}
+void noteCoveredVanilla(ScreenView const& view, ui::hud_editor::Boxes const& drawn, Settings::Information const& settings) {
+    auto const& info = drawn[static_cast<size_t>(ui::HudElementId::Info)];
+    std::optional<paperDoll::Box> doll, position, hud;
+    if (settings.hudHidePaperDoll && info) {
+        hud = paperDoll::Box{info->x, info->y, info->w, info->h};
+        if (VisualTree* tree = view.mVisualTree.get()) {
+            auto boxOf = [&](char const* name) -> std::optional<paperDoll::Box> {
+                auto control = tree->getControlByName(name, true);
+                if (!control || control->mCachedPositionDirty) return std::nullopt;
+                glm::vec2 at = *control->mCachedPosition, size = *control->mSize;
+                return paperDoll::Box{at.x, at.y, size.x, size.y};
+            };
+            doll = boxOf("hud_player");
+            position = boxOf("player_position");
+        }
+    }
+    debugVanilla::infoCovers(paperDoll::covered(doll, hud), paperDoll::meets(position, hud));
+}
+HotbarPlace editorHotbar(float width, float height) {
+    auto box = offhand::editorHotbar(seenHotbar ? std::optional(seenHotbar->box) : std::nullopt,
+        seenHotbar ? seenHotbar->screenW : 0, seenHotbar ? seenHotbar->screenH : 0, width, height);
+    return {box.x, box.y, box.w, box.h};
+}
+namespace {
 // One line whenever what the slot was placed from changes.
 void logPlacement(HotbarLookup const& hotbar, std::optional<offhand::Box> const& slot, glm::vec2 screen) {
     static std::string last;
@@ -347,10 +399,8 @@ std::optional<ui::hud_editor::Box> drawSchematicHud(MinecraftUIRenderContext& co
         y += rowH;
         auto* renderer = context.mClient.getItemRenderer();
         for (auto const& m : materials) {
-            if (auto const* stack = schematic::items::iconStack(m.icon); stack && renderer) {
-                BaseActorRenderContext renderContext(context.mScreenContext, context.mClient, context.mClient.getMinecraftGame_DEPRECATED());
-                renderer->renderGuiItemNew(renderContext, *stack, 0, std::round(x), std::round(y), false, 1.f, 1.f, icon / 16, 17);
-            }
+            if (auto const* stack = schematic::items::iconStack(m.icon); stack && renderer)
+                inspection::render::drawItemIcon(context, {stack, std::round(x), std::round(y), icon / 16}, 17);
             text(x + icon + 2 * z, y, leftX - x - icon - 4 * z, m.name, ui::palette::text, small);
             text(leftX, y, numW, std::to_string(m.left), ui::palette::text, small, ui::Align::Right);
             text(haveX, y, numW, m.unknown ? "-" : std::to_string(m.have),
@@ -368,6 +418,8 @@ std::optional<ui::hud_editor::Box> drawDurability(MinecraftUIRenderContext& cont
     auto look = static_cast<dur::Look>(std::clamp(settings.durabilityLook, 0, 2));
     // Copies for this frame only: the renderer must not replay a pickup squash.
     std::array<ItemStack, 6> stacks;
+    // What a loaded crossbow holds, marked on its icon (L-150).
+    std::array<ItemStack, 6> charges;
     dur::Samples samples{};
     auto sample = [&](dur::Slot slot, ItemStack const& source) {
         auto i = static_cast<size_t>(slot);
@@ -375,9 +427,18 @@ std::optional<ui::hud_editor::Box> drawDurability(MinecraftUIRenderContext& cont
         stacks[i] = source;
         stacks[i].mShowPickUp = false;
         stacks[i].mWasPickedUp = false;
-        samples[i] = {true, source.getDamageValue(), static_cast<int>(source.mItem->getMaxDamage())};
+        samples[i] = {true, source.getDamageValue(), static_cast<int>(source.mItem->getMaxDamage()),
+                      dur::weaponOf(source.getTypeName())};
+        ItemInstance const* charged = source.mChargedItem.get();
+        if (samples[i].weapon == dur::Weapon::Crossbow && charged && !charged->isNull() && charged->mItem) {
+            try { charges[i].reinit(charged->getTypeName(), 1, charged->getAuxValue()); } catch (...) { charges[i] = ItemStack(); }
+            charges[i].mShowPickUp = false;
+            charges[i].mWasPickedUp = false;
+        }
     };
-    if (auto* player = context.mClient.getLocalPlayer()) {
+    dur::AmmoCounts ammo;
+    auto* player = context.mClient.getLocalPlayer();
+    if (player) {
         using ArmorSlot = SharedTypes::Legacy::ArmorSlot;
         sample(dur::Slot::MainHand, player->getSelectedItem());
         sample(dur::Slot::Offhand, player->getOffhandSlot());
@@ -386,7 +447,19 @@ std::optional<ui::hud_editor::Box> drawDurability(MinecraftUIRenderContext& cont
         sample(dur::Slot::Legs, player->getArmor(ArmorSlot::Legs));
         sample(dur::Slot::Feet, player->getArmor(ArmorSlot::Feet));
     }
-    auto rows = dur::rows(samples, settings.durabilityOffhand, settings.durabilityArmor);
+    auto rows = dur::rows(samples, settings.durabilityOffhand, settings.durabilityArmor, settings.durabilityElytra);
+    auto ammoOf = [&](dur::Row const& row) {
+        return settings.durabilityAmmo ? dur::ammoFor(samples[static_cast<size_t>(row.slot)].weapon) : std::vector<dur::Ammo>{};
+    };
+    // Bounded: the 36 inventory slots and the offhand, only while a row needs them.
+    if (player && std::any_of(rows.begin(), rows.end(), [&](auto const& row) { return !ammoOf(row).empty(); })) {
+        auto count = [&](ItemStack const& stack) {
+            if (!stack.isNull() && stack.mItem) ammo.add(stack.getTypeName(), stack.mCount);
+        };
+        auto& inventory = player->getInventory();
+        for (int slot = 0; slot < 36; ++slot) count(inventory.getItem(slot));
+        count(player->getOffhandSlot());
+    }
     if (rows.empty() && preview) {
         // The layout editor needs something to place even with bare hands.
         ItemStack pick;
@@ -400,30 +473,63 @@ std::optional<ui::hud_editor::Box> drawDurability(MinecraftUIRenderContext& cont
     if (rows.empty()) return std::nullopt;
     float z = elementZoom(element);
     bool card = element.background == ui::ElementBackground::Card;
-    float padX = card ? 5 * z : 0, padY = card ? 3 * z : 0;
+    // Per line: a band behind each row, as long as that row (maintainer,
+    // 2026-10-12: rows differ more once ammo counts join them).
+    bool band = element.background == ui::ElementBackground::Line;
+    float padX = card ? 5 * z : band ? ui::lineSidePadding * z : 0, padY = card ? 3 * z : 0;
     float icon = 16 * z, gap = 4 * z, barW = 32 * z, barH = 3 * z, rowH = 18 * z;
     std::vector<std::string> texts;
+    std::vector<float> rowWidths;
+    // Ammo sits right of the durability: more space before it, the item icon
+    // and its total close together.
+    // 8 units after the durability, 6 between two kinds (8 looked too wide
+    // between a crossbow's arrows and fireworks, 2026-10-12).
+    float ammoGap = 8 * z, ammoKindGap = 6 * z;
+    std::array<ItemStack, 2> ammoIcons;
+    auto ammoIcon = [&](dur::Ammo kind) -> ItemStack const& {
+        auto& stack = ammoIcons[static_cast<size_t>(kind)];
+        if (stack.isNull()) {
+            try { stack.reinit(kind == dur::Ammo::Arrows ? "minecraft:arrow" : "minecraft:firework_rocket", 1, 0); }
+            catch (...) { stack = ItemStack(); }
+            // A new stack plays the pickup pop, drawn about a fifth larger
+            // than the tools beside it (measured 2026-10-12).
+            stack.mShowPickUp = false;
+            stack.mWasPickedUp = false;
+        }
+        return stack;
+    };
     float contentW = 0;
     for (auto const& row : rows) {
         texts.push_back(dur::showsNumber(look, row) ? dur::numberText(look, row) : std::string{});
         float w = icon + (dur::showsBar(look) ? gap + barW : 0);
         if (!texts.back().empty()) w += gap + ui::textWidthScaled(context, texts.back(), z);
+        auto kinds = ammoOf(row);
+        for (size_t k = 0; k < kinds.size(); ++k)
+            w += (k ? ammoKindGap : ammoGap) + icon + gap + ui::textWidthScaled(context, std::to_string(ammo.of(kinds[k])), z);
+        rowWidths.push_back(w + 2 * z);
         contentW = std::max(contentW, w + 2 * z);
     }
     float boxW = contentW + 2 * padX, boxH = rows.size() * rowH + 2 * padY;
     auto placement = ui::placeElement(width, height, boxW, boxH, element);
     if (card) ui::card(context, placement.x, placement.y, boxW, boxH, cardOpacity);
+    // Bands on the right side of the screen line up on the right edge.
+    bool alignRight = band && ui::anchorFactors(element.anchor).x == 1;
     auto* renderer = context.mClient.getItemRenderer();
     for (size_t i = 0; i < rows.size(); ++i) {
         auto const& row = rows[i];
-        float x = placement.x + padX + z, y = placement.y + padY + i * rowH;
+        float left = alignRight ? placement.x + boxW - padX - rowWidths[i] : placement.x + padX;
+        float x = left + z, y = placement.y + padY + i * rowH;
+        if (band) {
+            auto line = ui::lineBox(left, y, rowWidths[i], rowH, z);
+            ui::fill(context, line.x, line.y, line.width, line.height, ui::palette::panel, cardOpacity);
+        }
+        // Whole GUI units, as in inventory slots: layered icons (dyed
+        // leather) show seams between their layers at fractional positions.
         if (renderer) {
-            BaseActorRenderContext renderContext(context.mScreenContext, context.mClient,
-                                                 context.mClient.getMinecraftGame_DEPRECATED());
-            // Whole GUI units, as in inventory slots: layered icons (dyed
-            // leather) show seams between their layers at fractional positions.
-            renderer->renderGuiItemNew(renderContext, stacks[static_cast<size_t>(row.slot)], 0, std::round(x),
-                                       std::round(y + z), false, 1.f, 1.f, z, 17);
+            inspection::render::drawItemIcon(context, {&stacks[static_cast<size_t>(row.slot)], std::round(x), std::round(y + z), z}, 17);
+            // A loaded crossbow: its charge, small, on the icon's lower right.
+            if (auto const& charge = charges[static_cast<size_t>(row.slot)]; !charge.isNull())
+                inspection::render::drawItemIcon(context, {&charge, std::round(x + 8 * z), std::round(y + 9 * z), z / 2}, 18);
         }
         float cx = x + icon;
         if (dur::showsBar(look)) {
@@ -435,9 +541,113 @@ std::optional<ui::hud_editor::Box> drawDurability(MinecraftUIRenderContext& cont
             if (fillW > 0) ui::fill(context, cx, by, fillW, barH - z, ui::Rgb{color.r, color.g, color.b});
             cx += barW;
         }
-        if (!texts[i].empty())
+        if (!texts[i].empty()) {
             ui::labelScaled(context, cx + gap, y + (rowH - 10 * z) / 2, contentW, texts[i], z, ui::palette::text,
                             ui::Align::Left, element.shadow);
+            cx += gap + ui::textWidthScaled(context, texts[i], z);
+        }
+        auto kinds = ammoOf(row);
+        for (size_t k = 0; k < kinds.size(); ++k) {
+            auto kind = kinds[k];
+            cx += k ? ammoKindGap : ammoGap;
+            if (renderer) {
+                auto const& stack = ammoIcon(kind);
+                if (!stack.isNull())
+                    inspection::render::drawItemIcon(context, {&stack, std::round(cx), std::round(y + z), z}, 17);
+            }
+            cx += icon + gap;
+            int total = ammo.of(kind);
+            auto text = std::to_string(total);
+            // None left: the warning color, as a full used-slot counter.
+            ui::labelScaled(context, cx, y + (rowH - 10 * z) / 2, contentW, text, z,
+                            total == 0 ? ui::palette::warning : ui::palette::text, ui::Align::Left, element.shadow);
+            cx += ui::textWidthScaled(context, text, z);
+        }
+    }
+    context.flushText(0, std::nullopt);
+    return ui::hud_editor::Box{placement.x, placement.y, boxW, boxH};
+}
+// ---- Status Effects HUD (L-147, docs/demos/status-effects-hud.html) ----
+std::optional<statusEffects::Effect> effectFor(unsigned id, int ticks, int amplifier, bool ambient) {
+    if (id == 0) return std::nullopt;
+    MobEffect const* type = MobEffect::getById(id);
+    if (!type) return std::nullopt;
+    statusEffects::Effect effect{id, ticks, amplifier, ambient, type->mIsHarmful};
+    effect.name = getI18n().get(*type->mDescriptionId, getI18n().getCurrentLanguage());
+    return effect;
+}
+// The local player's effects as the client holds them; nullopt when the
+// component cannot be read (vanilla icons then stay drawn).
+std::optional<std::vector<statusEffects::Effect>> readEffects(LocalPlayer& player) {
+    auto component = player.getEntityContext().tryGetComponent<MobEffectsComponent>();
+    if (!component) return std::nullopt;
+    std::vector<statusEffects::Effect> effects;
+    for (auto const& instance : *component->mMobEffects)
+        if (auto effect = effectFor(instance.mId, instance.mDuration->mValue, instance.mAmplifier, instance.mAmbient))
+            effects.push_back(std::move(*effect));
+    return effects;
+}
+std::optional<ui::hud_editor::Box> drawStatusEffects(MinecraftUIRenderContext& context, float width, float height,
+    ui::HudElement const& element, Settings::Information const& settings, bool preview) {
+    namespace fx = statusEffects;
+    std::optional<std::vector<fx::Effect>> read;
+    if (auto* player = context.mClient.getLocalPlayer()) {
+        try { read = readEffects(*player); } catch (...) { read.reset(); }
+    }
+    fx::covers(!preview && read && settings.effectsHideVanilla);
+    std::vector<fx::Effect> effects = read ? *read : std::vector<fx::Effect>{};
+    if (effects.empty() && preview) {
+        // The layout editor needs something to place without active effects.
+        for (auto [id, ticks, amplifier] : {std::tuple{1u, 3300, 1}, std::tuple{19u, 80, 0}, std::tuple{16u, -1, 0}})
+            if (auto effect = effectFor(id, ticks, amplifier, false)) effects.push_back(std::move(*effect));
+    }
+    if (effects.empty()) return std::nullopt;
+    fx::order(effects);
+    float z = elementZoom(element);
+    bool card = element.background == ui::ElementBackground::Card;
+    bool band = element.background == ui::ElementBackground::Line;
+    float padX = card ? 5 * z : band ? ui::lineSidePadding * z : 0, padY = card ? 3 * z : 0;
+    float icon = 16 * z, gap = 4 * z, timeGap = 8 * z, rowH = 18 * z;
+    // Names on: name and level, then the time in its own right-aligned column.
+    // Names off: the level before the time.
+    // Columns laid out by width, no separators: icon, name (left), level and
+    // time (right-aligned). A column nobody uses takes no room.
+    float levelGap = 6 * z;
+    std::vector<std::string> names, levels, times;
+    float nameW = 0, levelW = 0, timeW = 0;
+    for (auto const& effect : effects) {
+        names.push_back(settings.effectsNames ? effect.name : std::string{});
+        levels.push_back(fx::levelText(effect.amplifier));
+        times.push_back(fx::infinite(effect) ? ui::translated("effectsInfinite") : fx::timeText(effect.ticks));
+        nameW = std::max(nameW, ui::textWidthScaled(context, names.back(), z));
+        levelW = std::max(levelW, ui::textWidthScaled(context, levels.back(), z));
+        timeW = std::max(timeW, ui::textWidthScaled(context, times.back(), z));
+    }
+    float nameX = icon + gap, levelX = nameX + (nameW > 0 ? nameW + levelGap : 0);
+    float timeX = levelX + (levelW > 0 ? levelW + timeGap : 0);
+    float rowW = timeX + timeW;
+    float boxW = rowW + 2 * padX, boxH = effects.size() * rowH + 2 * padY;
+    auto placement = ui::placeElement(width, height, boxW, boxH, element);
+    if (card) ui::card(context, placement.x, placement.y, boxW, boxH, cardOpacity);
+    float x = placement.x + padX;
+    for (size_t i = 0; i < effects.size(); ++i) {
+        auto const& effect = effects[i];
+        float y = placement.y + padY + i * rowH, textY = y + (rowH - 10 * z) / 2;
+        if (band) {
+            auto line = ui::lineBox(x, y, rowW, rowH, z);
+            ui::fill(context, line.x, line.y, line.width, line.height, ui::palette::panel, cardOpacity);
+        }
+        if (auto path = fx::iconPath(effect.id); !path.empty())
+            ui::imageUv(context, path, {std::round(x), std::round(y + z), icon, icon}, 0, 0, 1, 1);
+        if (!names[i].empty())
+            ui::labelScaled(context, x + nameX, textY, nameW, names[i], z,
+                            effect.harmful ? ui::palette::heart : ui::palette::text, ui::Align::Left, element.shadow);
+        if (!levels[i].empty())
+            ui::labelScaled(context, x + levelX, textY, levelW, levels[i], z, ui::palette::text, ui::Align::Right,
+                            element.shadow);
+        bool warn = settings.effectsWarning && fx::runningOut(effect);
+        ui::labelScaled(context, x + timeX, textY, timeW, times[i], z, warn ? ui::palette::warning : ui::palette::text,
+                        ui::Align::Right, element.shadow);
     }
     context.flushText(0, std::nullopt);
     return ui::hud_editor::Box{placement.x, placement.y, boxW, boxH};
@@ -527,18 +737,16 @@ std::optional<ui::hud_editor::Box> drawTargetCard(MinecraftUIRenderContext& cont
         return finalBox;
     float left = finalBox.x + padX, top = finalBox.y + padY;
     if (icon) {
-        if (auto* renderer = context.mClient.getItemRenderer()) {
-            BaseActorRenderContext renderContext(context.mScreenContext, context.mClient,
-                                                 context.mClient.getMinecraftGame_DEPRECATED());
-            renderer->renderGuiItemNew(renderContext, stack, 0, left, top + (headerH - iconSize) / 2, false, 1.f, 1.f, z, 17);
-        }
+        inspection::render::drawItemIcon(context, {&stack, left, top + (headerH - iconSize) / 2, z}, 17);
     } else if (texture) {
         ui::imageUv(context, target.icon.name, {left, top + (headerH - iconSize) / 2, iconSize, iconSize},
                     target.icon.u0, target.icon.v0, target.icon.u1, target.icon.v1);
     }
     float textX = left + iconSize + iconGap, textW = contentW - iconSize - iconGap;
     float textTop = top + (headerH - headerTextH) / 2;
-    ui::labelScaled(context, textX, textTop, textW + 2, target.name, z, ui::palette::text, ui::Align::Left, element.shadow);
+    // A ghost's name in the ghost's light blue: a block to place, not one that is there.
+    ui::labelScaled(context, textX, textTop, textW + 2, target.name, z,
+                    target.ghost ? ui::Rgb{.75f, .85f, .9f} : ui::palette::text, ui::Align::Left, element.shadow);
     if (settings.targetIdentifier)
         ui::labelScaled(context, textX, textTop + lineH, textW + 2, target.identifier, z, ui::palette::faint,
                         ui::Align::Left, element.shadow);
@@ -564,12 +772,7 @@ std::optional<ui::hud_editor::Box> drawTargetCard(MinecraftUIRenderContext& cont
             x += (10 * 8 + 1 + 4) * z;
         }
         if (auto const* stack = rowStack(row)) {
-            if (auto* renderer = context.mClient.getItemRenderer()) {
-                BaseActorRenderContext renderContext(context.mScreenContext, context.mClient,
-                                                     context.mClient.getMinecraftGame_DEPRECATED());
-                renderer->renderGuiItemNew(renderContext, *stack, 0, std::round(x), std::round(y), false, 1.f, 1.f,
-                                           rowIcon / 16, 17);
-            }
+            inspection::render::drawItemIcon(context, {stack, std::round(x), std::round(y), rowIcon / 16}, 17);
             x += rowIcon + 2 * z;
         }
         // Schematic rows in the verifier's colors (the HUD and Check tab use the same).
@@ -654,6 +857,12 @@ void appendPart(std::string& line, std::string part, std::string_view separator)
     if (!line.empty()) line += separator;
     line += part;
 }
+// FreeCamera's pose for readouts that follow the camera (L-124).
+std::optional<CameraPose> cameraPose(IClientInstance& client) {
+    auto pose = CameraSessions::instance().freeCameraPose(client);
+    if (!pose) return {};
+    return CameraPose{pose->x, pose->y, pose->z, pose->yaw, pose->pitch};
+}
 std::optional<DebugValues> collectDebugValues(IClientInstance& client, std::optional<ViewRay> const& ray) {
     auto* player = client.getLocalPlayer();
     if (!player) return std::nullopt;
@@ -676,8 +885,11 @@ std::optional<DebugValues> collectDebugValues(IClientInstance& client, std::opti
     value.fullscreen = options.getFullscreen();
     if (int maxFps = options.getDeferredTargetFrameRate(); maxFps > 0) value.maxFps = maxFps;
 #endif
-    auto info = collectPlayerInfo(client, {true, true, true, true, true, true, true, true});
+    auto info = collectPlayerInfo(client, {true, true, true, true, true, true, true, true}, cameraPose(client));
     if (info.present) {
+        if (info.camera && info.bodyPosition && info.bodyYaw && info.bodyPitch)
+            value.body = DebugValues::Body{info.bodyPosition->x, info.bodyPosition->y, info.bodyPosition->z,
+                                           *info.bodyYaw, *info.bodyPitch};
         if (info.position) {
             value.x = info.position->x;
             value.y = info.position->y;
@@ -719,16 +931,32 @@ GameText debugGameText(DebugValues const& value) {
     if (value.entities) appendPart(text.counts, ui::translated("debugEntities", *value.entities), " | ");
     if (value.chunks) appendPart(text.counts, ui::translated("debugChunks", *value.chunks), " | ");
     if (value.particles) appendPart(text.counts, ui::translated("debugParticles", *value.particles), " | ");
+    if (auto const& k = value.entityKinds)
+        text.entityKinds = ui::translated("debugEntityKinds.line", (*k)[0], (*k)[1], (*k)[2], (*k)[3], (*k)[4]);
+    if (auto const& types = value.entityTypes; types && !types->top.empty()) {
+        text.entityTypes.push_back(ui::translated("debugEntityTypes.head"));
+        for (auto const& type : types->top)
+            text.entityTypes.push_back(std::format("{} {}", type.name.empty() ? std::string(shortIdentifier(type.id)) : type.name, type.count));
+        if (types->moreTypes) text.entityTypes.push_back(ui::translated("debugEntityTypes.more", types->moreTypes, types->moreCount));
+    }
     if (value.x && value.y && value.z) {
         text.coordinates = ui::translated("hudXYZ", *value.x, *value.y, *value.z);
         text.blockChunk = ui::translated("hudBlock", static_cast<int>(std::floor(*value.x)),
                              static_cast<int>(std::floor(*value.y)), static_cast<int>(std::floor(*value.z)))
             + " | " + ui::translated("hudChunk", formatChunk(chunkPosition(*value.x, *value.z)));
     }
-    if (value.yaw && value.pitch) {
-        auto key = facingKey(*value.yaw);
-        text.facing = ui::translated("hudFacing", key ? ui::translated(*key) : ui::translated("unavailable"))
-            + " | " + ui::translated("hudRotation", formatRotation(*value.yaw, *value.pitch));
+    auto facing = [](float yaw, float pitch) {
+        auto key = facingKey(yaw);
+        return ui::translated("hudFacing", key ? ui::translated(*key) : ui::translated("unavailable"))
+            + " | " + ui::translated("hudRotation", formatRotation(yaw, pitch));
+    };
+    if (value.yaw && value.pitch) text.facing = facing(*value.yaw, *value.pitch);
+    if (auto const& b = value.body) {
+        auto camera = ui::translated("hudCameraTag") + " ", player = ui::translated("hudPlayerTag") + " ";
+        if (!text.coordinates.empty()) text.coordinates = camera + text.coordinates;
+        if (!text.facing.empty()) text.facing = camera + text.facing;
+        text.bodyCoordinates = player + ui::translated("hudXYZ", b->x, b->y, b->z);
+        text.bodyFacing = player + facing(b->yaw, b->pitch);
     }
     if (value.skyLight && value.blockLight)
         text.light = ui::translated("hudLight", ui::translated("hudLightValues", *value.skyLight, *value.blockLight));
@@ -839,6 +1067,13 @@ bool infoLineEnabled(Settings::Information const& settings, std::string_view id)
     if (id == "moon") return settings.moon;
     return false;
 }
+// Lines that read the camera's place and angles during FreeCamera (L-124).
+bool followsCamera(std::string_view id) {
+    for (std::string_view line : {"coordinates", "scaledCoordinates", "block", "chunk", "facing", "yaw", "pitch",
+                                  "rotation", "biome", "light", "weather"})
+        if (id == line) return true;
+    return false;
+}
 std::optional<std::string> infoLineText(std::string_view id, PlayerInfo const& info,
                                         std::optional<FrameStatistics> timing, std::optional<std::int64_t> ping,
                                         std::optional<SpeedValues> speed, std::optional<std::string> const& realTime,
@@ -924,6 +1159,24 @@ std::optional<std::string> infoLineText(std::string_view id, PlayerInfo const& i
     return {};
 }
 }
+// The durability bar and stack count over a slot icon, as in inventory slots.
+void slotDecorations(MinecraftUIRenderContext& context, ItemStack const& stack, offhand::Box icon, float unit) {
+    if (!stack.mItem) return;
+    int maxDamage = static_cast<int>(stack.mItem->getMaxDamage());
+    if (inspection::render::shouldShowDurabilityBar(stack.isDamageableItem(), stack.getDamageValue(), maxDamage)) {
+        // Vanilla's bar geometry in icon units, scaled with the slot.
+        float ratio = inspection::render::durabilityRatio(stack.getDamageValue(), maxDamage);
+        auto back = inspection::render::durabilityBackground({0, 0, 16, 16});
+        auto front = inspection::render::durabilityForeground(back, ratio);
+        auto color = inspection::render::durabilityColor(ratio);
+        ui::fill(context, icon.x + back.x0 * unit, icon.y + back.y0 * unit, back.width() * unit, back.height() * unit,
+                 ui::Rgb{0, 0, 0});
+        if (front.width() > 0)
+            ui::fill(context, icon.x + front.x0 * unit, icon.y + front.y0 * unit, front.width() * unit,
+                     front.height() * unit, ui::Rgb{color.r, color.g, color.b});
+    }
+    if (stack.mCount > 1) slotCount(context, icon, unit, stack.mCount);
+}
 void drawOffhandSlot(MinecraftUIRenderContext& context, ScreenView const& view, Settings::Information const& settings) {
     if (!settings.offhandSlot) return;
     auto* player = context.mClient.getLocalPlayer();
@@ -947,33 +1200,208 @@ void drawOffhandSlot(MinecraftUIRenderContext& context, ScreenView const& view, 
     stack.mShowPickUp = false;
     stack.mWasPickedUp = false;
     auto icon = offhand::iconBox(*slot);
-    if (auto* renderer = context.mClient.getItemRenderer()) {
-        BaseActorRenderContext renderContext(context.mScreenContext, context.mClient,
-                                             context.mClient.getMinecraftGame_DEPRECATED());
-        float x = std::round(icon.x), y = std::round(icon.y);
+    {
+        // Unrounded like the hotbar's own icons (see iconBox).
+        float x = icon.x, y = icon.y;
         // Compasses and clocks pick their frame as in an inventory slot.
         int frame = stack.mItem->getAnimationFrameFor(player, false, &stack, true);
-        renderer->renderGuiItemNew(renderContext, stack, frame, x, y, false, 1.f, 1.f, unit, 17);
-        // The glint pass and its strength as in container previews.
-        if (stack.mItem->isGlint(stack))
-            renderer->renderGuiItemNew(renderContext, stack, frame, x, y, true, 1.35f, 1.f, unit, 17);
+        inspection::render::drawItemIcon(context, {&stack, x, y, unit, frame, 1.f, true}, 17);
     }
-    int maxDamage = static_cast<int>(stack.mItem->getMaxDamage());
-    if (inspection::render::shouldShowDurabilityBar(stack.isDamageableItem(), stack.getDamageValue(), maxDamage)) {
-        // Vanilla's bar geometry in icon units, scaled with the slot.
-        float ratio = inspection::render::durabilityRatio(stack.getDamageValue(), maxDamage);
-        auto back = inspection::render::durabilityBackground({0, 0, 16, 16});
-        auto front = inspection::render::durabilityForeground(back, ratio);
-        auto color = inspection::render::durabilityColor(ratio);
-        ui::fill(context, icon.x + back.x0 * unit, icon.y + back.y0 * unit, back.width() * unit, back.height() * unit,
-                 ui::Rgb{0, 0, 0});
-        if (front.width() > 0)
-            ui::fill(context, icon.x + front.x0 * unit, icon.y + front.y0 * unit, front.width() * unit,
-                     front.height() * unit, ui::Rgb{color.r, color.g, color.b});
-    }
-    if (stack.mCount > 1) slotCount(context, icon, unit, stack.mCount);
+    slotDecorations(context, stack, icon, unit);
 }
 std::string biomeName(std::string const& identifier) { return localizedBiomeName(identifier); }
+// ---- Inventory grid and used-slot counter (L-127, docs/demos/inventory-hud.html) ----
+// Copies for this frame only: the renderer must not replay a pickup squash.
+struct InventorySample {
+    std::array<ItemStack, inventoryHud::slotCount> stacks;
+    std::array<bool, inventoryHud::slotCount> occupied{};
+};
+std::optional<InventorySample> sampleInventory(IClientInstance& client, bool preview) {
+    auto* player = client.getLocalPlayer();
+    if (!player && !preview) return std::nullopt;
+    InventorySample sample;
+    if (player) {
+        auto& inventory = player->getInventory();
+        for (int slot = 0; slot < inventoryHud::slotCount; ++slot) {
+            auto const& stack = inventory.getItem(slot);
+            if (stack.isNull() || stack.mCount <= 0 || !stack.mItem) continue;
+            auto i = static_cast<size_t>(slot);
+            sample.stacks[i] = stack;
+            sample.stacks[i].mShowPickUp = false;
+            sample.stacks[i].mWasPickedUp = false;
+            sample.occupied[i] = true;
+        }
+    }
+    if (preview && std::none_of(sample.occupied.begin(), sample.occupied.end(), [](bool b) { return b; })) {
+        // The layout editor needs something to place with an empty inventory.
+        std::pair<char const*, int> examples[]{{"minecraft:cobblestone", 64}, {"minecraft:oak_log", 23}, {"minecraft:torch", 40},
+                                                {"minecraft:diamond_pickaxe", 1}, {"minecraft:bread", 9}};
+        int slot = 9;
+        for (auto [name, count] : examples) {
+            auto i = static_cast<size_t>(slot);
+            try { sample.stacks[i].reinit(name, count, 0); } catch (...) { continue; }
+            sample.occupied[i] = !sample.stacks[i].isNull();
+            slot += 4;
+        }
+    }
+    return sample;
+}
+std::optional<ui::hud_editor::Box> drawInventoryGrid(MinecraftUIRenderContext& context, float width, float height,
+    ui::HudElement const& element, InventorySample const& sample, bool hotbar) {
+    namespace inv = inventoryHud;
+    float z = elementZoom(element);
+    bool card = element.background == ui::ElementBackground::Card;
+    float pad = card ? 3 * z : 0;
+    float cell = inv::slotSize * z;
+    float gridW = 9 * cell, gridH = inv::gridHeight(hotbar, cell);
+    float boxW = gridW + 2 * pad, boxH = gridH + 2 * pad;
+    auto placement = ui::placeElement(width, height, boxW, boxH, element);
+    auto rows = inv::gridRows(hotbar);
+    if (card) ui::card(context, placement.x, placement.y, boxW, boxH, cardOpacity);
+    // Whole GUI units, as in inventory slots: layered icons (dyed leather)
+    // show seams between their layers at fractional positions.
+    float left = std::round(placement.x + pad), top = std::round(placement.y + pad);
+    std::vector<inspection::render::IconAt> icons;
+    std::vector<std::pair<ItemStack const*, offhand::Box>> drawn;
+    for (size_t row = 0; row < rows.size(); ++row)
+        for (size_t column = 0; column < rows[row].size(); ++column) {
+            auto i = static_cast<size_t>(rows[row][column]);
+            float x = left + column * cell, y = top + inv::rowTop(static_cast<int>(row), cell);
+            // Every slot has a faint frame around the whole cell, clear of the
+            // icon; empty ones show only that (look D, 2026-10-11).
+            ui::frame(context, x, y, cell, cell, ui::palette::text, .18f);
+            if (!sample.occupied[i]) continue;
+            offhand::Box icon{std::round(x + z), std::round(y + z), 16 * z, 16 * z};
+            icons.push_back({&sample.stacks[i], icon.x, icon.y, z, 0, 1.f, true});
+            drawn.push_back({&sample.stacks[i], icon});
+        }
+    inspection::render::drawItemIcons(context, icons, 17);
+    for (auto [stack, icon] : drawn) slotDecorations(context, *stack, icon, z);
+    context.flushText(0, std::nullopt);
+    return ui::hud_editor::Box{placement.x, placement.y, boxW, boxH};
+}
+std::optional<ui::hud_editor::Box> drawUsedSlots(MinecraftUIRenderContext& context, float width, float height,
+    ui::HudElement const& element, InventorySample const& sample, bool hotbar) {
+    auto usage = inventoryHud::usedSlots(sample.occupied, hotbar);
+    bool full = usage.used >= usage.total;
+    // One line: a row as tall as the text keeps the card's padding even.
+    return drawElement(context, width, height, element,
+                       {{std::format("{}/{}", usage.used, usage.total), std::nullopt, full ? ui::palette::warning : ui::palette::text}},
+                       ui::lineGlyphHeight + 1);
+}
+// ---- Player list (L-128, docs/demos/player-list.html) ----
+// Face, name, host crown, platform, dimension and distance in aligned columns:
+// each list column is laid out once from its widest cells.
+std::optional<ui::hud_editor::Box> drawPlayerList(MinecraftUIRenderContext& context, float width, float height,
+                                                  ui::HudElement const& element, Settings::Information const& settings,
+                                                  float rowUnits) {
+    namespace list = playerList;
+    auto rows = list::collect(context.mClient);
+    if (rows.empty()) return std::nullopt;
+    float zoom = elementZoom(element);
+    float rowHeight = std::max(rowUnits, 10.f) * zoom, icon = 8 * zoom, gap = 3 * zoom, columnGap = 10 * zoom;
+    bool card = element.background == ui::ElementBackground::Card, band = element.background == ui::ElementBackground::Line;
+    float padX = card ? 5 : band ? ui::lineSidePadding * zoom : 0, padY = card ? 3 : 0;
+    auto measure = [&](std::string const& text) { return ui::labelWidth(context, text, zoom); };
+    float platformWidth = 0, distanceWidth = 0, longestName = 0;
+    for (auto const& row : rows) {
+        longestName = std::max(longestName, measure(row.name));
+        if (settings.playerListPlatform) platformWidth = std::max(platformWidth, measure(std::string(list::platformText(row.platform))));
+        if (settings.playerListDistance && row.distance && !row.self)
+            distanceWidth = std::max(distanceWidth, measure(list::distanceText(*row.distance)));
+        else if (settings.playerListDistance && !row.self && !row.distance && row.dimensionCurrent)
+            distanceWidth = std::max(distanceWidth, measure("-"));
+    }
+    if (settings.playerListDistance) distanceWidth = std::max(distanceWidth, measure("-"));
+    auto columnWidth = [&](float nameWidth) {
+        float w = icon + gap + nameWidth + gap + icon;
+        if (settings.playerListPlatform) w += gap + platformWidth;
+        if (settings.playerListDimension) w += gap + icon;
+        if (settings.playerListDistance) w += gap + distanceWidth;
+        return w;
+    };
+    // Names stop at about 16 characters; 10 when even one column does not fit.
+    float available = std::max(0.f, width - 8 - 2 * padX);
+    float nameWidth = std::min(longestName, 96 * zoom);
+    auto grid = list::plan(static_cast<int>(rows.size()), columnWidth(nameWidth), columnGap, available);
+    if (grid.columns == 1 && columnWidth(nameWidth) > available) {
+        nameWidth = std::min(longestName, 60 * zoom);
+        grid = list::plan(static_cast<int>(rows.size()), columnWidth(nameWidth), columnGap, available);
+    }
+    float colWidth = columnWidth(nameWidth);
+    int firstColumnRows = std::min(grid.shown, grid.perColumn);
+    bool more = grid.shown < static_cast<int>(rows.size());
+    auto header = ui::translated("playerList.count", static_cast<int>(rows.size()));
+    float contentWidth = std::max(grid.columns * colWidth + (grid.columns - 1) * columnGap, measure(header));
+    float boxWidth = contentWidth + 2 * padX;
+    float boxHeight = (1 + firstColumnRows + (more ? 1 : 0)) * rowHeight + 2 * padY;
+    auto at = ui::placeElement(width, height, boxWidth, boxHeight, element);
+    if (card) ui::card(context, at.x, at.y, boxWidth, boxHeight, cardOpacity);
+    float left = at.x + padX, top = at.y + padY;
+    auto textTop = [&](float y) { return ui::lineTextTop(y, rowHeight, zoom, band); };
+    auto bandAt = [&](float x, float y, float w) {
+        if (!band) return;
+        auto line = ui::lineBox(x, y, w, rowHeight, zoom);
+        ui::fill(context, line.x, line.y, line.width, line.height, ui::palette::panel, cardOpacity);
+    };
+    bandAt(left, top, measure(header));
+    ui::labelScaled(context, left, textTop(top), measure(header) + 2, header, zoom, ui::palette::dim, ui::Align::Left,
+                    element.shadow);
+    static char const* const dimensionBlocks[] = {"minecraft:grass_block", "minecraft:netherrack", "minecraft:end_stone"};
+    for (int i = 0; i < grid.shown; ++i) {
+        auto const& row = rows[static_cast<size_t>(i)];
+        float x = left + (i / grid.perColumn) * (colWidth + columnGap);
+        float y = top + (1 + i % grid.perColumn) * rowHeight;
+        // Icons share the text's line (8 units tall), not the row's middle.
+        float iconTop = textTop(y);
+        bandAt(x, y, colWidth);
+        if (row.face >= 0) map::faces::draw(context, row.face, x + icon / 2, iconTop + icon / 2, icon, 1);
+        x += icon + gap;
+        auto name = list::fitName(row.name, nameWidth, measure);
+        ui::labelScaled(context, x, textTop(y), nameWidth + 2, name, zoom, row.self ? ui::palette::accent : ui::palette::text,
+                        ui::Align::Left, element.shadow);
+        x += nameWidth + gap;
+        if (auto mark = list::permissionTexture(row.permission, settings.playerListMembers); !mark.empty())
+            ui::images(context, mark, {{x, iconTop, icon, icon}});
+        x += icon;
+        if (settings.playerListPlatform) {
+            x += gap;
+            ui::labelScaled(context, x, textTop(y), platformWidth + 2, std::string(list::platformText(row.platform)), zoom,
+                            row.platform < 0 ? ui::palette::faint : ui::palette::dim, ui::Align::Left, element.shadow);
+            x += platformWidth;
+        }
+        if (settings.playerListDimension) {
+            x += gap;
+            if (row.dimension && *row.dimension >= 0 && *row.dimension < 3) {
+                ItemStack stack;
+                try { stack.reinit(dimensionBlocks[*row.dimension], 1, 0); } catch (...) { stack = ItemStack(); }
+                stack.mShowPickUp = false;
+                stack.mWasPickedUp = false;
+                // Faded: where they were last seen, not where they are now.
+                if (!stack.isNull())
+                    inspection::render::drawItemIcon(context, {&stack, x, iconTop, icon / 16, 0, row.dimensionCurrent ? 1.f : .4f}, 17);
+            }
+            x += icon;
+        }
+        if (settings.playerListDistance && !row.self) {
+            x += gap;
+            // Players in another dimension or unknown ones: no distance, a dash only in yours.
+            std::string text = row.distance ? list::distanceText(*row.distance) : row.dimensionCurrent ? std::string("-") : std::string();
+            if (!text.empty())
+                ui::labelScaled(context, x, textTop(y), distanceWidth, text, zoom,
+                                row.distance ? ui::palette::dim : ui::palette::faint, ui::Align::Right, element.shadow);
+        }
+    }
+    if (more) {
+        auto rest = ui::translated("playerList.more", static_cast<int>(rows.size()) - grid.shown);
+        float y = top + (1 + firstColumnRows) * rowHeight;
+        bandAt(left, y, measure(rest));
+        ui::labelScaled(context, left, textTop(y), measure(rest) + 2, rest, zoom, ui::palette::dim, ui::Align::Left,
+                        element.shadow);
+    }
+    context.flushText(0, std::nullopt);
+    return ui::hud_editor::Box{at.x, at.y, boxWidth, boxHeight};
+}
 ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, float height,
                               Settings::Information const& preferences, HudPreview const* preview) {
     ui::hud_editor::Boxes boxes;
@@ -983,6 +1411,7 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
     auto const& runtime = *snapshot;
     cardOpacity = static_cast<float>(runtime.ui.hudBackgroundOpacity) / 100.f;
     auto const& hud = preview ? preview->layout : runtime.hud;
+    if (preview) box(ui::HudElementId::Chat) = chatPosition::preview(context, width, height, hud.chat);
     auto viewRay = [&](double reach) -> std::optional<ViewRay> {
         auto* player = context.mClient.getLocalPlayer();
         if (!player) return std::nullopt;
@@ -1003,6 +1432,10 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
     if (settings.debug && !hidden && !preview) {
         // No player, no panel: invented values would read as real ones.
         if (auto values = collectDebugValues(context.mClient, viewRay(settings.targetDistance))) {
+            auto counts = clientCounters(context.mClient);
+            if (settings.debugEntityKinds) values->entityKinds = counts.entityKinds;
+            if (size_t limit = settings.debugEntityTypes == 2 ? 10 : settings.debugEntityTypes == 1 ? 5 : 0; limit)
+                values->entityTypes = summarizeTypes(counts.entityTypes, limit);
             auto style = settings.debugLabels == 1 ? DebugLabel::JavaF3 : DebugLabel::GameStandard;
             auto columns = buildDebugColumns(*values, style, debugGameText(*values));
             drawDebugColumns(context, width, height, columns.left, columns.right, settings.debugShadow,
@@ -1015,6 +1448,8 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
         // Under every HUD element: they point into the world.
         map::markers::draw(context, width, height, runtime.map);
         if (auto message = schematic::ghosts::takeSaveMessage()) ui::showMessageToast(std::move(*message));
+        // Once the world shows: the server's look is missing on purpose.
+        if (int packs = visuals::serverPacks::takeSkipped()) ui::showMessageToast(ui::translated("skipServerPacks.notice", packs), 6);
         if (runtime.schematic.enabled) schematic::actions::adjustFrame(context, width, height);
     }
     if (hidden) {
@@ -1063,11 +1498,19 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
         if (preview && lines.empty()) lines.push_back({ui::translated("status.permanentSneak"), ui::palette::accent});
         box(ui::HudElementId::Status) = drawElement(context, width, height, hud.status, lines, runtime.ui.hudRowHeight);
     }
-    if (preview || (settings.target && !(settings.debug && settings.debugHideTarget))) {
+    // The player list shares the top center with the target card and is drawn
+    // over everything (L-128); the card waits while the list is held.
+    bool listHeld = !preview && playerList::held();
+    auto drawList = [&] {
+        if (preview || listHeld)
+            box(ui::HudElementId::PlayerList) = drawPlayerList(context, width, height, hud.playerList, settings,
+                                                               static_cast<float>(runtime.ui.hudRowHeight));
+    };
+    if (preview || (settings.target && !listHeld && !(settings.debug && settings.debugHideTarget))) {
         // One distance for every viewpoint: the body normally, the camera
         // during Freelook and FreeCamera (it looks elsewhere than the body).
         auto ray = viewRay(settings.targetDistance);
-        auto target = collectTargetInfo(context.mClient, true, ray);
+        auto target = collectTargetInfo(context.mClient, true, ray, settings.targetSchematic);
         if (!target && preview) {
             TargetInfo sample{ui::translated("feature.targetInfo"), "minecraft:grass_block"};
             sample.icon = {IconKind::Item, "minecraft:grass_block", 0};
@@ -1078,6 +1521,17 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
     }
     if (preview || settings.durabilityHud)
         box(ui::HudElementId::Durability) = drawDurability(context, width, height, hud.durability, settings, preview != nullptr);
+    if (preview || settings.effectsHud)
+        box(ui::HudElementId::StatusEffects) = drawStatusEffects(context, width, height, hud.statusEffects, settings, preview != nullptr);
+    else statusEffects::covers(false);
+    if (preview || settings.inventoryHud || settings.usedSlots) {
+        if (auto sample = sampleInventory(context.mClient, preview != nullptr)) {
+            if (preview || settings.inventoryHud)
+                box(ui::HudElementId::Inventory) = drawInventoryGrid(context, width, height, hud.inventory, *sample, settings.inventoryHotbar);
+            if (preview || settings.usedSlots)
+                box(ui::HudElementId::UsedSlots) = drawUsedSlots(context, width, height, hud.usedSlots, *sample, settings.usedSlotsHotbar);
+        }
+    }
     if (preview || (runtime.schematic.enabled && runtime.schematic.hud))
         box(ui::HudElementId::Schematic) = drawSchematicHud(context, width, height, hud.schematic, runtime.schematic, preview != nullptr);
     if (preview || runtime.camera.showMagnification) {
@@ -1092,11 +1546,16 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
         if (!toast && preview) toast = ui::Toast::Visible{ui::translated("feature.toolSwitch"), true, 1.f};
         if (toast) {
             float zoom = elementZoom(hud.toast);
-            // A message may hold several lines ("\n"), each centered in the box.
+            // A message may hold several lines ("\n"), each centered in the box;
+            // a line wider than most of the screen wraps.
             std::vector<std::string> parts;
+            float widest = std::max(width * .6f, 120.f);
+            auto measure = [&](std::string_view part) { return ui::textWidthScaled(context, part, zoom); };
             for (size_t start = 0;;) {
                 auto end = toast->text.find('\n', start);
-                parts.push_back(toast->text.substr(start, end == std::string::npos ? std::string::npos : end - start));
+                auto line = toast->text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+                if (measure(line) <= widest) parts.push_back(std::move(line));
+                else for (auto& wrapped : ui::wrapLabel(line, widest, 4, measure)) parts.push_back(std::move(wrapped));
                 if (end == std::string::npos) break;
                 start = end + 1;
             }
@@ -1118,7 +1577,7 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
             context.flushText(0, std::nullopt);
         }
     }
-    if (!preview && (!settings.hud || (settings.debug && settings.debugHideHud))) return boxes;
+    if (!preview && (!settings.hud || (settings.debug && settings.debugHideHud))) { drawList(); return boxes; }
     PlayerInfoRequest request;
     request.coordinates = settings.coordinates || settings.scaledCoordinates || settings.block || settings.chunk
         || settings.speed || settings.horizontalSpeed || settings.verticalSpeed;
@@ -1131,13 +1590,14 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
     request.weather = settings.weather;
     request.difficulty = settings.difficulty;
     request.sprinting = settings.sprinting;
-    auto info = collectPlayerInfo(context.mClient, request);
-    if (!info.present) return boxes;
+    auto info = collectPlayerInfo(context.mClient, request, cameraPose(context.mClient));
+    if (!info.present) { drawList(); return boxes; }
     auto timing = (settings.fps || settings.frameTime) ? frameStatistics() : std::optional<FrameStatistics>{};
     auto ping = settings.ping ? connectionPing(context.mClient) : std::optional<std::int64_t>{};
     bool anySpeed = settings.speed || settings.horizontalSpeed || settings.verticalSpeed;
-    if (anySpeed && info.position)
-        speedSampler.sample(info.position->x, info.position->y, info.position->z, ui::toastNow());
+    // Speed stays the body's; during FreeCamera position is the camera's.
+    if (anySpeed && info.bodyPosition)
+        speedSampler.sample(info.bodyPosition->x, info.bodyPosition->y, info.bodyPosition->z, ui::toastNow());
     else if (!anySpeed)
         speedSampler.reset();
     auto speed = anySpeed ? speedSampler.read() : std::optional<SpeedValues>{};
@@ -1147,11 +1607,14 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext& context, float width, fl
     for (auto const& id : settings.lineOrder) {
         if (static_cast<int>(lines.size()) >= capacity) break;
         if (!infoLineEnabled(settings, id)) continue;
-        if (auto text = infoLineText(id, info, timing, ping, speed, realTime, biomeDisplay(settings)))
+        if (auto text = infoLineText(id, info, timing, ping, speed, realTime, biomeDisplay(settings))) {
+            if (info.camera && followsCamera(id)) *text = ui::translated("hudCameraTag") + " " + *text;
             lines.push_back({std::move(*text), {}});
+        }
     }
     if (preview && lines.empty()) lines.push_back({ui::translated("feature.infoHud"), {}});
     box(ui::HudElementId::Info) = drawElement(context, width, height, hud.info, lines, runtime.ui.hudRowHeight);
+    drawList();
     return boxes;
 }
 }

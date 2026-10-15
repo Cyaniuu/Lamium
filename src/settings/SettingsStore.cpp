@@ -1,5 +1,6 @@
 #include "settings/SettingsStore.h"
 #include "nlohmann/json.hpp"
+#include <array>
 #include <fstream>
 #include <stdexcept>
 #include <system_error>
@@ -65,10 +66,12 @@ Json encode(Settings const& settings) {
                          {"useMode", interaction::autoModeNames[static_cast<size_t>(settings.interaction.useMode)]},
                          {"attackHeldOnly", settings.interaction.attackHeldOnly}, {"useHeldOnly", settings.interaction.useHeldOnly},
                          {"breaking", settings.interaction.breaking}, {"edgeGuard", settings.interaction.edgeGuard},
+                         {"edgeMargin", settings.interaction.edgeMargin},
                          {"toolGuard", settings.interaction.toolGuard}, {"elytraSwap", settings.interaction.elytraSwap},
                          {"toolGuardStrict", settings.interaction.toolGuardStrict},
                          {"elytraReturnSeconds", settings.interaction.elytraReturnSeconds},
                          {"elytraFireworkJump", settings.interaction.elytraFireworkJump},
+                         {"elytraRiptide", settings.interaction.elytraRiptide},
                          {"breakingMode", interaction::restrictionNames[static_cast<size_t>(settings.interaction.breakingMode)]},
                          {"breakingBand", settings.interaction.breakingBand},
                          {"placementMode", interaction::restrictionNames[static_cast<size_t>(settings.interaction.placementMode)]}}},
@@ -77,8 +80,12 @@ Json encode(Settings const& settings) {
                          {"debug", settings.information.debug}, {"debugLabels", settings.information.debugLabels},
                          {"debugHideHud", settings.information.debugHideHud},
                          {"debugHideTarget", settings.information.debugHideTarget},
+                         {"debugHideVanilla", settings.information.debugHideVanilla},
+                         {"hudHidePaperDoll", settings.information.hudHidePaperDoll},
                          {"debugShadow", settings.information.debugShadow},
                          {"debugBackground", settings.information.debugBackground},
+                         {"debugEntityKinds", settings.information.debugEntityKinds},
+                         {"debugEntityTypes", settings.information.debugEntityTypes},
                          {"target", settings.information.target}, {"targetIdentifier", settings.information.targetIdentifier},
                          {"targetIcon", settings.information.targetIcon},
                          {"targetHealth", settings.information.targetHealth},
@@ -87,12 +94,28 @@ Json encode(Settings const& settings) {
                          {"targetDistance", settings.information.targetDistance},
                          {"targetStates", settings.information.targetStates},
                          {"targetCoordinates", settings.information.targetCoordinates},
+                         {"targetSchematic", settings.information.targetSchematic},
                          {"durabilityHud", settings.information.durabilityHud},
                          {"durabilityLook", settings.information.durabilityLook},
                          {"durabilityOffhand", settings.information.durabilityOffhand},
                          {"durabilityArmor", settings.information.durabilityArmor},
+                         {"durabilityAmmo", settings.information.durabilityAmmo},
+                         {"durabilityElytra", settings.information.durabilityElytra},
                          {"offhandSlot", settings.information.offhandSlot},
                          {"offhandSlotEmpty", settings.information.offhandSlotEmpty},
+                         {"playerListPlatform", settings.information.playerListPlatform},
+                         {"playerListDimension", settings.information.playerListDimension},
+                         {"playerListDistance", settings.information.playerListDistance},
+                         {"playerListMembers", settings.information.playerListMembers},
+                         {"inventoryHud", settings.information.inventoryHud},
+                         {"usedSlots", settings.information.usedSlots},
+                         {"inventoryHotbar", settings.information.inventoryHotbar},
+                         {"usedSlotsHotbar", settings.information.usedSlotsHotbar},
+                         {"effectsHud", settings.information.effectsHud},
+                         {"chatPosition", settings.information.chatPosition},
+                         {"effectsNames", settings.information.effectsNames},
+                         {"effectsWarning", settings.information.effectsWarning},
+                         {"effectsHideVanilla", settings.information.effectsHideVanilla},
                          {"saturation", settings.information.saturation},
                          {"saturationPreview", settings.information.saturationPreview},
                          {"lineOrder", settings.information.lineOrder},
@@ -115,10 +138,14 @@ Json encode(Settings const& settings) {
                          {"dimension", settings.information.dimension}}},
         {"visuals", {{"hideOffhand", settings.visuals.hideOffhand},
                      {"hideEffects", settings.visuals.hideEffects},
+                     {"connectedTextures", settings.visuals.connectedTextures},
                      {"hideWeather", settings.visuals.hideWeather}, {"hideParticles", settings.visuals.hideParticles},
                      {"hideBossBars", settings.visuals.hideBossBars}, {"hideNausea", settings.visuals.hideNausea},
                      {"hideWater", settings.visuals.hideWater}, {"hideLava", settings.visuals.hideLava},
-                     {"hidePowderSnow", settings.visuals.hidePowderSnow}}},
+                     {"hidePowderSnow", settings.visuals.hidePowderSnow},
+                     {"hideDistanceFog", settings.visuals.hideDistanceFog},
+                     {"hidePortal", settings.visuals.hidePortal},
+                     {"skipServerPacks", settings.visuals.skipServerPacks}}},
         {"overlays", {{"chunkBorders", settings.overlays.chunkBorders}, {"hitboxes", settings.overlays.hitboxes}, {"shapes", settings.overlays.shapes},
                       {"light", settings.overlays.light},
                       {"lightValue", overlay::lightValueNames[static_cast<size_t>(settings.overlays.lightValue)]},
@@ -130,9 +157,12 @@ Json encode(Settings const& settings) {
                     {"freelookStartPerspective", settings.camera.freelookStartPerspective}, {"freeCameraToggle", settings.camera.freeCameraToggle},
                     {"freeCameraSpeed", settings.camera.freeCameraSpeed},
                     {"freeCameraWorldFixed", settings.camera.freeCameraWorldFixed},
+                    {"freeCameraLeaveOnHit", settings.camera.freeCameraLeaveOnHit},
+                    {"freeCameraHide", settings.camera.freeCameraHide},
                     {"magnification", settings.camera.magnification},
+                    {"zoomWideAngle", settings.camera.zoomWideAngle},
                     {"showMagnification", settings.camera.showMagnification}}},
-        {"lighting", {{"nightVision", settings.lighting.nightVision}}},
+        {"lighting", {{"nightVision", settings.lighting.nightVision}, {"nightVisionEven", settings.lighting.nightVisionEven}}},
         {"inspection", {{"containerPreviews", settings.inspection.containerPreviews},
                         {"shulkerPreviews", settings.inspection.shulkerPreviews},
                         {"emptyShulkerPreviews", settings.inspection.emptyShulkerPreviews},
@@ -140,8 +170,11 @@ Json encode(Settings const& settings) {
                         {"bundlePreviews", settings.inspection.bundlePreviews},
                         {"emptyBundlePreviews", settings.inspection.emptyBundlePreviews},
                         {"durability", settings.inspection.durability},
-                        {"foodValues", settings.inspection.foodValues}}},
+                        {"foodValues", settings.inspection.foodValues},
+                        {"lockedTrades", settings.inspection.lockedTrades},
+                        {"englishSearch", settings.inspection.englishSearch}}},
         {"inventory", {{"sorting", settings.inventory.sorting}, {"sortContainers", settings.inventory.sortContainers},
+                       {"repeatTrades", settings.inventory.repeatTrades},
                        {"offhandSwap", settings.inventory.offhandSwap},
                        {"deathRestore", settings.inventory.deathRestore},
                        {"deathRestoreAll", settings.inventory.deathRestoreAll},
@@ -151,6 +184,16 @@ Json encode(Settings const& settings) {
                        {"transferWheelStack", settings.inventory.transferWheelStack},
                        {"transferDragStack", settings.inventory.transferDragStack},
                        {"transferDragOne", settings.inventory.transferDragOne},
+                       {"transferWheelMatching", settings.inventory.transferWheelMatching},
+                       {"transferWheelAll", settings.inventory.transferWheelAll},
+                       {"transferClickMatching", settings.inventory.transferClickMatching},
+                       {"transferClickAll", settings.inventory.transferClickAll},
+                       {"transferDragKeepOne", settings.inventory.transferDragKeepOne},
+                       {"transferCursorMatching", settings.inventory.transferCursorMatching},
+                       {"transferDropOne", settings.inventory.transferDropOne},
+                       {"transferDropKeepOne", settings.inventory.transferDropKeepOne},
+                       {"transferDropAll", settings.inventory.transferDropAll},
+                       {"transferDropMatching", settings.inventory.transferDropMatching},
                        {"toolSwitch", settings.inventory.toolSwitch}, {"handRestock", settings.inventory.handRestock},
                        {"restockFromHotbar", settings.inventory.restockFromHotbar},
                        {"restockOffhand", settings.inventory.restockOffhand},
@@ -170,12 +213,17 @@ Json encode(Settings const& settings) {
                    {"magnification", encodeHudElement(settings.hud.magnification)},
                    {"durability", encodeHudElement(settings.hud.durability)},
                    {"minimap", encodeHudElement(settings.hud.minimap)},
-                   {"schematic", encodeHudElement(settings.hud.schematic)}}},
+                   {"schematic", encodeHudElement(settings.hud.schematic)},
+                   {"playerList", encodeHudElement(settings.hud.playerList)},
+                   {"inventory", encodeHudElement(settings.hud.inventory)},
+                   {"usedSlots", encodeHudElement(settings.hud.usedSlots)},
+                   {"statusEffects", encodeHudElement(settings.hud.statusEffects)},
+                   {"chat", encodeHudElement(settings.hud.chat)}}},
         {"map", {{"minimap", settings.map.minimap}, {"range", map::blocksAcross(settings.map.zoom)}, {"size", settings.map.size},
                  {"rotate", settings.map.rotate},
                  {"round", settings.map.round}, {"coordinates", settings.map.coordinates},
                  {"biome", settings.map.biome}, {"compass", settings.map.compass},
-                 {"debugHide", settings.map.debugHide}, {"radar", settings.map.radar},
+                 {"debugHide", settings.map.debugHide}, {"minimapShapes", settings.map.minimapShapes}, {"radar", settings.map.radar},
                  {"radarPlayers", settings.map.radarPlayers}, {"radarHostile", settings.map.radarHostile},
                  {"radarPassive", settings.map.radarPassive}, {"radarItems", settings.map.radarItems},
                  {"radarInvisible", settings.map.radarInvisible}, {"waypoints", settings.map.waypoints},
@@ -183,12 +231,15 @@ Json encode(Settings const& settings) {
                  {"waypointsMinimap", settings.map.waypointsMinimap}, {"waypointsDeath", settings.map.waypointsDeath},
                  {"waypointsCrossScale", settings.map.waypointsCrossScale}, {"worldMap", settings.map.worldMap},
                  {"worldMapNetherAuto", settings.map.worldMapNetherAuto}, {"worldMapPanel", settings.map.worldMapPanel},
-                 {"seedLink", settings.map.seedLink},
-                 {"radarFaces", settings.map.radarFaces}}},
+                 {"seedLink", settings.map.seedLink}, {"worldMapNames", settings.map.worldMapNames},
+                 {"radarFaces", settings.map.radarFaces}, {"worldMapWaypoints", settings.map.worldMapWaypoints},
+                 {"worldMapSchematics", settings.map.worldMapSchematics}, {"worldMapShapes", settings.map.worldMapShapes},
+                 {"worldMapList", settings.map.worldMapList}}},
         {"schematic", {{"enabled", settings.schematic.enabled}, {"hud", settings.schematic.hud},
                        {"hudVerify", settings.schematic.hudVerify}, {"hudMaterials", settings.schematic.hudMaterials},
                        {"menuBackground", settings.schematic.menuBackground}, {"menuSmall", settings.schematic.menuSmall},
-                       {"menuReopen", settings.schematic.menuReopen}}}
+                       {"ghostTintPercent", settings.schematic.ghostTint}, {"ghostLines", settings.schematic.ghostLines},
+                       {"menuReopen", settings.schematic.menuReopen}, {"outlineDistance", settings.schematic.outlineDistance}}}
     };
 }
 }
@@ -224,11 +275,13 @@ Settings decodeSettings(std::string_view text) {
         value.interaction.useHeldOnly = heldOnly("useHeldOnly", "useTrigger");
         value.interaction.breaking = options.value("breaking", value.interaction.breaking);
         value.interaction.edgeGuard = options.value("edgeGuard", value.interaction.edgeGuard);
+        value.interaction.edgeMargin = options.value("edgeMargin", value.interaction.edgeMargin);
         value.interaction.toolGuard = options.value("toolGuard", value.interaction.toolGuard);
         value.interaction.toolGuardStrict = options.value("toolGuardStrict", value.interaction.toolGuardStrict);
         value.interaction.elytraSwap = options.value("elytraSwap", value.interaction.elytraSwap);
         value.interaction.elytraReturnSeconds = options.value("elytraReturnSeconds", value.interaction.elytraReturnSeconds);
         value.interaction.elytraFireworkJump = options.value("elytraFireworkJump", value.interaction.elytraFireworkJump);
+        value.interaction.elytraRiptide = options.value("elytraRiptide", value.interaction.elytraRiptide);
         auto mode = [&](char const* key) {
             auto name = options.value(key,std::string("plane"));
             for (size_t i=0;i<interaction::restrictionNames.size();++i)
@@ -245,8 +298,12 @@ Settings decodeSettings(std::string_view text) {
         value.information.debugLabels = info.value("debugLabels", value.information.debugLabels);
         value.information.debugHideHud = info.value("debugHideHud", value.information.debugHideHud);
         value.information.debugHideTarget = info.value("debugHideTarget", value.information.debugHideTarget);
+        value.information.debugHideVanilla = info.value("debugHideVanilla", value.information.debugHideVanilla);
+        value.information.hudHidePaperDoll = info.value("hudHidePaperDoll", value.information.hudHidePaperDoll);
         value.information.debugShadow = info.value("debugShadow", value.information.debugShadow);
         value.information.debugBackground = info.value("debugBackground", value.information.debugBackground);
+        value.information.debugEntityKinds = info.value("debugEntityKinds", value.information.debugEntityKinds);
+        value.information.debugEntityTypes = info.value("debugEntityTypes", value.information.debugEntityTypes);
         value.information.target = info.value("target", value.information.target);
         value.information.targetIdentifier = info.value("targetIdentifier", value.information.targetIdentifier);
         value.information.targetStates = info.value("targetStates", value.information.targetStates);
@@ -256,12 +313,31 @@ Settings decodeSettings(std::string_view text) {
         value.information.targetGrowth = info.value("targetGrowth", value.information.targetGrowth);
         value.information.targetDistance = info.value("targetDistance", value.information.targetDistance);
         value.information.targetCoordinates = info.value("targetCoordinates", value.information.targetCoordinates);
+        // Test builds of 2026-10-15 saved a number here (0 meant hidden).
+        if (auto found = info.find("targetSchematic"); found != info.end())
+            value.information.targetSchematic = found->is_number() ? found->get<int>() != 0
+                : found->is_boolean() ? found->get<bool>() : value.information.targetSchematic;
         value.information.durabilityHud = info.value("durabilityHud", value.information.durabilityHud);
         value.information.durabilityLook = info.value("durabilityLook", value.information.durabilityLook);
         value.information.durabilityOffhand = info.value("durabilityOffhand", value.information.durabilityOffhand);
         value.information.durabilityArmor = info.value("durabilityArmor", value.information.durabilityArmor);
+        value.information.durabilityAmmo = info.value("durabilityAmmo", value.information.durabilityAmmo);
+        value.information.durabilityElytra = info.value("durabilityElytra", value.information.durabilityElytra);
         value.information.offhandSlot = info.value("offhandSlot", value.information.offhandSlot);
         value.information.offhandSlotEmpty = info.value("offhandSlotEmpty", value.information.offhandSlotEmpty);
+        value.information.playerListPlatform = info.value("playerListPlatform", value.information.playerListPlatform);
+        value.information.playerListDimension = info.value("playerListDimension", value.information.playerListDimension);
+        value.information.playerListDistance = info.value("playerListDistance", value.information.playerListDistance);
+        value.information.playerListMembers = info.value("playerListMembers", value.information.playerListMembers);
+        value.information.inventoryHud = info.value("inventoryHud", value.information.inventoryHud);
+        value.information.usedSlots = info.value("usedSlots", value.information.usedSlots);
+        value.information.inventoryHotbar = info.value("inventoryHotbar", value.information.inventoryHotbar);
+        value.information.usedSlotsHotbar = info.value("usedSlotsHotbar", value.information.usedSlotsHotbar);
+        value.information.chatPosition = info.value("chatPosition", value.information.chatPosition);
+        value.information.effectsHud = info.value("effectsHud", value.information.effectsHud);
+        value.information.effectsNames = info.value("effectsNames", value.information.effectsNames);
+        value.information.effectsWarning = info.value("effectsWarning", value.information.effectsWarning);
+        value.information.effectsHideVanilla = info.value("effectsHideVanilla", value.information.effectsHideVanilla);
         value.information.saturation = info.value("saturation", value.information.saturation);
         value.information.saturationPreview = info.value("saturationPreview", value.information.saturationPreview);
         value.information.hud = info.value("hud", value.information.hud);
@@ -301,6 +377,8 @@ Settings decodeSettings(std::string_view text) {
         auto const& visuals = data.at("visuals");
         value.visuals.hideOffhand = visuals.value("hideOffhand", value.visuals.hideOffhand);
         value.visuals.hideEffects = visuals.value("hideEffects", value.visuals.hideEffects);
+        value.visuals.connectedTextures = visuals.value("connectedTextures", value.visuals.connectedTextures);
+        value.visuals.skipServerPacks = visuals.value("skipServerPacks", value.visuals.skipServerPacks);
         value.visuals.hideWeather = visuals.value("hideWeather", value.visuals.hideWeather);
         value.visuals.hideParticles = visuals.value("hideParticles", value.visuals.hideParticles);
         value.visuals.hideBossBars = visuals.value("hideBossBars", value.visuals.hideBossBars);
@@ -308,6 +386,8 @@ Settings decodeSettings(std::string_view text) {
         value.visuals.hideWater = visuals.value("hideWater", value.visuals.hideWater);
         value.visuals.hideLava = visuals.value("hideLava", value.visuals.hideLava);
         value.visuals.hidePowderSnow = visuals.value("hidePowderSnow", value.visuals.hidePowderSnow);
+        value.visuals.hideDistanceFog = visuals.value("hideDistanceFog", value.visuals.hideDistanceFog);
+        value.visuals.hidePortal = visuals.value("hidePortal", value.visuals.hidePortal);
     }
     if (data.contains("overlays")) {
         auto const& overlays = data.at("overlays");
@@ -361,9 +441,12 @@ Settings decodeSettings(std::string_view text) {
         value.camera.freelookStartPerspective = camera.value("freelookStartPerspective", value.camera.freelookStartPerspective);
         value.camera.freeCameraToggle = camera.value("freeCameraToggle", value.camera.freeCameraToggle);
         value.camera.freeCameraWorldFixed = camera.value("freeCameraWorldFixed", value.camera.freeCameraWorldFixed);
+        value.camera.freeCameraLeaveOnHit = camera.value("freeCameraLeaveOnHit", value.camera.freeCameraLeaveOnHit);
+        value.camera.freeCameraHide = camera.value("freeCameraHide", value.camera.freeCameraHide);
         value.camera.freeCameraSpeed = camera.value("freeCameraSpeed", value.camera.freeCameraSpeed);
         value.camera.zoomToggle = camera.value("zoomToggle", value.camera.zoomToggle);
         value.camera.magnification = camera.value("magnification", value.camera.magnification);
+        value.camera.zoomWideAngle = camera.value("zoomWideAngle", value.camera.zoomWideAngle);
         value.camera.showMagnification = camera.value("showMagnification", value.camera.showMagnification);
     }
     if (data.contains("map") && data.at("map").is_object()) {
@@ -380,6 +463,7 @@ Settings decodeSettings(std::string_view text) {
         value.map.biome = map.value("biome", value.map.biome);
         value.map.compass = map.value("compass", value.map.compass);
         value.map.debugHide = map.value("debugHide", value.map.debugHide);
+        value.map.minimapShapes = map.value("minimapShapes", value.map.minimapShapes);
         value.map.radar = map.value("radar", value.map.radar);
         value.map.radarPlayers = map.value("radarPlayers", value.map.radarPlayers);
         value.map.radarHostile = map.value("radarHostile", value.map.radarHostile);
@@ -400,7 +484,12 @@ Settings decodeSettings(std::string_view text) {
         value.map.worldMapNetherAuto = map.value("worldMapNetherAuto", value.map.worldMapNetherAuto);
         value.map.worldMapPanel = map.value("worldMapPanel", value.map.worldMapPanel);
         value.map.seedLink = map.value("seedLink", value.map.seedLink);
+        value.map.worldMapNames = map.value("worldMapNames", value.map.worldMapNames);
         value.map.radarFaces = map.value("radarFaces", value.map.radarFaces);
+        value.map.worldMapWaypoints = map.value("worldMapWaypoints", value.map.worldMapWaypoints);
+        value.map.worldMapSchematics = map.value("worldMapSchematics", value.map.worldMapSchematics);
+        value.map.worldMapShapes = map.value("worldMapShapes", value.map.worldMapShapes);
+        value.map.worldMapList = std::clamp(map.value("worldMapList", value.map.worldMapList), 0, 2);
     }
     if (data.contains("schematic") && data.at("schematic").is_object()) {
         auto const& schematic = data.at("schematic");
@@ -409,16 +498,25 @@ Settings decodeSettings(std::string_view text) {
         value.schematic.hudVerify = schematic.value("hudVerify", value.schematic.hudVerify);
         value.schematic.hudMaterials = schematic.value("hudMaterials", value.schematic.hudMaterials);
         value.schematic.menuBackground = schematic.value("menuBackground", value.schematic.menuBackground);
+        // Builds of 2026-10-15 saved a choice: 0 strong, 1 weak, 2 none.
+        if (int choice = schematic.value("ghostTint", -1); choice >= 0 && choice <= 2)
+            value.schematic.ghostTint = std::array{100, 40, 0}[static_cast<size_t>(choice)];
+        value.schematic.ghostTint = schematic.value("ghostTintPercent", value.schematic.ghostTint);
+        value.schematic.ghostLines = schematic.value("ghostLines", value.schematic.ghostLines);
         value.schematic.menuSmall = schematic.value("menuSmall", value.schematic.menuSmall);
         value.schematic.menuReopen = schematic.value("menuReopen", value.schematic.menuReopen);
+        value.schematic.outlineDistance = schematic.value("outlineDistance", value.schematic.outlineDistance);
     }
     if (data.contains("lighting")) {
         value.lighting.nightVision = data.at("lighting").value("nightVision", value.lighting.nightVision);
+        value.lighting.nightVisionEven = data.at("lighting").value("nightVisionEven", value.lighting.nightVisionEven);
     }
     if (data.contains("inspection")) {
         value.inspection.containerPreviews = data.at("inspection").value("containerPreviews", value.inspection.containerPreviews);
         value.inspection.durability = data.at("inspection").value("durability", value.inspection.durability);
         value.inspection.foodValues = data.at("inspection").value("foodValues", value.inspection.foodValues);
+        value.inspection.lockedTrades = data.at("inspection").value("lockedTrades", value.inspection.lockedTrades);
+        value.inspection.englishSearch = data.at("inspection").value("englishSearch", value.inspection.englishSearch);
         value.inspection.shulkerPreviews = data.at("inspection").value("shulkerPreviews", value.inspection.shulkerPreviews);
         value.inspection.emptyShulkerPreviews = data.at("inspection").value("emptyShulkerPreviews", value.inspection.emptyShulkerPreviews);
         value.inspection.hideShulkerContents = data.at("inspection").value("hideShulkerContents", value.inspection.hideShulkerContents);
@@ -427,6 +525,7 @@ Settings decodeSettings(std::string_view text) {
     }
     if (data.contains("inventory")) {
         value.inventory.sorting = data.at("inventory").value("sorting", value.inventory.sorting);
+        value.inventory.repeatTrades = data.at("inventory").value("repeatTrades", value.inventory.repeatTrades);
         value.inventory.offhandSwap = data.at("inventory").value("offhandSwap", value.inventory.offhandSwap);
         value.inventory.deathRestore = data.at("inventory").value("deathRestore", value.inventory.deathRestore);
         value.inventory.deathRestoreAll = data.at("inventory").value("deathRestoreAll", value.inventory.deathRestoreAll);
@@ -437,6 +536,16 @@ Settings decodeSettings(std::string_view text) {
         value.inventory.transferWheelStack = data.at("inventory").value("transferWheelStack", value.inventory.transferWheelStack);
         value.inventory.transferDragStack = data.at("inventory").value("transferDragStack", value.inventory.transferDragStack);
         value.inventory.transferDragOne = data.at("inventory").value("transferDragOne", value.inventory.transferDragOne);
+        value.inventory.transferWheelMatching = data.at("inventory").value("transferWheelMatching", value.inventory.transferWheelMatching);
+        value.inventory.transferWheelAll = data.at("inventory").value("transferWheelAll", value.inventory.transferWheelAll);
+        value.inventory.transferClickMatching = data.at("inventory").value("transferClickMatching", value.inventory.transferClickMatching);
+        value.inventory.transferClickAll = data.at("inventory").value("transferClickAll", value.inventory.transferClickAll);
+        value.inventory.transferDragKeepOne = data.at("inventory").value("transferDragKeepOne", value.inventory.transferDragKeepOne);
+        value.inventory.transferCursorMatching = data.at("inventory").value("transferCursorMatching", value.inventory.transferCursorMatching);
+        value.inventory.transferDropOne = data.at("inventory").value("transferDropOne", value.inventory.transferDropOne);
+        value.inventory.transferDropKeepOne = data.at("inventory").value("transferDropKeepOne", value.inventory.transferDropKeepOne);
+        value.inventory.transferDropAll = data.at("inventory").value("transferDropAll", value.inventory.transferDropAll);
+        value.inventory.transferDropMatching = data.at("inventory").value("transferDropMatching", value.inventory.transferDropMatching);
         value.inventory.toolSwitch = data.at("inventory").value("toolSwitch", value.inventory.toolSwitch);
         value.inventory.handRestock = data.at("inventory").value("handRestock", value.inventory.handRestock);
         value.inventory.restockFromHotbar = data.at("inventory").value("restockFromHotbar", value.inventory.restockFromHotbar);
@@ -473,6 +582,11 @@ Settings decodeSettings(std::string_view text) {
         element("durability", value.hud.durability, ui::HudElementId::Durability);
         element("minimap", value.hud.minimap, ui::HudElementId::Minimap);
         element("schematic", value.hud.schematic, ui::HudElementId::Schematic);
+        element("playerList", value.hud.playerList, ui::HudElementId::PlayerList);
+        element("inventory", value.hud.inventory, ui::HudElementId::Inventory);
+        element("usedSlots", value.hud.usedSlots, ui::HudElementId::UsedSlots);
+        element("chat", value.hud.chat, ui::HudElementId::Chat);
+        element("statusEffects", value.hud.statusEffects, ui::HudElementId::StatusEffects);
     }
     value.normalize();
     return value;

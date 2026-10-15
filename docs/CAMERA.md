@@ -190,7 +190,30 @@ rotation center felt wrong, so FreeCamera locks first person instead.
 Continuing flight from the previous third-person eye (31323b8) did not pass
 verification and was removed: starting from third person begins at the head.
 
+## Trident interaction report (2026-10-14)
+
+[L-181](BACKLOG.md) tracks an unverified report of a trident striking the
+player when used with FreeCamera active. Establish whether the trident was
+thrown, used for Riptide or merely held, and whether the behavior occurs
+on a server. Keep interaction blocking, camera/body position and
+server-authoritative projectile behavior separate during diagnosis.
+No fix or change to the camera contract is selected.
+
 ## Underground terrain visibility (L-37; implemented 2026-10-07)
+
+L-200/L-202 follow-up (2026-10-15): the maintainer reported caves missing again.
+The ordinary local log identifies LeviLamina 26.51.7 rejected as an
+unsupported loader version. The initial .7 allowlist edit was superseded by
+L-202's shared loader-series/minimum policy (26.51, patch 5 or later).
+Executable gating, virtual-entry/ownership checks and the native
+request/retained-field validation remain. The shared registry waits for the
+first unmodified request/retention check before allowing the 3 -> 5 override;
+failure and its reason are visible in settings without disabling camera
+movement. No world/renderer yet is Waiting, not failure. The maintainer's
+local normal-build checklist on `d5978e2` passed underground visibility,
+restoration and hiding on .7; the ordinary log records native `3 -> 5`
+retention. Server coverage for this migration remains open. The older
+runtime coverage below belongs to .6.
 
 Runtime status: **underground terrain checked in a local world and on BDS**
 by the maintainer on `d56b81e`, 2026-10-07, Minecraft 1.26.51.01 / LeviLamina
@@ -228,9 +251,9 @@ byte-sized requests and stable selection across
 repeated activation/exit frames; they do not exercise the game renderer.
 
 The candidate requires Minecraft executable file version 1.26.51.1
-(launcher version 1.26.51.01) and LeviLamina Client 26.51.5 or 26.51.6. These
+(launcher version 1.26.51.01) and the common LeviLamina policy (26.51, patch 5 or later). These
 have different coverage: cave drawing was checked on 26.51.6; 26.51.5 has not
-been re-tested with this adapter. A pre-render hook
+been re-tested with this adapter, and 26.51.7 awaits its first check. A pre-render hook
 binds lazily from an actual primary renderer while FreeCamera is active. The
 SDK virtual-call thunk provides the slot; the implementation must be executable
 code in the game module. There is no hard-coded vtable slot or game address.
@@ -533,3 +556,15 @@ changes, death, riding, sleeping, perspective changes, Zoom, and another camera
 mod. Check view/frustum alignment, overlay coordinates, hands, and unloaded
 terrain. Instrumentation should remain local and optional; none of these checks
 has been completed for detached cameras.
+
+## Hiding the hand and HUD while flying (L-191, 2026-10-15)
+
+Decided by the maintainer 2026-10-15; built, not checked in game. FreeCamera
+setting "Hide while flying": nothing, hand (default), hand and hotbar, or
+the whole HUD. The hand is the first-person item pass
+(`ItemInHandRenderer::renderFirstPerson`); the whole HUD skips the HUD
+screen's draw, as F1 does, Lamium's HUD included; the hotbar hides its
+control (`desktop_hotbar`, `pocket_hotbar`, `hotbar_panel`) for each draw
+only and restores it right after (gated). Only while FreeCamera owns the
+view; nothing in the game's options changes. What FreeCamera allows the
+player to do is unchanged (L-25).

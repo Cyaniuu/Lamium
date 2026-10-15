@@ -5,6 +5,11 @@
 class IClientInstance;
 namespace lamium {
 inline bool gameplayScreen(std::string_view name) { return name.starts_with("hud_screen"); }
+// The title screen and the other menus before a world (OreUI pages): the
+// settings open there too (L-175). Loading screens are neither.
+inline bool outsideWorldMenu(std::string_view name, bool hasPlayer) {
+    return !hasPlayer && (name == "start_screen" || name.starts_with("ui://"));
+}
 void executeAction(IClientInstance& client, input::Action action);
 void releaseAction(input::Action action);
 std::string actionBindingName(IClientInstance& client, input::Action action);

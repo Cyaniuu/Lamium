@@ -20,10 +20,10 @@ inline constexpr auto sections = std::to_array<std::string_view>({
     "section.camera", "section.information", "section.map", "section.schematic", "section.inventory",
     "section.interaction", "section.interface"});
 inline constexpr std::string_view featureSection(std::string_view id) {
-    if (id == "zoom" || id == "freelook" || id == "freecamera" || id == "nightVision" || id == "hideOffhand" || id == "hideEffects") return "section.camera";
-    if (id == "previews" || id == "durability" || id == "foodValues" || id == "sorting" || id == "transfer" || id == "toolSwitch" || id == "weaponSwitch" || id == "handRestock" || id == "fakeOffhand" || id == "offhandSwap" || id == "deathRestore") return "section.inventory";
+    if (id == "zoom" || id == "freelook" || id == "freecamera" || id == "nightVision" || id == "hideOffhand" || id == "hideEffects" || id == "connectedTextures") return "section.camera";
+    if (id == "previews" || id == "durability" || id == "foodValues" || id == "lockedTrades" || id == "repeatTrades" || id == "englishSearch" || id == "sorting" || id == "transfer" || id == "toolSwitch" || id == "weaponSwitch" || id == "handRestock" || id == "fakeOffhand" || id == "offhandSwap" || id == "deathRestore") return "section.inventory";
     if (id == "restrictions" || id == "permanentSneak" || id == "permanentSprint" || id == "edgeGuard" || id == "toolGuard" || id == "elytraSwap" || id == "periodicAttack" || id == "periodicUse") return "section.interaction";
-    if (id == "settings" || id == "toasts" || id == "hudText") return "section.interface";
+    if (id == "settings" || id == "gameLanguage" || id == "skipServerPacks" || id == "toasts" || id == "hudText") return "section.interface";
     if (id.starts_with("schematic")) return "section.schematic";
     if (id == "minimap" || id == "mapText" || id == "caveView" || id == "radar" || id == "waypoints" || id == "worldMap") return "section.map";
     return "section.information";
@@ -37,9 +37,13 @@ inline constexpr auto features = std::to_array<FeatureInfo>({
     {"nightVision", "feature.nightVision", "help.nightVision", "lighting.nightVision", false, input::Action::NightVision},
     {"hideOffhand", "feature.hideOffhand", "help.hideOffhand", "visuals.hideOffhand", false, input::Action::HideOffhand},
     {"hideEffects", "feature.hideEffects", "help.hideEffects", "visuals.hideEffects", true, input::Action::ToggleHideEffects},
+    {"connectedTextures", "feature.connectedTextures", "help.connectedTextures", "visuals.connectedTextures", true, input::Action::ToggleConnectedTextures},
     {"previews", "feature.previews", "help.previews", "inspection.containerPreviews", false, input::Action::TogglePreviews},
     {"durability", "feature.durability", "help.durability", "inspection.durability", false, input::Action::ToggleDurability},
     {"foodValues", "feature.foodValues", "help.foodValues", "inspection.foodValues", false, input::Action::ToggleFoodValues},
+    {"lockedTrades", "feature.lockedTrades", "help.lockedTrades", "inspection.lockedTrades", false, input::Action::ToggleLockedTrades},
+    {"repeatTrades", "feature.repeatTrades", "help.repeatTrades", "inventory.repeatTrades", false, input::Action::ToggleRepeatTrades},
+    {"englishSearch", "feature.englishSearch", "help.englishSearch", "inspection.englishSearch", false, input::Action::ToggleEnglishSearch},
     {"sorting", "feature.sorting", "help.sorting", "inventory.sorting", false, input::Action::ToggleSorting},
     {"transfer", "feature.transfer", "help.transfer", "inventory.transfer", true, input::Action::Transfer},
     {"toolSwitch", "feature.toolSwitch", "help.toolSwitch", "inventory.toolSwitch", false, input::Action::ToolSwitch},
@@ -58,7 +62,13 @@ inline constexpr auto features = std::to_array<FeatureInfo>({
     {"periodicUse", "feature.periodicUse", "help.periodicInput", "interaction.autoUse", false, input::Action::PeriodicUse},
     {"infoHud", "feature.infoHud", "help.infoHud", "information.hud", false, input::Action::InfoHud},
     {"targetInfo", "feature.targetInfo", "help.targetInfo", "information.target", false, input::Action::TargetInfo},
+    {"playerList", "feature.playerList", "help.playerList", "", false, input::Action::PlayerList},
     {"durabilityHud", "feature.durabilityHud", "help.durabilityHud", "information.durabilityHud", false, input::Action::ToggleDurabilityHud},
+    {"inventoryHud", "feature.inventoryHud", "help.inventoryHud", "information.inventoryHud", false, input::Action::ToggleInventoryHud},
+    {"usedSlots", "feature.usedSlots", "help.usedSlots", "information.usedSlots", false, input::Action::ToggleUsedSlots},
+    {"chatPosition", "feature.chatPosition", "help.chatPosition", "information.chatPosition", false, input::Action::ToggleChatPosition},
+    {"statusEffects", "feature.statusEffects", "help.statusEffects", "information.effectsHud", false, input::Action::ToggleStatusEffects},
+    {"calculator", "feature.calculator", "help.calculator", "", false, input::Action::OpenCalculator},
     {"offhandSlot", "feature.offhandSlot", "help.offhandSlot", "information.offhandSlot", false, input::Action::ToggleOffhandSlot},
     {"saturation", "feature.saturation", "help.saturation", "information.saturation", false, input::Action::ToggleSaturation},
     {"debugView", "feature.debugView", "help.debugView", "information.debug", false, input::Action::DebugView},
@@ -85,6 +95,8 @@ inline constexpr auto features = std::to_array<FeatureInfo>({
     {"schematicSave", "feature.schematicSave", "help.schematicSave", ""},
     {"automationStatus", "feature.automationStatus", "help.automationStatus", "interface.automationStatus", false, input::Action::ToggleAutomationStatus},
     {"settings", "feature.settings", "help.settings", "", false, input::Action::Settings},
+    {"gameLanguage", "feature.gameLanguage", "help.gameLanguage", "", true},
+    {"skipServerPacks", "feature.skipServerPacks", "help.skipServerPacks", "visuals.skipServerPacks", true, input::Action::ToggleSkipServerPacks},
     // Headings without a switch: their first row is the switch (no key of its own).
     {"toasts", "feature.toasts", "help.toasts", ""},
     // Text of the line elements (Info HUD, Status, Debug View) and HUD backgrounds.
@@ -119,6 +131,8 @@ inline std::optional<input::Action> optionAction(std::string_view option) {
     if (option == "visuals.hideWater") return input::Action::HideWater;
     if (option == "visuals.hideLava") return input::Action::HideLava;
     if (option == "visuals.hidePowderSnow") return input::Action::HidePowderSnow;
+    if (option == "visuals.hideDistanceFog") return input::Action::HideDistanceFog;
+    if (option == "visuals.hidePortal") return input::Action::HidePortal;
     if (option == "interaction.breaking") return input::Action::BreakingRestriction;
     if (option == "interaction.attackMode") return input::Action::CycleAttackMode;
     if (option == "interaction.useMode") return input::Action::CycleUseMode;
@@ -163,12 +177,55 @@ inline std::optional<HudElementId> layoutElement(std::string_view feature) {
     if (feature == "durabilityHud") return HudElementId::Durability;
     if (feature == "minimap") return HudElementId::Minimap;
     if (feature == "schematicHud") return HudElementId::Schematic;
+    if (feature == "playerList") return HudElementId::PlayerList;
+    if (feature == "inventoryHud") return HudElementId::Inventory;
+    if (feature == "usedSlots") return HudElementId::UsedSlots;
+    if (feature == "chatPosition") return HudElementId::Chat;
+    if (feature == "statusEffects") return HudElementId::StatusEffects;
     return std::nullopt;
 }
 inline constexpr std::string_view layoutLinkLabel(HudElementId id) {
     return id == HudElementId::Toast ? "layoutLinkToast"
         : id == HudElementId::Magnification ? "layoutLinkMagnification" : "layoutLink";
 }
+// Action labels carry a catalog prefix that the settings UI strips.
+inline std::string actionName(std::string label) {
+    constexpr std::string_view prefix = "Lamium: ";
+    if (label.starts_with(prefix)) label.erase(0, prefix.size());
+    return label;
+}
+inline std::string actionTranslationKey(input::Action action, bool child = false) {
+    if (child && action == input::Action::FreeCameraSpeedUp) return "freeCameraSpeedUp";
+    if (child && action == input::Action::FreeCameraSpeedDown) return "freeCameraSpeedDown";
+    return "key.Lamium." + std::string(input::actions[static_cast<size_t>(action)].id);
+}
+// The catalog's name key for a feature id; empty for an unknown id.
+inline constexpr std::string_view featureNameKey(std::string_view id) {
+    for (auto const& feature : features)
+        if (feature.id == id) return feature.name;
+    return {};
+}
+// What a toggle toast names: an effect's own switch, otherwise its feature.
+inline std::string_view toggleToastKey(input::Action action) {
+    using input::Action;
+    switch (action) {
+    case Action::HideWeather: return "toast.hideWeather";
+    case Action::HideParticles: return "toast.hideParticles";
+    case Action::HideBossBars: return "toast.hideBossBars";
+    case Action::HideNausea: return "toast.hideNausea";
+    case Action::HideWater: return "toast.hideWater";
+    case Action::HideLava: return "toast.hideLava";
+    case Action::HidePowderSnow: return "toast.hidePowderSnow";
+    case Action::HideDistanceFog: return "toast.hideDistanceFog";
+    case Action::HidePortal: return "toast.hidePortal";
+    default: return featureNameKey(input::actions[static_cast<size_t>(action)].feature);
+    }
+}
+// Hotkeys found by key: only actions whose binding uses these inputs.
+struct KeyFilter {
+    input::Chord pressed;
+    input::Bindings bindings;
+};
 struct SettingsRow {
     RowKind kind;
     FeatureInfo const* feature = nullptr;
@@ -196,7 +253,7 @@ template<class Translate>
 std::vector<SettingsRow> buildSettingsRows(bool hotkeys, std::string_view category, SearchQuery const& query,
     std::set<std::string_view> const& expanded, Translate translate,
     std::vector<std::string> const& lineOrder = {},
-    std::set<std::string_view> const& searchCollapsed = {}) {
+    std::set<std::string_view> const& searchCollapsed = {}, KeyFilter const* keys = nullptr) {
     std::vector<SettingsRow> rows;
     bool const searching = query.value().find_first_not_of(' ') != std::string::npos;
     if (searching) category = {};
@@ -221,8 +278,10 @@ std::vector<SettingsRow> buildSettingsRows(bool hotkeys, std::string_view catego
             if (hotkeys) {
                 for (size_t i : actionOrder) {
                     auto const& action = input::actions[i];
-                    if (action.feature != feature.id || !query.matches(scope + " " + std::string(action.id) + " "
-                        + translate("key.Lamium." + std::string(action.id)))) continue;
+                    if (action.feature != feature.id) continue;
+                    if (keys ? !input::chordUses(input::effectiveChord(keys->bindings, static_cast<input::Action>(i)), keys->pressed)
+                             : !query.matches(scope + " " + std::string(action.id) + " "
+                                   + translate(actionTranslationKey(static_cast<input::Action>(i))))) continue;
                     sectionRow(section);
                     rows.push_back({RowKind::Action, &feature, nullptr, static_cast<input::Action>(i), section});
                 }
@@ -267,9 +326,10 @@ std::vector<SettingsRow> buildSettingsRows(bool hotkeys, std::string_view catego
             auto childText = [&](SettingsRow const& row) {
                 if (row.kind == RowKind::MapCache) return std::string(translate("mapCache"));
                 if (row.layout) return std::string(translate(layoutLinkLabel(*row.layout))) + " " + translate("nav.hudLayout");
-                return row.option ? std::string(row.option->id) + " " + translate(row.option->label)
-                    : std::string(input::actions[static_cast<size_t>(*row.action)].id) + " "
-                        + translate("key.Lamium." + std::string(input::actions[static_cast<size_t>(*row.action)].id));
+                if (row.option) return std::string(row.option->id) + " " + translate(row.option->label);
+                // The child label shown here, plus the Hotkeys name as an alias.
+                return std::string(input::actions[static_cast<size_t>(*row.action)].id) + " "
+                    + translate(actionTranslationKey(*row.action, true)) + " " + translate(actionTranslationKey(*row.action));
             };
             bool self = query.matches(scope);
             std::vector<SettingsRow> matching;
@@ -308,17 +368,6 @@ inline LabelParts splitLabel(std::string_view pattern) {
         return {name, "{}"};
     }
     return {std::string(pattern.substr(0, split)), std::string(pattern.substr(split + 2))};
-}
-// Action labels carry a catalog prefix that the settings UI strips.
-inline std::string actionName(std::string label) {
-    constexpr std::string_view prefix = "Lamium: ";
-    if (label.starts_with(prefix)) label.erase(0, prefix.size());
-    return label;
-}
-inline std::string actionTranslationKey(input::Action action, bool child = false) {
-    if (child && action == input::Action::FreeCameraSpeedUp) return "freeCameraSpeedUp";
-    if (child && action == input::Action::FreeCameraSpeedDown) return "freeCameraSpeedDown";
-    return "key.Lamium." + std::string(input::actions[static_cast<size_t>(action)].id);
 }
 // Reset a settings category: every option owned by its features and the HUD
 // placement of their elements. Key bindings stay; Hotkeys has its own reset.

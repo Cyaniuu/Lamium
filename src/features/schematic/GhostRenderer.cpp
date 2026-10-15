@@ -1,134 +1,127 @@
 #include "features/schematic/GhostRenderer.h"
-#include "features/schematic/SchematicSession.h"
-#include "features/schematic/SchematicItems.h"
-#include "features/schematic/Selection.h"
-#include "features/schematic/GhostFaces.h"
+#include "mc/world/level/block/actor/BlockActorType.h"
+#include "features/schematic/AreaSave.h"
+#include "features/schematic/PlacementOverlap.h"
 #include "features/schematic/EntityModels.h"
-#include "overlay/Depth.h"
-#include "app/AtomicFile.h"
-#include "ui/Localization.h"
+#include "features/schematic/GhostActors.h"
+#include "features/schematic/GhostMarks.h"
+#include "features/schematic/GhostMesh.h"
+#include "features/schematic/RayCells.h"
+#include "features/schematic/GhostVerify.h"
+#include "overlay/LineColor.h"
+#include "features/schematic/SchematicItems.h"
+#include "features/schematic/SchematicRegion.h"
+#include "features/schematic/SchematicSession.h"
+#include "features/schematic/Selection.h"
+#include "overlay/FaceMaterial.h"
 #include "app/Runtime.h"
+#include "app/Versions.h"
+#include "app/CapabilityHooks.h"
 #include "ll/api/event/EventBus.h"
 #include "ll/api/event/client/ClientExitLevelEvent.h"
 #include "ll/api/memory/Hook.h"
 #include "mc/client/game/IClientInstance.h"
 #include "mc/client/gui/screens/ScreenContext.h"
+#include "mc/client/options/IOptionRegistry.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/client/renderer/ActorShaderManager.h"
-#include "mc/client/renderer/BaseActorRenderer.h"
-#include "mc/client/game/IMinecraftGame.h"
-#include "mc/client/gui/Font.h"
-#include "mc/client/gui/FontHandle.h"
-#include "mc/client/gui/FontRepository.h"
 #include "mc/client/renderer/BaseActorRenderContext.h"
 #include "mc/client/renderer/RenderMaterialGroup.h"
 #include "mc/client/renderer/Tessellator.h"
+#include "mc/deps/minecraft_renderer/framebuilder/dragon/RenderMetadata.h"
 #include "mc/client/renderer/block/BlockTessellator.h"
 #include "mc/client/renderer/blockactor/BlockActorRenderDispatcher.h"
 #include "mc/client/renderer/blockactor/MovingBlockActorRenderer.h"
+#include "mc/client/renderer/game/LevelRendererCamera.h"
 #include "mc/client/renderer/game/LevelRendererPlayer.h"
-#include "mc/client/renderer/ptexture/LightTexture.h"
-#include "mc/deps/core/math/Color.h"
 #include "mc/deps/core_graphics/enums/PrimitiveMode.h"
-#include "mc/deps/minecraft_renderer/framebuilder/dragon/RenderMetadata.h"
 #include "mc/deps/minecraft_renderer/renderer/MaterialPtr.h"
 #include "mc/deps/minecraft_renderer/renderer/Mesh.h"
+#include "mc/deps/minecraft_renderer/renderer/MeshData.h"
+#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
+#include "mc/client/renderer/SupplementaryFieldAutoGenerationMode.h"
+#endif
 #include "mc/deps/minecraft_renderer/renderer/TexturePtr.h"
 #include "mc/deps/minecraft_renderer/resources/ClientTexture.h"
+#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
+#include "mc/deps/minecraft_renderer/resources/OffscreenCaptureDescription.h"
+#endif
 #include "mc/deps/minecraft_renderer/resources/ServerTexture.h"
-#include "mc/deps/nbt/CompoundTag.h"
 #include "mc/deps/renderer/Camera.h"
 #include "mc/deps/renderer/MatrixStack.h"
-#include "mc/locale/I18n.h"
-#include "mc/world/actor/Actor.h"
-#include "mc/world/actor/ActorType.h"
-#include "mc/world/phys/AABB.h"
-#include "mc/util/Mirror.h"
-#include "mc/util/Rotation.h"
+#include "mc/options/GraphicsMode.h"
 #include "mc/world/level/BlockPos.h"
-#include "mc/world/phys/HitResult.h"
-#include "mc/world/level/ShapeType.h"
-#include "mc/world/item/ItemInstance.h"
-#include "mc/common/client/renderer/helpers/MeshHelpers.h"
-#include "features/schematic/Verification.h"
-#include <mutex>
 #include "mc/world/level/BlockSource.h"
 #include "mc/world/level/block/Block.h"
 #include "mc/world/level/block/BlockRenderLayer.h"
-#include "mc/world/level/block/BlockType.h"
 #include "mc/world/level/block/BrightnessPair.h"
 #include "mc/world/level/block/actor/BlockActor.h"
 #include "mc/world/level/block/actor/BlockActorRendererId.h"
-#include "mc/world/level/block/actor/VanillaBlockActorFactory.h"
-#include "mc/world/level/block/states/VanillaBlockStateTransformUtils.h"
-#include "mc/world/level/chunk/ChunkState.h"
-#include "mc/world/level/chunk/LevelChunk.h"
-#include "mc/world/level/material/Material.h"
-#include <glm/gtc/matrix_transform.hpp>
+#include "mc/world/phys/HitResult.h"
+#include <glm/glm.hpp>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <format>
 #include <map>
-#include <optional>
 #include <set>
+#include <optional>
 #include <tuple>
+#include <variant>
 #include <vector>
 
+// The ghost pass (BACKLOG L-93, split by L-136): which sections to build and
+// draw each frame, the drawing of the built meshes and block actors, and the
+// lifecycle (feature off, world exit, dimension and graphics mode changes).
+// The meshes are built in GhostMesh, checked in GhostVerify, saves run in
+// AreaSave and the other in-world marks are drawn by GhostMarks.
 namespace lamium::schematic::ghosts {
 namespace {
-using Clock = std::chrono::steady_clock;
-constexpr int sectionSize = 16;
-constexpr int sectionBudget = 3;      // Sections rebuilt per frame.
-constexpr int checkBudget = 8;        // Sections whose blocks are compared per frame.
+#if defined(LAMIUM_INPUT_UPDATE_PROBE) || defined(LAMIUM_SDK_26_20_7)
+using GhostCaptureDescription = std::monostate;
+auto supplementaryFieldMode() { return Tessellator::SupplementaryFieldAutoGenerationMode::None; }
+bool hasRenderCamera(BaseActorRenderContext const&) { return true; }
+Vec3 renderCamera(BaseActorRenderContext const& context) { return context.mCameraPosition; }
+#else
+using GhostCaptureDescription = OffscreenCaptureDescription;
+auto supplementaryFieldMode() { return SupplementaryFieldAutoGenerationMode{}; }
+bool hasRenderCamera(BaseActorRenderContext const& context) { return context.mImpl != nullptr; }
+Vec3 renderCamera(BaseActorRenderContext const& context) { return context.mImpl->mCameraPosition; }
+#endif
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+// Measurement for the update plan (SCHEMATIC.md C): where the ghost pass
+// spends its time and why sections are rebuilt, logged every 5 s.
+struct Perf {
+    std::chrono::steady_clock::time_point since = std::chrono::steady_clock::now();
+    std::uint64_t frames = 0, frameNs = 0, maxFrameNs = 0, buildNs = 0, maxBuildNs = 0, builds = 0, checkNs = 0, checks = 0,
+                  scanNs = 0, blendNs = 0, waiting = 0, maxWaiting = 0, dueLatencyNs = 0, dueCount = 0, maxDueLatencyNs = 0,
+                  prepareNs = 0, facesNs = 0, linesNs = 0, actorsNs = 0, framesNs = 0, entitiesNs = 0, extrasNs = 0;
+    std::uint64_t reasons[5]{}; // new, looked-at change, signature changed, mesh gone, chunk incomplete
+    std::size_t sections = 0;
+    // L-193: blended re-sorts, and frames whose camera position differs from
+    // the previous blended frame.
+    std::uint64_t orderChanges = 0, cameraMoves = 0, blendedFrames = 0;
+} perf;
+Vec3 lastCamera{};
+struct PerfTimer {
+    std::uint64_t& into;
+    std::chrono::steady_clock::time_point start = std::chrono::steady_clock::now();
+    ~PerfTimer() { into += static_cast<std::uint64_t>((std::chrono::steady_clock::now() - start).count()); }
+};
+void perfReport();
+#endif
+constexpr int checkBudget = 32;       // Sections whose blocks are compared per frame.
 // Look at the world this often: quickly near the camera, where blocks are
 // being placed, slowly elsewhere. A section is rebuilt only when its blocks
 // changed since it was built.
 constexpr std::chrono::milliseconds refreshNear{250}, refreshFar{2000};
 constexpr double nearDistance = 24;
 constexpr std::chrono::milliseconds lookedDelay{100};
-constexpr double drawDistance = 192;  // Sections farther than this are not built or drawn.
-constexpr float towardEye = overlay::depth::ghostPull; // Depth rules: overlay/Depth.h.
-
-struct Outline { glm::vec3 min, max; float r, g, b; };
-struct EntityCell { BlockPos pos; Block const* block; };
-struct Section {
-    glm::vec3 origin{};
-    std::optional<mce::Mesh> faces, lines, marks;
-    std::uint32_t faceVertices = 0, lineVertices = 0, markVertices = 0;
-    std::vector<EntityCell> entities;
-    Clock::time_point built{}, checked{};
-    std::optional<Clock::time_point> due; // An early rebuild after a looked-at block changed.
-    std::uint64_t signature = 0;          // the world's blocks in the section when built
-    bool complete = false; // false while some chunk was not loaded
-};
-using SectionKey = std::tuple<int, int, int, int>; // placement, section x, y, z
-// Game blocks for a placement's palette, turned by the game's own transform.
-// What one palette entry asks the player to place.
-struct ItemInfo {
-    std::string item, name, icon; // icon: the item as binary NBT for ItemStack::fromTag
-    int perBlock = 1;
-};
-// An entity of the schematic where the placement puts it.
-struct EntityGhost {
-    std::string identifier, name, icon; // icon: an item of the same name, if the game has one
-    Position at;   // world position of its feet
-    Point offset;  // its cell inside the placed box, for layers
-    float yaw = 0; // world facing, degrees (0 = south)
-};
-struct Resolved {
-    std::shared_ptr<Structure const> keep; // keeps `structure` alive across snapshots
-    Structure const* structure = nullptr;
-    int rotation = 0;
-    Mirror mirror = Mirror::None;
-    std::vector<Block const*> blocks;
-    std::vector<ItemInfo> items;
-    std::vector<EntityGhost> entities;
-    // Whether each entity stands at its spot; nullopt while it cannot be
-    // judged (too far for the client to know its entities, chunk not loaded).
-    std::vector<std::optional<bool>> entityPlaced;
-};
-
+// Section rebuilds per frame stop once this much time went into them (a
+// count of 3 made 20-30 ms frames when large sections came together).
+constexpr std::chrono::microseconds buildTimeBudget{3000};
+constexpr int sectionLimit = 32;
 std::map<SectionKey, Section> sections;
 std::vector<Resolved> resolved;
 std::vector<std::string> builtKeys; // drawKey of each resolved placement
@@ -137,1116 +130,82 @@ std::vector<std::string> builtKeys; // drawKey of each resolved placement
 // entities in one cell.
 std::map<std::tuple<int, int, int, Block const*>, std::optional<std::shared_ptr<BlockActor>>> actors;
 std::vector<std::pair<BlockPos, Block const*>> watched; // Recently looked-at cells and what was there.
-// Entities are looked up this often, and only this close to the player: the
-// client does not know entities beyond its tracking range.
-constexpr std::chrono::milliseconds entityRefresh{250};
-constexpr double entityRange = 48;
-constexpr size_t maxEntities = 512; // per placement
-constexpr float entityFrameWidth = .8f, entityFrameHeight = 1.8f;
-constexpr float nameTagScale = .025f; // blocks per font pixel
-Clock::time_point entitiesChecked{};
-// Names over missing entities' frames, collected with the frames and drawn
-// as name tags in the same pass.
-std::vector<std::pair<Position, std::string>> labels;
-
-// Verification of the selected placement, a bounded number of cells per
-// frame; a finished pass is published and the next begins.
-constexpr std::uint64_t scanBudget = 16384;
-struct Scan {
-    std::uint64_t revision = 0;
-    std::string key; // drawKey of the placement being checked
-    int placement = -1;
-    std::uint64_t next = 0;
-    Tally tally;
-    std::vector<Mismatch> mismatches;
-    std::map<std::string, MaterialLine> all, shown;
-};
-Scan scan;
-std::mutex resultMutex;
-std::shared_ptr<Verification const> published = std::make_shared<Verification const>();
-void publish(std::shared_ptr<Verification const> value) {
-    std::lock_guard lock(resultMutex);
-    published = std::move(value);
-}
-// Saving an area. The request is handed over under the mutex; the job itself
-// belongs to the render thread.
-constexpr std::uint64_t saveBudget = 32768; // cells read per frame
-// Columns are read when their chunk is loaded; the others wait until the
-// player comes near. While nothing can be read, a reminder every so often.
-constexpr std::chrono::seconds waitReminder{8};
-struct SaveJob {
-    SaveRequest request;
-    StructureBuilder builder;
-    std::vector<Column> columns;
-    std::vector<std::uint64_t> progress; // cells read per column
-    std::uint64_t done = 0;
-    std::map<Block const*, PaletteBlock> palette;
-    Clock::time_point lastProgress = Clock::now(), lastReminder{};
-    // Entities are taken per column when it is read: the client forgets
-    // the ones far behind a player walking along a large area.
-    std::set<std::int64_t> entitiesSeen;
-};
-std::mutex saveMutex;
-std::optional<SaveRequest> pendingSave;
-std::optional<std::string> saveMessage;
-std::optional<SaveStatus> status; // published copy of the job's progress
-bool saveBusy = false;
-std::atomic<bool> stopRequested{false};
-std::optional<SaveJob> saveJob;
-void finishSave(std::string message) {
-    saveJob.reset();
-    std::lock_guard lock(saveMutex);
-    saveBusy = false;
-    status.reset();
-    saveMessage = std::move(message);
-}
-// A save in progress or waiting ends when the world is left, the feature is
-// off or the player stops it.
-void stopSave() {
-    {
-        std::lock_guard lock(saveMutex);
-        if (!saveBusy) return;
-        pendingSave.reset();
-    }
-    stopRequested = false;
-    finishSave(ui::translated("schematic.save.stopped"));
-}
-// "Show in world": a marked cell until `pointUntil`.
-std::mutex pointMutex;
-std::optional<Point> pointAt;
-Clock::time_point pointUntil{};
 std::uint64_t builtRevision = 0;
-// The cells the camera is in (eye and feet). Ghosts within one cell of
-// them are drawn whole: no face dropped, none skipped as enclosed. From
-// inside a schematic, or with the camera at a cell border, what is around
-// the player then shows as blocks instead of hollow space.
-std::array<std::optional<Point>, 2> cameraCells;
-bool nearCamera(Point p, int reach = 1) {
-    return std::any_of(cameraCells.begin(), cameraCells.end(), [&](auto const& c) {
-        return c && std::abs(c->x - p.x) <= reach && std::abs(c->y - p.y) <= reach && std::abs(c->z - p.z) <= reach;
-    });
-}
-Vec3 buildCamera{}; // the camera position the sections near it are built for
+// The camera's cells and position the sections near it are built for, and
+// the graphics mode they are built in (sections are rebuilt when it changes).
+BuildCamera buildCamera;
+struct Wanted { std::tuple<int, int, int, int> key; double distance; bool seen; };
+// The wanted sections of the last listing (drawPlacements).
+struct WantedCache {
+    bool valid = false;
+    Point cell;
+    std::uint64_t revision = 0, stamp = 0;
+    int dimension = -1;
+    Clock::time_point at{};
+    std::vector<Wanted> list;
+} wantedCache;
+int lastGraphicsMode = -1;
 int builtDimension = -1;
 std::atomic<bool> releaseRequested{false};
 ll::event::ListenerPtr exitListener;
-bool installed = false;
+bool installed = false, blendInstalled = false;
 
-void log(std::string const& text) {
-    try { Runtime::instance().self().getLogger().info("Schematic ghosts: {}", text); } catch (...) {}
+// Every section's blended quads in one mesh, sorted far to near from where
+// the camera was (L-192, L-193). Sorted again when the camera has moved or
+// the quads changed, at most this often; standing still keeps one order.
+struct Combined {
+    std::optional<mce::Mesh> mesh;
+    std::uint32_t vertices = 0;
+    glm::dvec3 anchor{}; // positions are relative to it
+    std::uint64_t key = 0;
+    Vec3 sortedFrom{};
+    Clock::time_point sortedAt{};
+    // The sections in the mesh: they skip their own meshes until the next
+    // sort, so one entering the budget meanwhile is not lost (water ghosts
+    // blinked out by section between sorts) and one leaving is not doubled.
+    std::set<SectionKey> members;
+} combined;
+// Meshes cannot be assigned: cleared member by member.
+void forgetCombined() {
+    combined.mesh.reset();
+    combined.vertices = 0;
+    combined.key = 0;
+    combined.members.clear();
 }
+constexpr std::chrono::milliseconds resortEvery{50};
+constexpr float resortDistance = .25f;
+constexpr size_t manyBlendedQuads = 20000;
+// The nearest sections (to their closest point) join the camera-sorted mesh
+// up to this many quads; the rest draw their own meshes, sections far to
+// near. A fixed 24-block radius left far overlaps flickering, and sorting a
+// whole large liquid ghost was too slow (terrain_water_lamium).
+constexpr size_t sortedBlendedQuads = 30000;
+
 void release() {
+    forgetCombined();
     sections.clear();
+    wantedCache.valid = false;
+    resetMarks();
     resolved.clear();
     models::reset();
     builtKeys.clear();
     actors.clear();
     watched.clear();
-    entitiesChecked = {};
-    labels.clear();
     builtRevision = 0;
-    scan = {};
-    publish(std::make_shared<Verification const>());
+    resetVerification();
 }
-
-::Rotation gameRotation(int quarterTurns) {
-    switch (quarterTurns) {
-    case 1: return ::Rotation::Clockwise90;
-    case 2: return ::Rotation::Clockwise180;
-    case 3: return ::Rotation::CounterClockwise90;
-    default: return ::Rotation::None;
-    }
-}
-::Mirror gameMirror(Mirror mirror) {
-    return mirror == Mirror::X ? ::Mirror::X : mirror == Mirror::Z ? ::Mirror::Z : ::Mirror::None;
-}
-// The palette entry as the NBT the game's block registry reads.
-Block const* lookup(PaletteBlock const& entry) {
-    nbt::Root root;
-    root.compound.set("name", {entry.name});
-    root.compound.set("states", {entry.states});
-    root.compound.set("version", {entry.version});
-    auto tag = CompoundTag::fromBinaryNbt(nbt::write(root));
-    if (!tag) return nullptr;
-    auto block = Block::tryGetFromRegistry(*tag);
-    return block ? &*block : nullptr;
-}
-bool flagged(nbt::Compound const& states, char const* name) {
-    std::int64_t value = 0;
-    auto const* tag = states.find(name);
-    return tag && tag->integer(value) && value != 0;
-}
-// A block's states as text, for naming what differs (the target card).
-std::map<std::string, std::string> blockStates(Block const& block) {
-    std::map<std::string, std::string> out;
-    auto const& tags = block.mSerializationId->mTags;
-    auto found = tags.find("states");
-    if (found == tags.end()) return out;
-    auto* states = std::get_if<CompoundTag>(&found->second.mTagStorage);
-    if (!states) return out;
-    for (auto const& [key, value] : states->mTags) {
-        if (auto* v = std::get_if<ByteTag>(&value.mTagStorage)) out[key] = std::to_string(v->data);
-        else if (auto* v = std::get_if<IntTag>(&value.mTagStorage)) out[key] = std::to_string(v->data);
-        else if (auto* v = std::get_if<StringTag>(&value.mTagStorage)) out[key] = *v;
-    }
-    return out;
-}
-ItemInfo describe(Block const& block, std::string_view fallback) {
-    ItemInfo out;
-    auto item = block.getBlockType().asItemInstance(block, nullptr);
-    if (item.isNull()) { out.name = std::string(fallback); return out; }
-    out.item = item.getTypeName();
-    out.name = item.getName();
-    nbt::Root tag;
-    tag.compound.set("Name", {out.item});
-    tag.compound.set("Count", {std::int8_t{1}});
-    tag.compound.set("Damage", {static_cast<std::int16_t>(item.getAuxValue())});
-    out.icon = nbt::write(tag);
-    return out;
-}
-ItemInfo itemFor(PaletteBlock const& entry, Block const* block) {
-    if (entry.isAir()) return {};
-    ItemInfo out = block ? describe(*block, entry.name) : ItemInfo{"", entry.name, "", 1};
-    out.perBlock = itemsPerBlock(entry.name, flagged(entry.states, "upper_block_bit") || flagged(entry.states, "head_piece_bit"));
-    return out;
-}
-Resolved resolve(Structure const& structure, SavedPlacement const& placement) {
-    Resolved out{nullptr, &structure, placement.placement.rotation, placement.placement.mirror, {}};
-    out.blocks.reserve(structure.palette.size());
-    unsigned missing = 0;
-    for (auto const& entry : structure.palette) {
-        Block const* block = entry.isAir() ? nullptr : lookup(entry);
-        if (!block && !entry.isAir()) ++missing;
-        out.items.push_back(itemFor(entry, block));
-        if (block && (out.rotation || out.mirror != Mirror::None))
-            if (auto const* turned = VanillaBlockStateTransformUtils::transformBlock(*block, gameRotation(out.rotation), gameMirror(out.mirror)))
-                block = turned;
-        out.blocks.push_back(block);
-    }
-    if (missing) log(std::format("{}: {} palette entries are not known blocks", placement.file, missing));
-    Size placed = placedSize(structure.size, placement.placement.rotation);
-    for (auto const& entity : structure.entities) {
-        if (entity.identifier.empty() || out.entities.size() >= maxEntities) continue;
-        EntityGhost ghost{entity.identifier, {}, {}, toWorldPosition(structure.size, placement.placement, {entity.x, entity.y, entity.z}), {}};
-        auto const& o = placement.placement.origin;
-        ghost.offset = {std::clamp(static_cast<int>(std::floor(ghost.at.x)) - o.x, 0, placed.x - 1),
-                        std::clamp(static_cast<int>(std::floor(ghost.at.y)) - o.y, 0, placed.y - 1),
-                        std::clamp(static_cast<int>(std::floor(ghost.at.z)) - o.z, 0, placed.z - 1)};
-        if (auto const* turn = entity.data.find("Rotation"); turn && turn->as<nbt::List>() && !turn->as<nbt::List>()->items.empty())
-            if (auto const* yaw = turn->as<nbt::List>()->items.front().as<float>()) ghost.yaw = toWorldYaw(*yaw, placement.placement);
-        auto key = entityNameKey(entity.identifier);
-        ghost.name = getI18n().get(key, getI18n().getCurrentLanguage());
-        if (ghost.name.empty() || ghost.name == key) ghost.name = entity.identifier;
-        nbt::Root tag;
-        tag.compound.set("Name", {entity.identifier});
-        tag.compound.set("Count", {std::int8_t{1}});
-        tag.compound.set("Damage", {std::int16_t{0}});
-        ghost.icon = nbt::write(tag);
-        out.entities.push_back(std::move(ghost));
-    }
-    out.entityPlaced.assign(out.entities.size(), std::nullopt);
-    return out;
-}
-
-// Light UVs and colors: the in-world mesh carries both, but fill when absent.
-void finishColors(Tessellator& batch, float r, float g, float b) {
-    auto& data = batch.mMeshData.get();
-    size_t vertices = data.mPositions->size();
-    auto& uv1 = data.mTextureUVs[1].get();
-    if (uv1.size() != vertices) uv1.assign(vertices, glm::vec2{1.f, 1.f});
-    auto& colors = data.mColors.get();
-    if (colors.size() != vertices) colors.assign(vertices, 0xffffffffu);
-    auto scale = [](std::uint32_t value, int shift, float factor) {
-        return static_cast<std::uint32_t>(std::lround(std::clamp(((value >> shift) & 255) * factor, 0.f, 255.f))) << shift;
-    };
-    for (auto& c : colors) c = scale(c, 0, r) | scale(c, 8, g) | scale(c, 16, b) | (c & 0xff000000u);
-}
-
-// A ghost with an opaque full block on all six sides cannot be seen: real
-// ones, or ghosts that will be drawn there (shown layers, nothing placed).
-// An opaque full ghost will be drawn at `n`: nothing real is there, the
-// placement asks for an opaque full block in a shown layer.
-bool ghostOpaqueAt(BlockSource& region, session::Shown const& shown, Resolved const& blocks, Point n) {
-    auto const& structure = *shown.structure;
-    auto const& placement = shown.placement;
-    Size placed = placedSize(structure.size, placement.placement.rotation);
-    Point const& origin = placement.placement.origin;
-    auto local = toLocal(structure.size, placement.placement, n);
-    if (!local || !layerShown(placement.layers, placed, {n.x - origin.x, n.y - origin.y, n.z - origin.z})) return false;
-    auto index = structure.blocks[static_cast<size_t>(structure.cell(local->x, local->y, local->z))];
-    if (index == voidCell || static_cast<size_t>(index) >= blocks.blocks.size()) return false;
-    Block const* ghost = blocks.blocks[static_cast<size_t>(index)];
-    return ghost && ghost->getBlockType().mIsOpaqueFullBlock && region.getBlock(BlockPos{n.x, n.y, n.z}).isAir();
-}
-bool enclosed(BlockSource& region, session::Shown const& shown, Resolved const& blocks, Point at) {
-    for (auto const& d : faces::offsets) {
-        Point n{at.x + d[0], at.y + d[1], at.z + d[2]};
-        if (region.getBlock(BlockPos{n.x, n.y, n.z}).getBlockType().mIsOpaqueFullBlock) continue;
-        if (!ghostOpaqueAt(region, shown, blocks, n)) return false;
-    }
-    return true;
-}
-// Drops the quads of a just tessellated ghost that lie on a side touching an
-// opaque ghost: unseen from outside, and they fought with the neighbor's own
-// face. Real neighbors are already culled by the tessellator. A dropped
-// quad collapses to one point, so no other vertex data has to move.
-// Near the camera (this cell or the neighbor within one cell of it) the pair
-// keeps one face instead: the one facing the camera. Every such plane then
-// has exactly one face, so the cells around the camera look solid even when
-// the near clip plane cuts the closest face, with nothing fighting in one
-// plane (the material draws both sides).
-void cullAgainstGhosts(Tessellator& batch, size_t from, BlockSource& region, session::Shown const& shown, Resolved const& blocks, Point at) {
-    auto& positions = batch.mMeshData->mPositions.get();
-    std::array<std::optional<bool>, 6> hidden;
-    for (size_t q = from; q + 4 <= positions.size(); q += 4) {
-        std::array<faces::Vertex, 4> quad;
-        for (size_t k = 0; k < 4; ++k) quad[k] = {positions[q + k].x, positions[q + k].y, positions[q + k].z};
-        int side = faces::sideOf(quad, at.x, at.y, at.z);
-        if (side < 0) continue;
-        auto& known = hidden[static_cast<size_t>(side)];
-        if (!known) {
-            auto const& d = faces::offsets[side];
-            Point n{at.x + d[0], at.y + d[1], at.z + d[2]};
-            known = ghostOpaqueAt(region, shown, blocks, n);
-            if (*known && (nearCamera(at) || nearCamera(n)))
-                known = !faces::beyond(side, at.x, at.y, at.z, buildCamera.x, buildCamera.y, buildCamera.z);
-        }
-        if (*known) for (size_t k = 1; k < 4; ++k) positions[q + k] = positions[q];
-    }
-}
-// The cells of one section inside a placement's box.
-// `halo` widens the section by that many cells on every side.
-template <class Visit>
-void eachCell(session::Shown const& shown, SectionKey key, int halo, Visit&& visit) {
-    auto const& placement = shown.placement;
-    Size placed = placedSize(shown.structure->size, placement.placement.rotation);
-    Point const& origin = placement.placement.origin;
-    auto [index, sx, sy, sz] = key;
-    Point low{sx * sectionSize - halo, sy * sectionSize - halo, sz * sectionSize - halo};
-    int span = sectionSize + 2 * halo;
-    for (int x = std::max(low.x, origin.x - halo); x < std::min(low.x + span, origin.x + placed.x + halo); ++x)
-        for (int y = std::max(low.y, origin.y - halo); y < std::min(low.y + span, origin.y + placed.y + halo); ++y)
-            for (int z = std::max(low.z, origin.z - halo); z < std::min(low.z + span, origin.z + placed.z + halo); ++z)
-                visit(x, y, z);
-}
-// The world's blocks in a section's cells, hashed: equal values mean nothing
-// there changed and the built meshes still hold.
-std::uint64_t signatureOf(BlockSource& region, session::Shown const& shown, SectionKey key) {
-    std::uint64_t hash = 1469598103934665603ull;
-    // One cell around the section too: its border ghosts' faces and
-    // enclosure depend on the neighbors there.
-    eachCell(shown, key, 1, [&](int x, int y, int z) {
-        BlockPos pos{x, y, z};
-        auto* chunk = region.getChunkAt(pos);
-        auto value = chunk && chunk->mLoadState->load() >= ChunkState::Loaded ? reinterpret_cast<std::uintptr_t>(&region.getBlock(pos)) : 1;
-        hash = (hash ^ static_cast<std::uint64_t>(value)) * 1099511628211ull;
-    });
-    return hash;
-}
-
-void buildSection(ScreenContext& screen, BlockSource& region, BlockTessellator& own, session::Shown const& shown,
-                  Resolved const& blocks, SectionKey key, Section& out) {
-    auto const& structure = *shown.structure;
-    auto const& placement = shown.placement;
-    Size placed = placedSize(structure.size, placement.placement.rotation);
-    Point const& origin = placement.placement.origin;
-    auto [index, sx, sy, sz] = key;
-    Point low{sx * sectionSize, sy * sectionSize, sz * sectionSize};
-    // Reset in place: meshes cannot be copied or assigned.
-    out.faces.reset(); out.lines.reset(); out.marks.reset();
-    out.faceVertices = out.lineVertices = out.markVertices = 0;
-    out.entities.clear();
-    out.due.reset();
-    out.origin = {static_cast<float>(low.x), static_cast<float>(low.y), static_cast<float>(low.z)};
-    out.built = out.checked = Clock::now();
-    out.signature = signatureOf(region, shown, key);
-    out.complete = true;
-
-    Tessellator batch(screen.tessellator.mBufferResourceService);
-    batch.begin({}, mce::PrimitiveMode::QuadList, 4096, false);
-    // Mistakes also get tinted faces just outside the real block, so they
-    // stay visible next to the vanilla selection outline.
-    std::vector<Outline> outlines, marks;
-    auto cellBox = [](BlockPos p) { return std::pair{glm::vec3(p.x, p.y, p.z), glm::vec3(p.x + 1, p.y + 1, p.z + 1)}; };
-    for (int x = std::max(low.x, origin.x); x < std::min(low.x + sectionSize, origin.x + placed.x); ++x)
-        for (int y = std::max(low.y, origin.y); y < std::min(low.y + sectionSize, origin.y + placed.y); ++y)
-            for (int z = std::max(low.z, origin.z); z < std::min(low.z + sectionSize, origin.z + placed.z); ++z) {
-                Point offset{x - origin.x, y - origin.y, z - origin.z};
-                if (!layerShown(placement.layers, placed, offset)) continue;
-                auto local = toLocal(structure.size, placement.placement, {x, y, z});
-                if (!local) continue;
-                auto paletteIndex = structure.blocks[static_cast<size_t>(structure.cell(local->x, local->y, local->z))];
-                if (paletteIndex == voidCell || static_cast<size_t>(paletteIndex) >= blocks.blocks.size()) continue;
-                Block const* expected = blocks.blocks[static_cast<size_t>(paletteIndex)];
-                bool expectsAir = structure.palette[static_cast<size_t>(paletteIndex)].isAir();
-                BlockPos pos{x, y, z};
-                auto* chunk = region.getChunkAt(pos);
-                // While a chunk arrives the client shows placeholder blocks:
-                // neither counts as built until it is loaded.
-                if (!chunk || chunk->mLoadState->load() < ChunkState::Loaded) { out.complete = false; continue; }
-                Block const& actual = region.getBlock(pos);
-                if (actual.getMaterial().mType == SharedTypes::v1_26_20::MaterialType::ClientRequestPlaceholder) {
-                    out.complete = false;
-                    continue;
-                }
-                auto [boxLow, boxHigh] = cellBox(pos);
-                if (expectsAir) {
-                    // An extra block: red outline (the real block hides any ghost).
-                    if (placement.countExtras && !actual.isAir()) {
-                        marks.push_back({boxLow, boxHigh, 1.f, .25f, .2f});
-                    }
-                    continue;
-                }
-                if (!expected) { outlines.push_back({boxLow, boxHigh, 1.f, .55f, .1f}); continue; } // unknown block name
-                if (&actual == expected) continue; // placed correctly
-                if (!actual.isAir()) {
-                    bool sameType = &actual.getBlockType() == &expected->getBlockType();
-                    // Something else is there: red, or yellow when only the state differs.
-                    Outline mark = sameType ? Outline{boxLow, boxHigh, 1.f, .8f, .2f} : Outline{boxLow, boxHigh, 1.f, .25f, .2f};
-                    marks.push_back(mark);
-                    continue;
-                }
-                // Within two cells of the camera a ghost may own the face the
-                // camera sees, so it is never skipped as enclosed.
-                if (!nearCamera({x, y, z}, 2) && enclosed(region, shown, blocks, {x, y, z})) continue;
-                size_t before = batch.mMeshData->mPositions->size();
-                own.tessellateInWorld(batch, *expected, pos, false);
-                cullAgainstGhosts(batch, before, region, shown, blocks, {x, y, z});
-                auto& positions = batch.mMeshData->mPositions.get();
-                if (positions.size() == before) {
-                    // No block mesh: block entities draw through their renderer;
-                    // others (honey block, door) keep the outline alone for now.
-                    out.entities.push_back({pos, expected});
-                    outlines.push_back({boxLow, boxHigh, .35f, .85f, 1.f});
-                    continue;
-                }
-                glm::vec3 shapeLow{1e9f}, shapeHigh{-1e9f};
-                for (size_t v = before; v < positions.size(); ++v) {
-                    shapeLow = glm::min(shapeLow, positions[v]);
-                    shapeHigh = glm::max(shapeHigh, positions[v]);
-                }
-                outlines.push_back({shapeLow, shapeHigh, .35f, .85f, 1.f});
-            }
-
-    if (batch.mCount) {
-        // Section-relative vertices keep float precision far from the origin.
-        for (auto& p : batch.mMeshData->mPositions.get()) p -= out.origin;
-        finishColors(batch, .62f, .85f, 1.f);
-        out.faceVertices = batch.mCount;
-        out.faces.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium schematic ghosts",
-            Tessellator::SupplementaryFieldAutoGenerationMode::None));
-    }
-    if (!marks.empty()) {
-        // Mistakes mark whole cells. Where marks of one color touch, the
-        // faces between them and the outlines of cells inside a run are
-        // left out: dense wrong or extra areas drew every one of them.
-        auto cellOf = [](Outline const& m) {
-            return std::tuple<int, int, int>{static_cast<int>(std::floor(m.min.x)), static_cast<int>(std::floor(m.min.y)),
-                                             static_cast<int>(std::floor(m.min.z))};
-        };
-        std::map<std::tuple<int, int, int>, float> colorAt; // keyed cell -> green channel, which tells red from yellow
-        for (auto const& m : marks) colorAt[cellOf(m)] = m.g;
-        auto sameAt = [&](std::tuple<int, int, int> cell, int side, float g) {
-            auto const& d = faces::offsets[side];
-            auto found = colorAt.find({std::get<0>(cell) + d[0], std::get<1>(cell) + d[1], std::get<2>(cell) + d[2]});
-            return found != colorAt.end() && found->second == g;
-        };
-        Tessellator quads(screen.tessellator.mBufferResourceService);
-        quads.begin({}, mce::PrimitiveMode::QuadList, static_cast<int>(marks.size() * 48), false);
-        std::uint32_t vertices = 0;
-        // Same order as faces::offsets: -x, +x, -y, +y, -z, +z.
-        constexpr int sides[6][4] = {{0,2,6,4},{1,5,7,3},{0,4,5,1},{2,3,7,6},{0,1,3,2},{4,6,7,5}};
-        for (auto const& m : marks) {
-            auto cell = cellOf(m);
-            quads.color(m.r, m.g, m.b, .3f);
-            glm::vec3 a = m.min - glm::vec3{.01f} - out.origin, b = m.max + glm::vec3{.01f} - out.origin;
-            glm::vec3 c[8];
-            for (int i = 0; i < 8; ++i) c[i] = {i & 1 ? b.x : a.x, i & 2 ? b.y : a.y, i & 4 ? b.z : a.z};
-            int open = 0;
-            for (int side = 0; side < 6; ++side) {
-                if (sameAt(cell, side, m.g)) continue;
-                ++open;
-                auto const& f = sides[side];
-                for (int k = 0; k < 4; ++k) quads.vertex(c[f[k]].x, c[f[k]].y, c[f[k]].z);
-                for (int k = 3; k >= 0; --k) quads.vertex(c[f[k]].x, c[f[k]].y, c[f[k]].z);
-                vertices += 8;
-            }
-            if (open) outlines.push_back(m);
-        }
-        out.markVertices = vertices;
-        // Ended either way, so the tessellator never stays open.
-        auto mesh = quads.end(Tessellator::UploadMode::Buffered, "Lamium schematic mistakes",
-            Tessellator::SupplementaryFieldAutoGenerationMode::None);
-        if (vertices) out.marks.emplace(std::move(mesh));
-    }
-    if (!outlines.empty()) {
-        Tessellator lines(screen.tessellator.mBufferResourceService);
-        lines.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(outlines.size() * 24), false);
-        constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
-        for (auto const& o : outlines) {
-            lines.color(o.r, o.g, o.b, 1.f);
-            glm::vec3 a = o.min - glm::vec3{.002f} - out.origin, b = o.max + glm::vec3{.002f} - out.origin, c[8];
-            for (int i = 0; i < 8; ++i) c[i] = {i & 1 ? b.x : a.x, i & 2 ? b.y : a.y, i & 4 ? b.z : a.z};
-            for (auto [i, j] : edges) { lines.vertex(c[i].x, c[i].y, c[i].z); lines.vertex(c[j].x, c[j].y, c[j].z); }
-        }
-        out.lineVertices = static_cast<std::uint32_t>(outlines.size() * 24);
-        out.lines.emplace(lines.end(Tessellator::UploadMode::Buffered, "Lamium schematic outlines",
-            Tessellator::SupplementaryFieldAutoGenerationMode::None));
-    }
-}
-
-// Which of each placement's entities stand at their spots, from the
-// entities the client knows around the placement.
-void checkEntities(BlockSource& region, LocalPlayer& player, session::Snapshot const& snapshot, int dimension) {
-    auto now = Clock::now();
-    if (now - entitiesChecked < entityRefresh) return;
-    entitiesChecked = now;
-    Vec3 feet = player.getFeetPos();
-    for (size_t i = 0; i < snapshot.placements.size() && i < resolved.size(); ++i) {
-        auto const& shown = snapshot.placements[i];
-        auto& r = resolved[i];
-        std::fill(r.entityPlaced.begin(), r.entityPlaced.end(), std::nullopt);
-        bool wanted = shown.placement.visible || static_cast<int>(i) == snapshot.selected;
-        if (r.entities.empty() || !shown.structure || !shown.placement.entities || !wanted || shown.placement.dimension != dimension)
-            continue;
-        std::vector<EntitySpot> expected;
-        std::vector<size_t> judged;
-        double lowX = 1e18, lowY = 1e18, lowZ = 1e18, highX = -1e18, highY = -1e18, highZ = -1e18;
-        for (size_t e = 0; e < r.entities.size(); ++e) {
-            auto const& at = r.entities[e].at;
-            double dx = at.x - feet.x, dy = at.y - feet.y, dz = at.z - feet.z;
-            if (dx * dx + dy * dy + dz * dz > entityRange * entityRange) continue;
-            BlockPos pos{static_cast<int>(std::floor(at.x)), static_cast<int>(std::floor(at.y)), static_cast<int>(std::floor(at.z))};
-            auto* chunk = region.getChunkAt(pos);
-            if (!chunk || chunk->mLoadState->load() < ChunkState::Loaded) continue;
-            expected.push_back({r.entities[e].identifier, at.x, at.y, at.z});
-            judged.push_back(e);
-            lowX = std::min(lowX, at.x); lowY = std::min(lowY, at.y); lowZ = std::min(lowZ, at.z);
-            highX = std::max(highX, at.x); highY = std::max(highY, at.y); highZ = std::max(highZ, at.z);
-        }
-        if (expected.empty()) continue;
-        constexpr float grow = static_cast<float>(entityReach) + .5f;
-        AABB area{Vec3{static_cast<float>(lowX) - grow, static_cast<float>(lowY) - grow, static_cast<float>(lowZ) - grow},
-                  Vec3{static_cast<float>(highX) + grow, static_cast<float>(highY) + grow, static_cast<float>(highZ) + grow}};
-        // Owned copies: the actors are not kept past this call.
-        std::vector<std::string> names;
-        std::vector<Vec3> positions;
-        for (Actor* actor : region.fetchEntities(&player, area, false, false)) {
-            if (!actor || actor->mRemoved || names.size() >= 4 * maxEntities) continue;
-            names.push_back(actor->getTypeName());
-            positions.push_back(actor->getFeetPos());
-        }
-        std::vector<EntitySpot> actual;
-        for (size_t a = 0; a < names.size(); ++a) actual.push_back({names[a], positions[a].x, positions[a].y, positions[a].z});
-        auto placed = matchEntities(expected, actual);
-        for (size_t k = 0; k < judged.size(); ++k) r.entityPlaced[judged[k]] = placed[k];
-    }
-}
-// The schematic's entities in the finished pass: their own material lines
-// and a "not placed" row for each one missing in the shown layers.
-void addEntityResults(Verification& result, session::Shown const& shown, Resolved const& r) {
-    if (!shown.placement.entities) return;
-    Size placed = placedSize(shown.structure->size, shown.placement.placement.rotation);
-    std::map<std::string, MaterialLine> all, visible;
-    for (size_t e = 0; e < r.entities.size(); ++e) {
-        auto const& ghost = r.entities[e];
-        bool here = r.entityPlaced[e].value_or(false);
-        bool inLayer = layerShown(shown.placement.layers, placed, ghost.offset);
-        for (auto* lines : {&all, &visible}) {
-            if (lines == &visible && !inLayer) continue;
-            auto& line = (*lines)[ghost.identifier];
-            if (line.name.empty()) { line.item = ghost.identifier; line.name = ghost.name; line.icon = ghost.icon; line.entity = true; }
-            ++line.needed;
-            if (here) ++line.placed;
-        }
-        if (inLayer && r.entityPlaced[e] == false && result.mismatches.size() < maxMismatches) {
-            Point cell{static_cast<int>(std::floor(ghost.at.x)), static_cast<int>(std::floor(ghost.at.y)), static_cast<int>(std::floor(ghost.at.z))};
-            result.mismatches.push_back({CellState::Missing, cell, ghost.icon, {}, ghost.name, {}, true});
-        }
-    }
-    for (auto& [key, line] : all) result.materials.push_back(std::move(line));
-    for (auto& [key, line] : visible) result.visibleMaterials.push_back(std::move(line));
-}
-
-// One cell of a placement, the n-th of its placed box (x, then y, then z
-// fastest), compared with the world.
-struct Cell {
-    bool inside = false;      // false: outside the structure or a structure void
-    CellState state = CellState::Unknown;
-    int palette = -1;
-    bool air = false, visible = false;
-    Point world, offset;
-    Block const* expected = nullptr;
-    Block const* actual = nullptr;
-};
-Cell classifyCell(BlockSource& region, session::Shown const& shown, Resolved const& blocks, Size placed, std::uint64_t n) {
-    Cell c;
-    auto const& structure = *shown.structure;
-    auto const& placement = shown.placement;
-    int ox = static_cast<int>(n / (static_cast<std::uint64_t>(placed.y) * placed.z));
-    int oy = static_cast<int>(n / placed.z % placed.y);
-    int oz = static_cast<int>(n % placed.z);
-    c.offset = {ox, oy, oz};
-    c.world = {placement.placement.origin.x + ox, placement.placement.origin.y + oy, placement.placement.origin.z + oz};
-    auto local = toLocal(structure.size, placement.placement, c.world);
-    if (!local) return c;
-    auto paletteIndex = structure.blocks[static_cast<size_t>(structure.cell(local->x, local->y, local->z))];
-    if (paletteIndex == voidCell || static_cast<size_t>(paletteIndex) >= blocks.blocks.size()) return c;
-    c.inside = true;
-    c.palette = static_cast<int>(paletteIndex);
-    c.air = structure.palette[static_cast<size_t>(paletteIndex)].isAir();
-    c.expected = blocks.blocks[static_cast<size_t>(paletteIndex)];
-    c.visible = layerShown(placement.layers, placed, c.offset);
-    BlockPos pos{c.world.x, c.world.y, c.world.z};
-    auto* chunk = region.getChunkAt(pos);
-    if (!chunk || chunk->mLoadState->load() < ChunkState::Loaded) { c.state = CellState::Unknown; return c; }
-    c.actual = &region.getBlock(pos);
-    auto const* actual = c.actual;
-    auto const* expected = c.expected;
-    if (actual->getMaterial().mType == SharedTypes::v1_26_20::MaterialType::ClientRequestPlaceholder) c.state = CellState::Unknown;
-    else if (c.air) c.state = actual->isAir() ? CellState::Correct : placement.countExtras ? CellState::Extra : CellState::Ignored;
-    else if (!expected) c.state = CellState::Unknown;
-    else if (actual == expected) c.state = CellState::Correct;
-    else if (actual->isAir()) c.state = CellState::Missing;
-    else c.state = &actual->getBlockType() == &expected->getBlockType() ? CellState::State : CellState::Wrong;
-    return c;
-}
-// Progress of every placement for the Placed list: correct / total in its
-// shown layers, counted in the background only while the list is on screen.
-// The selected placement takes its numbers from the full check instead.
-constexpr std::uint64_t progressBudget = 8192;
-std::atomic<std::int64_t> progressWanted{0}; // steady-clock milliseconds of the last request
-struct ProgressScan {
-    size_t index = 0;
-    std::string key;
-    std::uint64_t next = 0;
-    Tally tally;
-} progressScan;
-std::mutex progressMutex;
-std::map<std::string, Tally> progressDone; // by drawKey
-void recordProgress(std::string const& key, Tally const& tally) {
-    std::lock_guard lock(progressMutex);
-    progressDone[key] = tally;
-}
-std::int64_t steadyMs() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
-}
-void stepProgress(BlockSource& region, session::Snapshot const& snapshot, int dimension) {
-    if (steadyMs() - progressWanted.load() > 1000) return;
-    size_t count = snapshot.placements.size();
-    if (!count || resolved.size() != count) return;
-    for (std::uint64_t budget = progressBudget, tries = 0; budget && tries <= count; ) {
-        if (progressScan.index >= count) progressScan.index = 0;
-        auto const& shown = snapshot.placements[progressScan.index];
-        bool usable = static_cast<int>(progressScan.index) != snapshot.selected && shown.structure
-            && shown.placement.dimension == dimension && resolved[progressScan.index].structure == shown.structure.get();
-        auto key = drawKey(shown.placement);
-        if (!usable) { ++progressScan.index; progressScan.key.clear(); ++tries; continue; }
-        if (progressScan.key != key) { progressScan.key = key; progressScan.next = 0; progressScan.tally = {}; }
-        Size placed = placedSize(shown.structure->size, shown.placement.placement.rotation);
-        std::uint64_t total = static_cast<std::uint64_t>(placed.x) * placed.y * placed.z;
-        for (; progressScan.next < total && budget; ++progressScan.next, --budget) {
-            auto c = classifyCell(region, shown, resolved[progressScan.index], placed, progressScan.next);
-            if (c.inside && c.visible) progressScan.tally.add(c.state, !c.air);
-        }
-        if (progressScan.next < total) return;
-        recordProgress(key, progressScan.tally);
-        progressScan.key.clear();
-        ++progressScan.index;
-        ++tries;
-    }
-}
-void stepScan(BlockSource& region, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
-    int index = snapshot.selected;
-    bool valid = index >= 0 && index < static_cast<int>(snapshot.placements.size())
-        && snapshot.placements[static_cast<size_t>(index)].structure
-        && snapshot.placements[static_cast<size_t>(index)].placement.dimension == dimension;
-    if (!valid) {
-        if (scan.placement != -1) {
-            scan = {};
-            scan.revision = snapshot.revision;
-            auto none = std::make_shared<Verification>();
-            none->revision = snapshot.revision;
-            publish(std::move(none));
-        }
-        return;
-    }
-    // A change to another placement, or to this one's name or visibility,
-    // keeps the pass going.
-    auto key = drawKey(snapshot.placements[static_cast<size_t>(index)].placement)
-        + std::format("|{}", static_cast<void const*>(snapshot.placements[static_cast<size_t>(index)].structure.get()));
-    if (scan.key != key) {
-        scan = {};
-        scan.key = key;
-    }
-    scan.revision = snapshot.revision;
-    scan.placement = index;
-    auto const& shown = snapshot.placements[static_cast<size_t>(index)];
-    auto const& structure = *shown.structure;
-    auto const& placement = shown.placement;
-    auto const& blocks = resolved[static_cast<size_t>(index)];
-    Size placed = placedSize(structure.size, placement.placement.rotation);
-    std::uint64_t total = static_cast<std::uint64_t>(placed.x) * placed.y * placed.z;
-    auto addMaterial = [](std::map<std::string, MaterialLine>& lines, ItemInfo const& info, bool correct) {
-        auto key = info.item.empty() ? "block:" + info.name : info.item;
-        auto& line = lines[key];
-        if (line.name.empty()) { line.item = info.item; line.name = info.name; line.icon = info.icon; }
-        line.needed += static_cast<std::uint64_t>(info.perBlock);
-        if (correct) line.placed += static_cast<std::uint64_t>(info.perBlock);
-    };
-    for (std::uint64_t budget = scanBudget; scan.next < total && budget; ++scan.next, --budget) {
-        auto c = classifyCell(region, shown, blocks, placed, scan.next);
-        if (!c.inside) continue;
-        auto paletteIndex = c.palette;
-        bool visible = c.visible, air = c.air;
-        CellState state = c.state;
-        Block const* actual = c.actual;
-        Block const* expected = c.expected;
-        Point world = c.world;
-        if (!air) {
-            auto const& info = blocks.items[static_cast<size_t>(paletteIndex)];
-            addMaterial(scan.all, info, state == CellState::Correct);
-            if (visible) addMaterial(scan.shown, info, state == CellState::Correct);
-        }
-        if (!visible) continue;
-        scan.tally.add(state, !air);
-        bool mistake = state == CellState::Missing || state == CellState::Wrong || state == CellState::State || state == CellState::Extra;
-        if (!mistake || scan.mismatches.size() >= maxMismatches) continue;
-        Mismatch m{state, world, {}, {}, {}, {}};
-        if (!air) {
-            auto const& info = blocks.items[static_cast<size_t>(paletteIndex)];
-            m.expected = info.icon;
-            m.expectedName = info.name;
-        }
-        if (actual && !actual->isAir()) {
-            auto info = describe(*actual, actual->getTypeName());
-            m.actual = info.icon;
-            m.actualName = info.name;
-            if (state == CellState::State && expected) {
-                m.states = stateDifferences(blockStates(*expected), blockStates(*actual));
-                m.identifier = expected->getTypeName();
-            }
-        }
-        scan.mismatches.push_back(std::move(m));
-    }
-    if (scan.next < total) return;
-    auto result = std::make_shared<Verification>();
-    result->revision = scan.revision;
-    result->placement = index;
-    result->complete = true;
-    result->visible = scan.tally;
-    recordProgress(drawKey(placement), scan.tally);
-    result->mismatches = std::move(scan.mismatches);
-    for (auto& [key, line] : scan.all) result->materials.push_back(std::move(line));
-    for (auto& [key, line] : scan.shown) result->visibleMaterials.push_back(std::move(line));
-    addEntityResults(*result, shown, blocks);
-    sortMismatches(result->mismatches, camera.x, camera.y, camera.z);
-    sortMaterials(result->materials);
-    sortMaterials(result->visibleMaterials);
-    publish(std::move(result));
-    // Start the next pass.
-    scan.next = 0;
-    scan.tally = {};
-    scan.mismatches.clear();
-    scan.all.clear();
-    scan.shown.clear();
-}
-
-template <class Draw>
-void translated(ScreenContext& screen, glm::vec3 offset, Draw&& draw) {
-    auto ref = screen.camera.worldMatrixStack->push(false);
-    ref.stack->_isDirty = true;
-    ref.mat->_m = glm::scale(glm::translate(ref.mat->_m.get(), offset * towardEye), glm::vec3{towardEye});
-    // Pop manually, as the world overlay does for this stack, also when the
-    // draw throws: a pushed matrix left behind would shift the whole world.
-    auto pop = [&] {
-        ref.stack->_isDirty = true;
-        if (ref.stack->sortOrigin->has_value() && (ref.stack->stack->size() - 1) <= ref.stack->sortOrigin->value())
-            ref.stack->sortOrigin->reset();
-        ref.stack->stack->pop_back();
-        ref.mat = nullptr;
-        ref.stack = nullptr;
-    };
-    try { draw(); } catch (...) { pop(); throw; }
-    pop();
-}
-
-// The palette entry of a game block: its serialized name, states and version.
-PaletteBlock paletteEntry(Block const& block) {
-    auto bytes = block.mSerializationId->toBinaryNbt();
-    auto root = nbt::read({reinterpret_cast<std::uint8_t const*>(bytes.data()), bytes.size()});
-    PaletteBlock out;
-    if (auto const* name = root.compound.find("name"); name && name->as<std::string>()) out.name = *name->as<std::string>();
-    if (auto const* states = root.compound.find("states"); states && states->as<nbt::Compound>()) out.states = *states->as<nbt::Compound>();
-    std::int64_t version = 0;
-    if (auto const* v = root.compound.find("version"); v && v->integer(version)) out.version = static_cast<std::int32_t>(version);
-    if (out.name.empty()) out.name = block.getTypeName();
-    return out;
-}
-void stepSave(BlockSource& region, LocalPlayer& player) {
-    if (stopRequested.exchange(false)) { stopSave(); return; }
-    if (!saveJob) {
-        std::optional<SaveRequest> request;
-        {
-            std::lock_guard lock(saveMutex);
-            request = std::exchange(pendingSave, std::nullopt);
-        }
-        if (!request) return;
-        auto columns = chunkColumns(request->area);
-        auto count = columns.size();
-        saveJob.emplace(SaveJob{*request, StructureBuilder(request->area.size(), request->area.low()), std::move(columns),
-                                std::vector<std::uint64_t>(count), 0, {}});
-    }
-    auto& job = *saveJob;
-    if (static_cast<int>(player.getDimensionId()) != job.request.dimension) {
-        finishSave(ui::translated("schematic.save.otherDimension"));
-        return;
-    }
-    Point low = job.request.area.low();
-    auto const& structure = job.builder.structure();
-    int height = structure.size.y;
-    std::uint64_t total = structure.cells(), budget = saveBudget;
-    auto loaded = [&](BlockPos const& pos) {
-        auto* chunk = region.getChunkAt(pos);
-        return chunk && chunk->mLoadState->load() >= ChunkState::Loaded;
-    };
-    auto entry = [&](Block const& block) -> PaletteBlock const& {
-        auto found = job.palette.find(&block);
-        if (found == job.palette.end()) found = job.palette.emplace(&block, paletteEntry(block)).first;
-        return found->second;
-    };
-    std::uint64_t before = job.done;
-    for (size_t c = 0; c < job.columns.size() && budget; ++c) {
-        auto const& column = job.columns[c];
-        auto& read = job.progress[c];
-        std::uint64_t cells = column.cells(height);
-        if (read >= cells || !loaded(BlockPos{column.lowX, low.y, column.lowZ})) continue;
-        int width = column.highX - column.lowX + 1, depth = column.highZ - column.lowZ + 1;
-        bool wasRead = false;
-        for (; read < cells && budget; ++read, --budget) {
-            // Within a column: z fastest, then x, then y.
-            int z = column.lowZ + static_cast<int>(read % depth);
-            int x = column.lowX + static_cast<int>(read / depth % width);
-            int y = low.y + static_cast<int>(read / (static_cast<std::uint64_t>(width) * depth));
-            BlockPos pos{x, y, z};
-            Block const& block = region.getBlock(pos);
-            // A placeholder: the chunk is still arriving; come back later.
-            if (block.getMaterial().mType == SharedTypes::v1_26_20::MaterialType::ClientRequestPlaceholder) break;
-            auto cell = structure.cell(x - low.x, y - low.y, z - low.z);
-            job.builder.setBlock(cell, entry(block));
-            Block const& extra = region.getExtraBlock(pos);
-            if (!extra.isAir()) job.builder.setLiquid(cell, entry(extra));
-            ++job.done;
-            wasRead = read + 1 >= cells;
-        }
-        if (wasRead && job.request.entities) {
-            AABB columnBox{Vec3{static_cast<float>(column.lowX), static_cast<float>(low.y), static_cast<float>(column.lowZ)},
-                           Vec3{static_cast<float>(column.highX + 1), static_cast<float>(low.y + height), static_cast<float>(column.highZ + 1)}};
-            for (Actor* actor : region.fetchEntities(&player, columnBox, false, false)) {
-                if (!actor || actor->mRemoved || actor->hasType(ActorType::Player) || structure.entities.size() >= maxEntities) continue;
-                if (!job.entitiesSeen.insert(actor->getOrCreateUniqueID().rawID).second) continue;
-                // What the client knows: type, position and facing.
-                auto feetAt = actor->getFeetPos();
-                auto rotation = actor->getRotation();
-                EntityRecord record{actor->getTypeName(), feetAt.x - low.x, feetAt.y - low.y, feetAt.z - low.z, {}};
-                record.data.set("identifier", {record.identifier});
-                nbt::List pos{nbt::Type::Float, {}}, turn{nbt::Type::Float, {}};
-                for (float v : {feetAt.x, feetAt.y, feetAt.z}) pos.items.push_back({v});
-                for (float v : {rotation.y, rotation.x}) turn.items.push_back({v});
-                record.data.set("Pos", {std::move(pos)});
-                record.data.set("Rotation", {std::move(turn)});
-                job.builder.addEntity(std::move(record));
-            }
-        }
-    }
-    auto now = Clock::now();
-    if (job.done != before) job.lastProgress = now;
-    {
-        std::lock_guard lock(saveMutex);
-        status = SaveStatus{job.request.file, job.done, total, now - job.lastProgress > std::chrono::seconds(1)};
-    }
-    if (job.done < total) {
-        if (now - job.lastProgress > std::chrono::seconds(1) && now - job.lastReminder > waitReminder) {
-            job.lastReminder = now;
-            // Point at the nearest column still waiting.
-            auto feet = player.getFeetPos();
-            Column const* nearest = nullptr;
-            double best = 1e18;
-            for (size_t c = 0; c < job.columns.size(); ++c) {
-                if (job.progress[c] >= job.columns[c].cells(height)) continue;
-                double dx = (job.columns[c].lowX + job.columns[c].highX) / 2.0 - feet.x, dz = (job.columns[c].lowZ + job.columns[c].highZ) / 2.0 - feet.z;
-                if (dx * dx + dz * dz < best) { best = dx * dx + dz * dz; nearest = &job.columns[c]; }
-            }
-            static constexpr std::array<char const*, 8> directions{"schematic.dir.n", "schematic.dir.ne", "schematic.dir.e",
-                "schematic.dir.se", "schematic.dir.s", "schematic.dir.sw", "schematic.dir.w", "schematic.dir.nw"};
-            double dx = nearest ? (nearest->lowX + nearest->highX + 1) / 2.0 - feet.x : 0;
-            double dz = nearest ? (nearest->lowZ + nearest->highZ + 1) / 2.0 - feet.z : 0;
-            std::lock_guard lock(saveMutex);
-            saveMessage = ui::translated("schematic.save.waiting", job.request.file, static_cast<int>(job.done * 100 / total),
-                ui::translated(directions[static_cast<size_t>(compassOctant(dx, dz))]),
-                static_cast<int>(std::lround(std::hypot(dx, dz))));
-        }
-        return;
-    }
-    try {
-        std::filesystem::create_directories(job.request.path.parent_path());
-        writeFileReplacing(job.request.path, writeStructure(structure), "schematic");
-        auto sz = structure.size;
-        finishSave(ui::translated("schematic.save.done", job.request.file, sz.x, sz.y, sz.z));
-    } catch (std::exception const& error) {
-        log(std::string("could not save an area: ") + error.what());
-        finishSave(ui::translated("schematic.save.failed", job.request.file));
-    }
-}
-// The area chosen for saving: a white frame; corner 1 outlined red and
-// corner 2 blue on the block's own edges, with tinted faces just outside so
-// a full block still shows which corner it is.
-void drawSelection(ScreenContext& screen, Vec3 const& camera, int dimension) {
-    auto state = selection::current();
-    if (state.dimension != dimension || (!state.first && !state.second)) return;
-    Area area = state.area().value_or(Area{state.first ? *state.first : *state.second, state.first ? *state.first : *state.second});
-    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
-    mce::MaterialPtr faceMaterial(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"});
-    if (!lineMaterial.mRenderMaterialInfoPtr) return;
-    Point low = area.low();
-    Size size = area.size();
-    constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
-    auto corners = [](glm::vec3 a, glm::vec3 b, glm::vec3 (&c)[8]) {
-        for (int k = 0; k < 8; ++k) c[k] = {k & 1 ? b.x : a.x, k & 2 ? b.y : a.y, k & 4 ? b.z : a.z};
-    };
-    Tessellator lines(screen.tessellator.mBufferResourceService);
-    lines.begin({}, mce::PrimitiveMode::LineList, 72, false);
-    auto box = [&](glm::vec3 a, glm::vec3 b) {
-        glm::vec3 c[8];
-        corners(a, b, c);
-        for (auto [p, q] : edges) { lines.vertex(c[p].x, c[p].y, c[p].z); lines.vertex(c[q].x, c[q].y, c[q].z); }
-    };
-    glm::vec3 base{static_cast<float>(low.x - camera.x), static_cast<float>(low.y - camera.y), static_cast<float>(low.z - camera.z)};
-    lines.color(1.f, 1.f, 1.f, 1.f);
-    box(base - glm::vec3{.03f}, base + glm::vec3{static_cast<float>(size.x), static_cast<float>(size.y), static_cast<float>(size.z)} + glm::vec3{.03f});
-    Tessellator faces(screen.tessellator.mBufferResourceService);
-    faces.begin({}, mce::PrimitiveMode::QuadList, 96, false);
-    constexpr int sides[6][4] = {{0,2,6,4},{1,5,7,3},{0,4,5,1},{2,3,7,6},{0,1,3,2},{4,6,7,5}};
-    for (int i = 0; i < 2; ++i) {
-        auto const& corner = i == 0 ? state.first : state.second;
-        if (!corner) continue;
-        glm::vec3 color = i == 0 ? glm::vec3{1.f, .25f, .2f} : glm::vec3{.25f, .5f, 1.f};
-        glm::vec3 at{static_cast<float>(corner->x - camera.x), static_cast<float>(corner->y - camera.y), static_cast<float>(corner->z - camera.z)};
-        lines.color(color.r, color.g, color.b, 1.f);
-        box(at - glm::vec3{.005f}, at + glm::vec3{1.005f});
-        faces.color(color.r, color.g, color.b, .25f);
-        glm::vec3 c[8];
-        corners(at - glm::vec3{.01f}, at + glm::vec3{1.01f}, c);
-        for (auto const& side : sides) {
-            for (int k = 0; k < 4; ++k) faces.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
-            for (int k = 3; k >= 0; --k) faces.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
-        }
-    }
-    translated(screen, glm::vec3{0}, [&] {
-        if (faceMaterial.mRenderMaterialInfoPtr && faces.mCount)
-            MeshHelpers::renderMeshImmediately(screen, faces, faceMaterial, std::monostate{});
-        MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, std::monostate{});
-    });
-}
-
-// While a save waits, the chunk columns it still has to read: yellow frames
-// standing on the area's floor, nearest first.
-void drawWaitingColumns(ScreenContext& screen, Vec3 const& camera) {
-    if (!saveJob) return;
-    auto const& job = *saveJob;
-    int height = job.builder.structure().size.y;
-    Point low = job.request.area.low();
-    std::vector<std::pair<double, Column const*>> waiting;
-    for (size_t c = 0; c < job.columns.size(); ++c) {
-        auto const& column = job.columns[c];
-        if (job.progress[c] >= column.cells(height)) continue;
-        double dx = (column.lowX + column.highX + 1) / 2.0 - camera.x, dz = (column.lowZ + column.highZ + 1) / 2.0 - camera.z;
-        waiting.push_back({dx * dx + dz * dz, &column});
-    }
-    if (waiting.empty()) return;
-    std::sort(waiting.begin(), waiting.end(), [](auto const& a, auto const& b) { return a.first < b.first; });
-    if (waiting.size() > 256) waiting.resize(256);
-    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
-    mce::MaterialPtr faceMaterial(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"});
-    if (!lineMaterial.mRenderMaterialInfoPtr) return;
-    Tessellator lines(screen.tessellator.mBufferResourceService), faces(screen.tessellator.mBufferResourceService);
-    lines.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(waiting.size() * 24), false);
-    faces.begin({}, mce::PrimitiveMode::QuadList, static_cast<int>(waiting.size() * 8), false);
-    lines.color(1.f, .8f, .25f, 1.f);
-    faces.color(1.f, .8f, .25f, .18f);
-    constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
-    for (auto const& [distance, column] : waiting) {
-        glm::vec3 a{static_cast<float>(column->lowX - camera.x) + .05f, static_cast<float>(low.y - camera.y),
-                    static_cast<float>(column->lowZ - camera.z) + .05f};
-        glm::vec3 b{static_cast<float>(column->highX + 1 - camera.x) - .05f, static_cast<float>(low.y + height - camera.y),
-                    static_cast<float>(column->highZ + 1 - camera.z) - .05f};
-        glm::vec3 c[8];
-        for (int k = 0; k < 8; ++k) c[k] = {k & 1 ? b.x : a.x, k & 2 ? b.y : a.y, k & 4 ? b.z : a.z};
-        for (auto [p, q] : edges) { lines.vertex(c[p].x, c[p].y, c[p].z); lines.vertex(c[q].x, c[q].y, c[q].z); }
-        // The floor, seen from both sides, so the column reads from above too.
-        glm::vec3 floor[4]{c[0], c[1], c[5], c[4]};
-        for (int k = 0; k < 4; ++k) faces.vertex(floor[k].x, floor[k].y + .02f, floor[k].z);
-        for (int k = 3; k >= 0; --k) faces.vertex(floor[k].x, floor[k].y + .02f, floor[k].z);
-    }
-    translated(screen, glm::vec3{0}, [&] {
-        if (faceMaterial.mRenderMaterialInfoPtr) MeshHelpers::renderMeshImmediately(screen, faces, faceMaterial, std::monostate{});
-        MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, std::monostate{});
-    });
-}
-
-// Missing entities: a dashed frame where each should stand, in the ghost
-// color, with its name drawn by the HUD. Entities already there show nothing.
-// Every placement's box in the ghosts' light blue (L-93 screen review): the
-// selected one solid, the others dashed. The line material ignores alpha
-// (checked 2026-10-08), so the shape tells them apart.
-void drawPlacementFrames(ScreenContext& screen, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
-    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
-    if (!lineMaterial.mRenderMaterialInfoPtr) return;
-    constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
-    Tessellator lines(screen.tessellator.mBufferResourceService);
-    int count = 0;
-    for (size_t i = 0; i < snapshot.placements.size(); ++i) {
-        auto const& shown = snapshot.placements[i];
-        bool selected = static_cast<int>(i) == snapshot.selected;
-        if (!shown.structure || shown.placement.dimension != dimension || (!shown.placement.visible && !selected)) continue;
-        if (!count) lines.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(snapshot.placements.size() * 24 * 8), false);
-        ++count;
-        Size size = placedSize(shown.structure->size, shown.placement.placement.rotation);
-        auto const& o = shown.placement.placement.origin;
-        glm::vec3 a{static_cast<float>(o.x - camera.x) - .02f, static_cast<float>(o.y - camera.y) - .02f,
-                    static_cast<float>(o.z - camera.z) - .02f};
-        glm::vec3 b = a + glm::vec3{static_cast<float>(size.x) + .04f, static_cast<float>(size.y) + .04f,
-                                    static_cast<float>(size.z) + .04f};
-        lines.color(.35f, .85f, 1.f, 1.f);
-        glm::vec3 c[8];
-        for (int k = 0; k < 8; ++k) c[k] = {k & 1 ? b.x : a.x, k & 2 ? b.y : a.y, k & 4 ? b.z : a.z};
-        for (auto [p, q] : edges) {
-            if (selected) { lines.vertex(c[p].x, c[p].y, c[p].z); lines.vertex(c[q].x, c[q].y, c[q].z); continue; }
-            constexpr float dash = .5f, gap = .5f;
-            glm::vec3 from = c[p], to = c[q];
-            float length = glm::length(to - from);
-            glm::vec3 step = (to - from) / length;
-            for (float t = 0; t < length; t += dash + gap) {
-                glm::vec3 s0 = from + step * t, s1 = from + step * std::min(length, t + dash);
-                lines.vertex(s0.x, s0.y, s0.z);
-                lines.vertex(s1.x, s1.y, s1.z);
-            }
-        }
-    }
-    if (!count) return;
-    translated(screen, glm::vec3{0}, [&] {
-        MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, std::monostate{});
-    });
-}
-// Missing entities: their game model with part outlines (L-115), or a dashed
-// frame when the entity has no model.
-void drawEntities(ScreenContext& screen, IClientInstance& client, session::Snapshot const& snapshot, int dimension, Vec3 const& camera) {
-    std::vector<models::Spot> spots;
-    std::vector<std::pair<size_t, std::string>> names; // spot index, name
-    for (size_t i = 0; i < snapshot.placements.size() && i < resolved.size(); ++i) {
-        auto const& shown = snapshot.placements[i];
-        if (!shown.structure || !shown.placement.visible || !shown.placement.entities || shown.placement.dimension != dimension) continue;
-        Size placed = placedSize(shown.structure->size, shown.placement.placement.rotation);
-        auto const& r = resolved[i];
-        for (size_t e = 0; e < r.entities.size(); ++e) {
-            if (r.entityPlaced[e] != false || !layerShown(shown.placement.layers, placed, r.entities[e].offset)) continue;
-            auto const& at = r.entities[e].at;
-            double dx = at.x - camera.x, dy = at.y - camera.y, dz = at.z - camera.z, distance = dx * dx + dy * dy + dz * dz;
-            if (distance > drawDistance * drawDistance) continue;
-            spots.push_back({at, r.entities[e].identifier, r.entities[e].yaw});
-            if (distance < 32 * 32) names.push_back({spots.size() - 1, r.entities[e].name});
-        }
-    }
-    auto modelled = models::draw(screen, client, camera, spots, [&](std::function<void()> const& draw) { translated(screen, glm::vec3{0}, draw); });
-    // A model says what the entity is; only the frames get name tags.
-    std::vector<std::pair<Position, std::string>> named;
-    for (auto& [index, name] : names) {
-        if (modelled[index] || named.size() >= 64) continue;
-        auto const& at = spots[index].at;
-        named.push_back({{at.x, at.y + entityFrameHeight + .3, at.z}, std::move(name)});
-    }
-    labels = std::move(named);
-    std::vector<Position> frames;
-    for (size_t i = 0; i < spots.size(); ++i)
-        if (!modelled[i]) frames.push_back(spots[i].at);
-    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
-    if (frames.empty() || !lineMaterial.mRenderMaterialInfoPtr) return;
-    // Each edge as dashes. The frame has one size: it does not claim the
-    // entity's real size, which the client cannot know without the entity.
-    constexpr float dash = .2f, gap = .15f, half = entityFrameWidth / 2;
-    constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
-    Tessellator lines(screen.tessellator.mBufferResourceService);
-    lines.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(frames.size() * 12 * 12), false);
-    lines.color(.35f, .85f, 1.f, 1.f);
-    for (auto const& at : frames) {
-        glm::vec3 base{static_cast<float>(at.x - camera.x), static_cast<float>(at.y - camera.y), static_cast<float>(at.z - camera.z)};
-        glm::vec3 a = base + glm::vec3{-half, 0, -half}, b = base + glm::vec3{half, entityFrameHeight, half}, c[8];
-        for (int k = 0; k < 8; ++k) c[k] = {k & 1 ? b.x : a.x, k & 2 ? b.y : a.y, k & 4 ? b.z : a.z};
-        for (auto [p, q] : edges) {
-            glm::vec3 from = c[p], to = c[q];
-            float length = glm::length(to - from);
-            glm::vec3 step = (to - from) / length;
-            for (float t = 0; t < length; t += dash + gap) {
-                glm::vec3 s0 = from + step * t, s1 = from + step * std::min(length, t + dash);
-                lines.vertex(s0.x, s0.y, s0.z);
-                lines.vertex(s1.x, s1.y, s1.z);
-            }
-        }
-    }
-    translated(screen, glm::vec3{0}, [&] { MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, std::monostate{}); });
-}
-
-// The names of missing entities like a named entity's tag: a dark plate with
-// the text, facing the camera, a fixed size in the world. Drawn with the
-// game's name tag materials (the both-sides variants).
-void drawNameTags(ScreenContext& screen, IClientInstance& client, BlockSource& region, BaseActorRenderer& renderer, Vec3 const& camera) {
-    if (labels.empty()) return;
-    auto const& backgroundMaterial = renderer.mNameTagBackgroundWithBackfaceMat.get();
-    auto const& textMaterial = renderer.mNameTagTextWithBackfaceMat.get();
-    if (!backgroundMaterial.mRenderMaterialInfoPtr || !textMaterial.mRenderMaterialInfoPtr) return;
-    if (screen.camera.viewMatrixStack->stack->empty()) return;
-    auto view = *screen.camera.viewMatrixStack->top()._m;
-    // The view's rotation rows are the camera axes.
-    glm::vec3 right{view[0][0], view[1][0], view[2][0]}, up{view[0][1], view[1][1], view[2][1]};
-    glm::vec3 across{view[0][2], view[1][2], view[2][2]};
-    auto fontHandle = client.getFontHandle();
-    auto& font = fontHandle.getFont();
-    auto background = BaseActorRenderer::NAME_TAG_BACKGROUND_COLOR();
-    for (auto const& [at, name] : labels) {
-        // Not through walls: a block between the camera and the tag hides it.
-        Vec3 to{static_cast<float>(at.x), static_cast<float>(at.y), static_cast<float>(at.z)};
-        auto hit = region.clip(camera, to, false, ShapeType::Outline, 64, false, false, nullptr,
-            [](BlockSource const&, Block const&, bool) { return true; }, false);
-        if (hit.mType == HitResultType::Tile) continue;
-        float width = static_cast<float>(font.getLineLength(name, 1.f, false));
-        glm::vec3 offset{static_cast<float>(at.x - camera.x), static_cast<float>(at.y - camera.y), static_cast<float>(at.z - camera.z)};
-        // Font pixels: x to the camera's right, y downward.
-        glm::mat4 model{glm::vec4(right * nameTagScale, 0), glm::vec4(-up * nameTagScale, 0), glm::vec4(across * nameTagScale, 0),
-                        glm::vec4(offset, 1)};
-        auto ref = screen.camera.worldMatrixStack->push(false);
-        ref.stack->_isDirty = true;
-        ref.mat->_m = ref.mat->_m.get() * model;
-        Tessellator plate(screen.tessellator.mBufferResourceService);
-        plate.begin({}, mce::PrimitiveMode::QuadList, 8, false);
-        plate.color(background.r, background.g, background.b, background.a);
-        float x0 = -width / 2 - 1, x1 = width / 2 + 1, y0 = -1, y1 = 8;
-        glm::vec2 quad[4]{{x0, y0}, {x0, y1}, {x1, y1}, {x1, y0}};
-        for (int k = 0; k < 4; ++k) plate.vertex(quad[k].x, quad[k].y, .01f);
-        for (int k = 3; k >= 0; --k) plate.vertex(quad[k].x, quad[k].y, .01f);
-        MeshHelpers::renderMeshImmediately(screen, plate, backgroundMaterial, std::monostate{});
-        mce::Color white{1.f, 1.f, 1.f, 1.f}, black{0.f, 0.f, 0.f, 1.f};
-        font.drawCached(screen, name, -width / 2, 0, white, false, false, false, &textMaterial, -1, false, 0, white, black, 0, 0,
-            std::monostate{}, false);
-        ref.stack->_isDirty = true;
-        if (ref.stack->sortOrigin->has_value() && (ref.stack->stack->size() - 1) <= ref.stack->sortOrigin->value())
-            ref.stack->sortOrigin->reset();
-        ref.stack->stack->pop_back();
-        ref.mat = nullptr;
-        ref.stack = nullptr;
-    }
-}
-
 void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, LocalPlayer& player) {
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+    auto stage = std::chrono::steady_clock::now();
+    auto lap = [&](std::uint64_t& into) {
+        auto now = std::chrono::steady_clock::now();
+        into += static_cast<std::uint64_t>((now - stage).count());
+        stage = now;
+    };
+#define LAMIUM_PERF_LAP(field) lap(perf.field)
+#else
+#define LAMIUM_PERF_LAP(field)
+#endif
     auto snapshot = session::snapshot();
     int dimension = static_cast<int>(player.getDimensionId());
     // A file replaced on disk loads as a new structure without a new
@@ -1265,7 +224,9 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
         std::vector<bool> taken(resolved.size());
         for (int i = 0; i < static_cast<int>(snapshot.placements.size()); ++i) {
             auto const& shown = snapshot.placements[static_cast<size_t>(i)];
-            auto key = drawKey(shown.placement);
+            // Overlapping earlier placements are part of the key: they decide
+            // which cells this one leaves out (L-141).
+            auto key = drawKey(shown.placement) + overlap::touchingKey(snapshot.placements, static_cast<size_t>(i));
             int old = -1;
             for (int j = 0; j < static_cast<int>(builtKeys.size()); ++j)
                 if (!taken[static_cast<size_t>(j)] && builtKeys[static_cast<size_t>(j)] == key
@@ -1293,7 +254,7 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
         builtDimension = dimension;
     }
     ScreenContext& screen = context.mScreenContext;
-    Vec3 const camera = context.mCameraPosition;
+    Vec3 const camera = renderCamera(context);
     auto& region = player.getDimensionBlockSource();
     // When the camera moves to another cell, rebuild the sections around
     // the old and the new cells (which ghosts are drawn whole changes).
@@ -1302,19 +263,19 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
             return Point{static_cast<int>(std::floor(x)), static_cast<int>(std::floor(y)), static_cast<int>(std::floor(z))};
         };
         std::array<std::optional<Point>, 2> now{cellAt(camera.x, camera.y, camera.z), cellAt(camera.x, camera.y - 1.62, camera.z)};
-        buildCamera = camera;
-        if (now != cameraCells) {
+        buildCamera.eye = camera;
+        if (now != buildCamera.cells) {
             auto section = [](int v) { return static_cast<int>(std::floor(v / static_cast<double>(sectionSize))); };
             auto mark = [&](std::optional<Point> const& c) {
                 if (!c) return;
-                for (int dx = -2; dx <= 2; dx += 2) for (int dy = -2; dy <= 2; dy += 2) for (int dz = -2; dz <= 2; dz += 2)
-                    for (auto& [key, built] : sections)
-                        if (std::get<1>(key) == section(c->x + dx) && std::get<2>(key) == section(c->y + dy) && std::get<3>(key) == section(c->z + dz))
-                            built.due = Clock::now();
+                for (int i = 0; i < static_cast<int>(snapshot.placements.size()); ++i)
+                    for (int dx = -2; dx <= 2; dx += 2) for (int dy = -2; dy <= 2; dy += 2) for (int dz = -2; dz <= 2; dz += 2)
+                        if (auto found = sections.find({i, section(c->x + dx), section(c->y + dy), section(c->z + dz)}); found != sections.end())
+                            found->second.due = Clock::now();
             };
-            for (auto const& c : cameraCells) mark(c);
+            for (auto const& c : buildCamera.cells) mark(c);
             for (auto const& c : now) mark(c);
-            cameraCells = now;
+            buildCamera.cells = now;
         }
     }
 
@@ -1338,8 +299,14 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
         }
         return std::none_of(std::begin(outside), std::end(outside), [](int n) { return n == 8; });
     };
-    // Sections near the camera, for visible placements in this dimension.
-    struct Wanted { SectionKey key; double distance; bool seen; };
+    // Sections near the camera, for visible placements in this dimension,
+    // nearest first. Listed again when the camera enters another cell, the
+    // placements change or half a second passed; each frame they are only
+    // split by whether they are in view (with 8-block sections the full list
+    // runs to thousands).
+    Point cameraCell{static_cast<int>(std::floor(camera.x)), static_cast<int>(std::floor(camera.y)), static_cast<int>(std::floor(camera.z))};
+    if (!wantedCache.valid || !(wantedCache.cell == cameraCell) || wantedCache.revision != snapshot.revision
+        || wantedCache.dimension != dimension || Clock::now() - wantedCache.at > std::chrono::milliseconds(500)) {
     std::vector<Wanted> wanted;
     for (int i = 0; i < static_cast<int>(snapshot.placements.size()); ++i) {
         auto const& shown = snapshot.placements[static_cast<size_t>(i)];
@@ -1357,15 +324,30 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
                     double cx = (sx + .5) * sectionSize - camera.x, cy = (sy + .5) * sectionSize - camera.y,
                            cz = (sz + .5) * sectionSize - camera.z;
                     double distance = std::sqrt(cx * cx + cy * cy + cz * cz);
-                    if (distance <= drawDistance) wanted.push_back({{i, sx, sy, sz}, distance, inView(sx, sy, sz)});
+                    if (distance <= drawDistance) wanted.push_back({{i, sx, sy, sz}, distance, false});
                 }
     }
-    std::sort(wanted.begin(), wanted.end(), [](auto const& a, auto const& b) {
-        return a.seen != b.seen ? a.seen : a.distance < b.distance;
-    });
-    std::set<SectionKey> keep;
-    for (auto const& w : wanted) keep.insert(w.key);
-    std::erase_if(sections, [&](auto const& entry) { return !keep.contains(entry.first); });
+    std::sort(wanted.begin(), wanted.end(), [](auto const& a, auto const& b) { return a.distance < b.distance; });
+    // Sections no longer wanted go.
+    std::uint64_t stamp = ++wantedCache.stamp;
+    for (auto const& w : wanted)
+        if (auto found = sections.find(w.key); found != sections.end()) found->second.wantedStamp = stamp;
+    std::erase_if(sections, [&](auto const& entry) { return entry.second.wantedStamp != stamp; });
+    wantedCache.list = std::move(wanted);
+    wantedCache.cell = cameraCell;
+    wantedCache.revision = snapshot.revision;
+    wantedCache.dimension = dimension;
+    wantedCache.at = Clock::now();
+    wantedCache.valid = true;
+    }
+    // In view first, each part nearest first.
+    std::vector<Wanted> wanted;
+    wanted.reserve(wantedCache.list.size());
+    for (int pass = 0; pass < 2; ++pass)
+        for (auto w : wantedCache.list) {
+            w.seen = inView(std::get<1>(w.key), std::get<2>(w.key), std::get<3>(w.key));
+            if (w.seen == (pass == 0)) wanted.push_back(w);
+        }
 
     // The block in the crosshair and the cell against its face are where a
     // block is broken or placed next: when either changes, rebuild its
@@ -1387,13 +369,12 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
         auto due = Clock::now() + (current.isAir() ? Clock::duration{} : std::chrono::duration_cast<Clock::duration>(lookedDelay));
         auto section = [](int v) { return static_cast<int>(std::floor(v / static_cast<double>(sectionSize))); };
         // The cell's own section and any section across a face of it.
-        for (auto& [key, built] : sections)
-            if (std::abs(std::get<1>(key) - section(pos.x)) <= 1 && std::abs(std::get<2>(key) - section(pos.y)) <= 1
-                && std::abs(std::get<3>(key) - section(pos.z)) <= 1
-                && section(pos.x - 1) <= std::get<1>(key) && std::get<1>(key) <= section(pos.x + 1)
-                && section(pos.y - 1) <= std::get<2>(key) && std::get<2>(key) <= section(pos.y + 1)
-                && section(pos.z - 1) <= std::get<3>(key) && std::get<3>(key) <= section(pos.z + 1))
-                if (!built.due || due < *built.due) built.due = due;
+        for (int i = 0; i < static_cast<int>(snapshot.placements.size()); ++i)
+            for (int sx = section(pos.x - 1); sx <= section(pos.x + 1); ++sx)
+                for (int sy = section(pos.y - 1); sy <= section(pos.y + 1); ++sy)
+                    for (int sz = section(pos.z - 1); sz <= section(pos.z + 1); ++sz)
+                        if (auto found = sections.find({i, sx, sy, sz}); found != sections.end())
+                            if (!found->second.due || due < *found->second.due) found->second.due = due;
     }
     // Keep the previous positions one more frame: placing moves the crosshair.
     std::vector<std::pair<BlockPos, Block const*>> next;
@@ -1403,30 +384,63 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
             next.push_back({pos, &region.getBlock(pos)});
     watched = std::move(next);
 
+    LAMIUM_PERF_LAP(prepareNs);
     // Build missing sections and rebuild changed ones, in view and nearest
     // first, within the budgets.
-    int budget = sectionBudget, checks = checkBudget;
+    int budget = sectionLimit, checks = checkBudget;
+    auto buildsStart = std::chrono::steady_clock::now();
+    // The view outlives the tessellator that reads through it.
+    std::unique_ptr<SchematicRegion> view;
     std::unique_ptr<BlockTessellator> own;
     auto now = Clock::now();
+    // Ghost blocks come from the game's block tessellator and mesh streams;
+    // frames, the Check list and materials do not, and keep working without
+    // them. The in-world mistake outlines are built with the sections, so
+    // they stop too.
+    bool tessellate = versionSensitiveAllowed(capabilities::Id::SchematicBlocks);
     for (auto const& w : wanted) {
-        if (!budget) break;
+        if (!tessellate) break;
+        if (!budget || (budget < sectionLimit && std::chrono::steady_clock::now() - buildsStart >= buildTimeBudget)) break;
         auto found = sections.find(w.key);
         auto refreshAfter = w.distance <= nearDistance ? std::chrono::duration_cast<Clock::duration>(refreshNear)
             : std::chrono::duration_cast<Clock::duration>(refreshFar);
         bool stale = found == sections.end() || !found->second.complete || (found->second.due && now >= *found->second.due)
-            || (found->second.faces && !found->second.faces->isValid()) || (found->second.lines && !found->second.lines->isValid())
+            || (found->second.faces && !found->second.faces->isValid())
+            || (found->second.blendMesh && !found->second.blendMesh->isValid())
+            || std::any_of(found->second.lines.begin(), found->second.lines.end(), [](auto const& l) { return !l->mesh || !l->mesh->isValid(); })
             || (found->second.marks && !found->second.marks->isValid());
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+        int reason = found == sections.end() ? 0 : !found->second.complete ? 4 : (found->second.due && now >= *found->second.due) ? 1 : 3;
+        if (stale && reason == 1) {
+            auto late = static_cast<std::uint64_t>((now - *found->second.due).count()) + static_cast<std::uint64_t>(std::chrono::nanoseconds(lookedDelay).count());
+            perf.dueLatencyNs += late;
+            ++perf.dueCount;
+            perf.maxDueLatencyNs = std::max(perf.maxDueLatencyNs, late);
+        }
+#endif
         if (!stale && now - found->second.checked > refreshAfter && checks > 0) {
             --checks;
             auto const index = static_cast<size_t>(std::get<0>(w.key));
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+            PerfTimer timer{perf.checkNs};
+            ++perf.checks;
+            reason = 2;
+#endif
             stale = signatureOf(region, snapshot.placements[index], w.key) != found->second.signature;
             found->second.checked = now;
         }
         if (!stale) continue;
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+        ++perf.reasons[reason];
+#endif
         if (!own) {
             // A private tessellator, primed with one appended block: in-world
             // tessellation on a fresh one crashed in the probe.
-            own = std::make_unique<BlockTessellator>(&region);
+            view = std::make_unique<SchematicRegion>(region);
+            own = std::make_unique<BlockTessellator>(view.get());
+            static bool logged = false;
+            if (!logged) log(std::format("tessellator default render layer {}", static_cast<int&>(own->mRenderingLayer)));
+            logged = true;
             if (auto stone = Block::tryGetFromRegistry(HashedString{"minecraft:stone"})) {
                 Tessellator primer(screen.tessellator.mBufferResourceService);
                 primer.begin({}, mce::PrimitiveMode::QuadList, 64, false);
@@ -1434,117 +448,388 @@ void drawPlacements(BaseActorRenderContext& context, IClientInstance& client, Lo
             }
         }
         auto const index = static_cast<size_t>(std::get<0>(w.key));
-        buildSection(screen, region, *own, snapshot.placements[index], resolved[index], w.key, sections[w.key]);
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+        auto buildStart = std::chrono::steady_clock::now();
+#endif
+        auto earlier = overlap::earlierMeeting(snapshot.placements, index);
+        std::function<bool(Point)> owned;
+        if (!earlier.empty())
+            owned = [&](Point cell) { return overlap::ownedEarlier(snapshot.placements, earlier, dimension, cell); };
+        auto neighbors = overlap::touching(snapshot.placements, index);
+        std::function<NeighborGhost(Point)> others;
+        if (!neighbors.empty()) {
+            for (size_t j : neighbors) if (j < resolved.size()) prepareShapes(screen, *own, resolved[j]);
+            others = [&](Point cell) {
+                for (size_t j : neighbors)
+                    if (j < resolved.size())
+                        if (auto ghost = ghostDrawnAt(region, snapshot.placements[j], resolved[j], cell); ghost.block) return ghost;
+                return NeighborGhost{};
+            };
+        }
+        buildSection(screen, region, *view, *own, snapshot.placements[index], resolved[index], w.key, buildCamera, owned,
+                     others, sections[w.key]);
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+        auto took = static_cast<std::uint64_t>((std::chrono::steady_clock::now() - buildStart).count());
+        perf.buildNs += took;
+        perf.maxBuildNs = std::max(perf.maxBuildNs, took);
+        ++perf.builds;
+#endif
         --budget;
     }
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+    {
+        // Sections in range that have never been built: what the budget left waiting.
+        std::uint64_t waiting = 0;
+        for (auto const& w : wanted) waiting += sections.find(w.key) == sections.end();
+        perf.waiting += waiting;
+        perf.maxWaiting = std::max(perf.maxWaiting, waiting);
+        perf.sections = sections.size();
+    }
+#endif
 
-    checkEntities(region, player, snapshot, dimension);
-    stepScan(region, snapshot, dimension, camera);
-    stepProgress(region, snapshot, dimension);
+    {
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+        PerfTimer timer{perf.scanNs};
+#endif
+        checkEntities(region, player, snapshot, dimension, resolved);
+        stepScan(region, snapshot, dimension, camera, resolved);
+        stepProgress(region, snapshot, dimension, resolved);
+    }
 
     // Draw: alpha-tested ghost faces (empty texels let water and glass show
-    // through), then outlines, then block-entity models.
+    // through), then outlines, then block-entity models. Blended ghosts,
+    // liquids and mistake marks are drawn later (drawBlended).
     auto& dispatcher = client.getBlockEntityRenderDispatcher();
     auto* moving = static_cast<MovingBlockActorRenderer*>(dispatcher.mRenderers.get()[BlockActorRendererId::MovingBlock].get());
     if (!moving) return;
     mce::TexturePtr const& atlas = moving->mAtlasTexture.get();
-    mce::MaterialPtr const& faces = moving->mBlockMaterials[static_cast<int>(BlockRenderLayer::RenderlayerAlphatest)].get();
-    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
-    // Vertex-colored and blended, as shape faces use in Fancy graphics.
-    mce::MaterialPtr markMaterial(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"});
     auto* lightTexture = client.getLightTexture();
+    mce::MaterialPtr const& faces = moving->mBlockMaterials[static_cast<int>(BlockRenderLayer::RenderlayerAlphatest)].get();
+    auto fullBright = [&] {
+        BrightnessPair full;
+        full.sky->mValue = 15;
+        full.block->mValue = 15;
+        ActorShaderManager::setupShaderParameters(screen, region, full, glm::vec4{1, 1, 1, 1}, 1.f, true, *lightTexture,
+            Vec2{1, 1}, Vec4{0, 0, 1, 1});
+    };
+    mce::MaterialPtr lineMaterial = overlay::lines::material();
+    // Vertex-colored and blended without depth writes, as shape faces use in
+    // Fancy graphics; under Vibrant Visuals the overlay face material.
+    mce::MaterialPtr markMaterial(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"});
+    if (buildCamera.vibrant) markMaterial = overlay::faceMaterial(client).material;
     std::variant<std::monostate, mce::TexturePtr, mce::ClientTexture, mce::ServerTexture> texture{atlas};
-    for (auto& [key, section] : sections) {
-        if (!inView(std::get<1>(key), std::get<2>(key), std::get<3>(key))) continue;
-        glm::vec3 offset{static_cast<float>(section.origin.x - camera.x), static_cast<float>(section.origin.y - camera.y),
+    std::unique_ptr<SchematicRegion> actorView;
+    // In three passes, so the light is set up once for all faces (block
+    // actors set up their own after): the per-section setups and draws were
+    // the largest fixed cost with many large placements (C, measured).
+    float const lineDistance = Runtime::instance().snapshot()->schematic.outlineDistance; // 0: no limit
+    std::vector<std::pair<SectionKey const*, Section*>> shown;
+    for (auto& [key, section] : sections)
+        if (inView(std::get<1>(key), std::get<2>(key), std::get<3>(key))) shown.push_back({&key, &section});
+    auto offsetOf = [&](Section const& section) {
+        return glm::vec3{static_cast<float>(section.origin.x - camera.x), static_cast<float>(section.origin.y - camera.y),
                          static_cast<float>(section.origin.z - camera.z)};
+    };
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+    stage = std::chrono::steady_clock::now();
+#endif
+    if (faces.mRenderMaterialInfoPtr && lightTexture) {
+        fullBright();
+        for (auto [key, section] : shown)
+            if (section->faces)
+                translated(screen, offsetOf(*section), [&] {
+                    section->faces->renderMesh(screen, faces, texture, 0, section->faceVertices, GhostCaptureDescription{}, nullptr);
+                });
+    }
+    LAMIUM_PERF_LAP(facesNs);
+    for (auto [key, section] : shown) {
+        // Outlines only near the camera: far away they are a few pixels of
+        // noise, and a draw each.
+        glm::vec3 offset = offsetOf(*section);
+        glm::vec3 nearest = glm::clamp(glm::vec3{0.f}, offset, offset + glm::vec3(static_cast<float>(sectionSize)));
+        bool lined = !section->lines.empty() && (lineDistance <= 0 || glm::length(nearest) <= lineDistance);
+        if (!lined && !section->marks) continue;
         translated(screen, offset, [&] {
-            if (section.faces && faces.mRenderMaterialInfoPtr && lightTexture) {
-                BrightnessPair full;
-                full.sky->mValue = 15;
-                full.block->mValue = 15;
-                ActorShaderManager::setupShaderParameters(screen, region, full, glm::vec4{1, 1, 1, 1}, 1.f, true,
-                    *lightTexture, Vec2{1, 1}, Vec4{0, 0, 1, 1});
-                section.faces->renderMesh(screen, faces, texture, 0, section.faceVertices, std::monostate{}, nullptr);
-            }
-            if (section.marks && markMaterial.mRenderMaterialInfoPtr)
-                section.marks->renderMesh(screen, markMaterial, gsl::span<mce::ClientTexture const*>{}, 0, section.markVertices,
-                    std::monostate{}, nullptr);
-            if (section.lines && lineMaterial.mRenderMaterialInfoPtr)
-                section.lines->renderMesh(screen, lineMaterial, gsl::span<mce::ClientTexture const*>{}, 0, section.lineVertices,
-                    std::monostate{}, nullptr);
+            if (section->marks && markMaterial.mRenderMaterialInfoPtr)
+                section->marks->renderMesh(screen, markMaterial, gsl::span<mce::ClientTexture const*>{}, 0, section->markVertices,
+                    GhostCaptureDescription{}, nullptr);
+            if (lined && lineMaterial.mRenderMaterialInfoPtr)
+                for (auto const& l : section->lines)
+                    overlay::lines::colored(screen, l->color.r, l->color.g, l->color.b, [&] {
+                        l->mesh->renderMesh(screen, lineMaterial, gsl::span<mce::ClientTexture const*>{}, 0, l->vertices,
+                            GhostCaptureDescription{}, nullptr);
+                    });
         });
-        for (auto const& [pos, block] : section.entities) {
-            auto type = block->getBlockEntityType();
-            if (type == BlockActorType::Undefined) continue;
+    }
+    LAMIUM_PERF_LAP(linesNs);
+    for (auto [keyPtr, sectionPtr] : shown) {
+        auto const& key = *keyPtr;
+        auto& section = *sectionPtr;
+        for (auto const& [pos, block, data] : section.entities) {
+            // The renderer reads the block at the cell (wall or standing
+            // banner, which head, facing): the ghost's, not the world's air.
+            if (!actorView) {
+                actorView = std::make_unique<SchematicRegion>(region);
+                actorView->fullLight = true;
+            }
+            // A piston's renderer may also look at its head's cell: the
+            // placement's ghost there (the arm block), not the world's air.
+            bool piston = block->getBlockType().mBlockEntityType == BlockActorType::PistonArm;
+            auto placementIndex = static_cast<size_t>(std::get<0>(key));
+            actorView->answer = [&, piston, placementIndex](BlockPos const& at) -> Block const* {
+                if (at == pos) return block;
+                if (!piston || placementIndex >= resolved.size()) return nullptr;
+                return ghostDrawnAt(region, snapshot.placements[placementIndex], resolved[placementIndex], {at.x, at.y, at.z}).block;
+            };
             auto& actor = actors[{pos.x, pos.y, pos.z, block}];
-            if (!actor) actor = VanillaBlockActorFactory::createBlockActor(type, pos, block->getBlockType());
-            if (!actor || !*actor) continue;
+            if (!actor)
+                actor = makeBlockActor(*block, pos, data ? &*data : nullptr,
+                                       snapshot.placements[static_cast<size_t>(std::get<0>(key))].placement.placement, region);
+            if (!*actor) continue;
             Vec3 renderPos{static_cast<float>(pos.x - camera.x), static_cast<float>(pos.y - camera.y), static_cast<float>(pos.z - camera.z)};
-            mce::MaterialPtr none(mce::RenderMaterialGroup::common(), HashedString{"lamium_no_forced_material"});
-            dispatcher.render(context, region, **actor, *block, renderPos, pos, false, none, nullptr, 0, std::nullopt);
+            renderBlockActor(context, *actorView, **actor, *block, renderPos, pos);
         }
     }
+    if (actorView) actorView->answer = nullptr;
+    LAMIUM_PERF_LAP(actorsNs);
     drawPlacementFrames(screen, snapshot, dimension, camera);
-    drawEntities(screen, client, snapshot, dimension, camera);
+    LAMIUM_PERF_LAP(framesNs);
+    drawEntities(screen, client, snapshot, dimension, camera, resolved);
+    LAMIUM_PERF_LAP(entitiesNs);
     drawNameTags(screen, client, region, *moving, camera);
+    LAMIUM_PERF_LAP(extrasNs);
+#undef LAMIUM_PERF_LAP
 }
+// The blended meshes (stained glass, honey, slime, liquids, mistake marks),
+// sections far to near, in the block entities' alpha pass: after the
+// world's own translucent blocks, so those are not lost behind a ghost's
+// depth, and without depth writes (a beacon beam's material), so one
+// sorted mesh decides what lies over what. Drawn as separate passes before,
+// marks and blended ghosts swapped order from frame to frame.
+std::uint64_t ghostFrame = 0, blendedFrame = 0;
+void drawBlended(BaseActorRenderContext& context) {
+    if (sections.empty() || !hasRenderCamera(context) || blendedFrame == ghostFrame) return;
+    blendedFrame = ghostFrame;
+    IClientInstance& client = context.mClientInstance;
+    auto* player = client.getLocalPlayer();
+    auto* lightTexture = client.getLightTexture();
+    auto& dispatcher = client.getBlockEntityRenderDispatcher();
+    auto* moving = static_cast<MovingBlockActorRenderer*>(dispatcher.mRenderers.get()[BlockActorRendererId::MovingBlock].get());
+    if (!player || !lightTexture || !moving) return;
+    mce::MaterialPtr material(mce::RenderMaterialGroup::switchable(), HashedString{"beacon_beam_transparent"});
+    if (!material.mRenderMaterialInfoPtr) material = mce::MaterialPtr(mce::RenderMaterialGroup::common(), HashedString{"beacon_beam_transparent"});
+    static bool named = false;
+    if (!std::exchange(named, true)) log(material.mRenderMaterialInfoPtr ? "blended ghosts use beacon_beam_transparent" : "beacon_beam_transparent not found");
+    if (!material.mRenderMaterialInfoPtr) return;
+    ScreenContext& screen = context.mScreenContext;
+    Vec3 const camera = renderCamera(context);
+    auto& region = player->getDimensionBlockSource();
+    std::variant<std::monostate, mce::TexturePtr, mce::ClientTexture, mce::ServerTexture> texture{moving->mAtlasTexture.get()};
+    struct Blended { double gap; SectionKey key; Section const* section; };
+    std::vector<Blended> blendedSections;
+    for (auto const& [sectionKey, section] : sections) {
+        if (!section.blend || section.blend->positions.empty()) continue;
+        auto gap = [](double v, double low) { return std::max({low - v, 0., v - (low + sectionSize)}); };
+        double gx = gap(camera.x, section.origin.x), gy = gap(camera.y, section.origin.y), gz = gap(camera.z, section.origin.z);
+        blendedSections.push_back({gx * gx + gy * gy + gz * gz, sectionKey, &section});
+    }
+    std::stable_sort(blendedSections.begin(), blendedSections.end(), [](auto const& a, auto const& b) { return a.gap < b.gap; });
+    std::vector<BlendQuads const*> parts;
+    std::vector<SectionKey> partKeys;
+    std::uint64_t key = 1469598103934665603ull;
+    size_t sorted = 0;
+    for (auto const& b : blendedSections) {
+        size_t quads = b.section->blend->positions.size() / 4;
+        if (parts.empty() || sorted + quads <= sortedBlendedQuads || !b.section->blendMesh) {
+            parts.push_back(b.section->blend.get());
+            partKeys.push_back(b.key);
+            sorted += quads;
+            key = (key ^ reinterpret_cast<std::uintptr_t>(b.section->blend.get())) * 1099511628211ull;
+        }
+    }
+    if (parts.empty()) forgetCombined();
+    if (blendedSections.empty()) return;
+    auto now = Clock::now();
+    float moved = std::max({std::abs(camera.x - combined.sortedFrom.x), std::abs(camera.y - combined.sortedFrom.y),
+                            std::abs(camera.z - combined.sortedFrom.z)});
+    // Many quads (large liquid ghosts) sort and upload less often while moving.
+    size_t total = 0;
+    for (auto const* b : parts) total += b->positions.size() / 4;
+    auto every = total > manyBlendedQuads ? resortEvery * 5 : resortEvery;
+    // A new set of sections waits for the interval too: while walking, the
+    // last section in the budget changed nearly every frame, and the sort and
+    // upload ran each frame (6-7 ms with a large liquid ghost).
+    bool resort = !parts.empty()
+        && (!combined.mesh || !combined.mesh->isValid()
+            || ((key != combined.key || moved >= resortDistance) && now - combined.sortedAt >= every));
+    if (resort) {
+        combined.mesh.reset();
+        combined.anchor = {std::floor(camera.x), std::floor(camera.y), std::floor(camera.z)};
+        // Every quad by its center, far to near from the camera.
+        struct Quad { float distance; std::uint32_t part, index; };
+        std::vector<Quad> quads;
+        for (std::uint32_t p = 0; p < parts.size(); ++p) {
+            auto const& b = *parts[p];
+            for (std::uint32_t q = 0; q < b.positions.size() / 4; ++q) {
+                glm::vec3 c = (b.positions[q * 4] + b.positions[q * 4 + 1] + b.positions[q * 4 + 2] + b.positions[q * 4 + 3]) * .25f
+                    + b.origin;
+                float dx = c.x - camera.x, dy = c.y - camera.y, dz = c.z - camera.z;
+                quads.push_back({dx * dx + dy * dy + dz * dz, p, q});
+            }
+        }
+        std::stable_sort(quads.begin(), quads.end(), [](Quad const& a, Quad const& b) { return a.distance > b.distance; });
+        Tessellator batch(screen.tessellator.mBufferResourceService);
+        batch.begin({}, mce::PrimitiveMode::QuadList, static_cast<int>(quads.size() * 4), false);
+        auto& data = static_cast<mce::MeshData&>(batch.mMeshData);
+        // A stream is kept only when every part has it for every vertex.
+        auto merge = [&](auto member, auto& to) {
+            to.clear();
+            for (auto const* b : parts)
+                if ((b->*member).size() != b->positions.size()) return;
+            to.reserve(quads.size() * 4);
+            for (auto const& q : quads)
+                for (std::uint32_t k = 0; k < 4; ++k) to.push_back((parts[q.part]->*member)[q.index * 4 + k]);
+        };
+        auto& positions = *data.mPositions;
+        positions.clear();
+        positions.reserve(quads.size() * 4);
+        glm::vec3 low{1e9f}, high{-1e9f};
+        for (auto const& q : quads) {
+            auto const& b = *parts[q.part];
+            glm::dvec3 shift = glm::dvec3(b.origin) - combined.anchor;
+            for (std::uint32_t k = 0; k < 4; ++k) {
+                glm::vec3 v = glm::vec3(glm::dvec3(b.positions[q.index * 4 + k]) + shift);
+                positions.push_back(v);
+                low = glm::min(low, v);
+                high = glm::max(high, v);
+            }
+        }
+        merge(&BlendQuads::normals, *data.mNormals);
+        merge(&BlendQuads::tangents, *data.mTangents);
+        merge(&BlendQuads::colors, *data.mColors);
+        merge(&BlendQuads::mers, *data.mMERS);
+        merge(&BlendQuads::bones, *data.mBoneId0s);
+        merge(&BlendQuads::pbr, *data.mPBRTextureIndices);
+        merge(&BlendQuads::geo, *data.mGeoType);
+        for (int i = 0; i < 3; ++i) {
+            auto& to = *data.mTextureUVs[i];
+            to.clear();
+            bool all = std::all_of(parts.begin(), parts.end(), [&](auto const* b) { return b->uvs[i].size() == b->positions.size(); });
+            if (!all) continue;
+            to.reserve(quads.size() * 4);
+            for (auto const& q : quads)
+                for (std::uint32_t k = 0; k < 4; ++k) to.push_back(parts[q.part]->uvs[i][q.index * 4 + k]);
+        }
+        auto& enabled = *data.mFieldEnabled;
+        std::copy_n(parts.front()->enabled.begin(), std::min(parts.front()->enabled.size(), enabled.size()), enabled.begin());
+#if !defined(LAMIUM_SDK_26_20_7)
+        *data.mAABB = {low, high};
+#endif
+        static_cast<unsigned&>(batch.mCount) = static_cast<unsigned>(quads.size() * 4);
+        combined.vertices = static_cast<std::uint32_t>(quads.size() * 4);
+        combined.mesh.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium schematic blended ghosts", supplementaryFieldMode()));
+        combined.key = key;
+        combined.members = {partKeys.begin(), partKeys.end()};
+        combined.sortedFrom = camera;
+        combined.sortedAt = now;
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+        ++perf.orderChanges;
+#endif
+    }
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+    ++perf.blendedFrames;
+    if (camera.x != lastCamera.x || camera.y != lastCamera.y || camera.z != lastCamera.z) ++perf.cameraMoves;
+    lastCamera = camera;
+#endif
+    BrightnessPair full;
+    full.sky->mValue = 15;
+    full.block->mValue = 15;
+    ActorShaderManager::setupShaderParameters(screen, region, full, glm::vec4{1, 1, 1, 1}, 1.f, true, *lightTexture, Vec2{1, 1},
+        Vec4{0, 0, 1, 1});
+    // Sections not in the sorted mesh, far to near by their centers.
+    std::vector<std::pair<double, Section const*>> far;
+    for (auto const& b : blendedSections) {
+        if (combined.members.contains(b.key) || !b.section->blendMesh) continue;
+        double cx = b.section->origin.x + sectionSize / 2. - camera.x, cy = b.section->origin.y + sectionSize / 2. - camera.y,
+               cz = b.section->origin.z + sectionSize / 2. - camera.z;
+        far.push_back({cx * cx + cy * cy + cz * cz, b.section});
+    }
+    std::sort(far.begin(), far.end(), [](auto const& a, auto const& b) { return a.first > b.first; });
+    for (auto const& [distance, section] : far) {
+        glm::vec3 at{static_cast<float>(section->origin.x - camera.x), static_cast<float>(section->origin.y - camera.y),
+                     static_cast<float>(section->origin.z - camera.z)};
+        translated(screen, at, [&] {
+            section->blendMesh->renderMesh(screen, material, texture, 0, section->blendVertices, GhostCaptureDescription{}, nullptr);
+        });
+    }
+    if (!combined.mesh || !combined.vertices) return;
+    glm::vec3 offset{static_cast<float>(combined.anchor.x - camera.x), static_cast<float>(combined.anchor.y - camera.y),
+                     static_cast<float>(combined.anchor.z - camera.z)};
+    translated(screen, offset, [&] {
+        combined.mesh->renderMesh(screen, material, texture, 0, combined.vertices, GhostCaptureDescription{}, nullptr);
+    });
+}
+// Calls of the alpha pass per ghost frame, logged once (spike: is it once a frame?).
+int alphaCalls = 0;
 
-// The cell chosen with "Show in world": a pulsing tinted box with outlines
-// and a tall beam of crossed faces above it, readable from far away.
-void drawPoint(ScreenContext& screen, Vec3 const& camera) {
-    std::optional<Point> at;
-    {
-        std::lock_guard lock(pointMutex);
-        if (pointAt && Clock::now() > pointUntil) pointAt.reset();
-        at = pointAt;
+LL_TYPE_INSTANCE_HOOK(GhostBlendPass, ll::memory::HookPriority::Normal, LevelRendererCamera,
+    &LevelRendererCamera::$renderBlockEntities, void, BaseActorRenderContext& context, bool renderAlphaLayer) {
+    origin(context, renderAlphaLayer);
+    if (!renderAlphaLayer) return;
+    ++alphaCalls;
+    auto& runtime = Runtime::instance();
+    if (!runtime.enabled() || !runtime.snapshot()->schematic.enabled) return;
+    try {
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+        PerfTimer timer{perf.blendNs};
+#endif
+        if (versionSensitiveAllowed(capabilities::Id::SchematicBlend)) drawBlended(context);
+    } catch (std::exception const& error) {
+        static bool reported = false;
+        if (!std::exchange(reported, true)) log(std::string("drawing blended ghosts failed: ") + error.what());
     }
-    if (!at) return;
-    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
-    mce::MaterialPtr faceMaterial(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"});
-    float pulse = .5f + .5f * std::sin(std::chrono::duration<float>(Clock::now().time_since_epoch()).count() * 6.f);
-    glm::vec3 offset{static_cast<float>(at->x - camera.x), static_cast<float>(at->y - camera.y), static_cast<float>(at->z - camera.z)};
-    constexpr float grow = .04f, beam = 64.f, half = .12f;
-    if (faceMaterial.mRenderMaterialInfoPtr) {
-        Tessellator faces(screen.tessellator.mBufferResourceService);
-        faces.begin({}, mce::PrimitiveMode::QuadList, 48 + 16, false);
-        faces.color(1.f, 1.f, 1.f, .25f + .3f * pulse);
-        glm::vec3 a{-grow}, b{1 + grow}, c[8];
-        for (int i = 0; i < 8; ++i) c[i] = {i & 1 ? b.x : a.x, i & 2 ? b.y : a.y, i & 4 ? b.z : a.z};
-        constexpr int sides[6][4] = {{0,2,6,4},{1,5,7,3},{0,4,5,1},{2,3,7,6},{0,1,3,2},{4,6,7,5}};
-        for (auto const& side : sides) {
-            for (int k = 0; k < 4; ++k) faces.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
-            for (int k = 3; k >= 0; --k) faces.vertex(c[side[k]].x, c[side[k]].y, c[side[k]].z);
-        }
-        faces.color(1.f, 1.f, 1.f, .45f);
-        // Two crossed faces make the beam visible from every side.
-        glm::vec3 beamQuads[2][4] = {{{.5f - half, 1, .5f}, {.5f + half, 1, .5f}, {.5f + half, beam, .5f}, {.5f - half, beam, .5f}},
-                                     {{.5f, 1, .5f - half}, {.5f, 1, .5f + half}, {.5f, beam, .5f + half}, {.5f, beam, .5f - half}}};
-        for (auto const& quad : beamQuads) {
-            for (int k = 0; k < 4; ++k) faces.vertex(quad[k].x, quad[k].y, quad[k].z);
-            for (int k = 3; k >= 0; --k) faces.vertex(quad[k].x, quad[k].y, quad[k].z);
-        }
-        translated(screen, offset, [&] { MeshHelpers::renderMeshImmediately(screen, faces, faceMaterial, std::monostate{}); });
-    }
-    if (!lineMaterial.mRenderMaterialInfoPtr) return;
-    Tessellator lines(screen.tessellator.mBufferResourceService);
-    lines.begin({}, mce::PrimitiveMode::LineList, 26, false);
-    lines.color(1.f, 1.f, 1.f, 1.f);
-    glm::vec3 a{-grow}, b{1 + grow}, c[8];
-    for (int i = 0; i < 8; ++i) c[i] = {i & 1 ? b.x : a.x, i & 2 ? b.y : a.y, i & 4 ? b.z : a.z};
-    constexpr int edges[12][2] = {{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
-    for (auto [i, j] : edges) { lines.vertex(c[i].x, c[i].y, c[i].z); lines.vertex(c[j].x, c[j].y, c[j].z); }
-    lines.vertex(.5f, 1.f, .5f);
-    lines.vertex(.5f, beam, .5f);
-    translated(screen, offset, [&] { MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, std::monostate{}); });
 }
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+void perfReport() {
+    auto now = std::chrono::steady_clock::now();
+    if (now - perf.since < std::chrono::seconds(5) || !perf.frames) return;
+    auto ms = [](std::uint64_t ns) { return static_cast<double>(ns) / 1e6; };
+    auto per = [&](std::uint64_t ns) { return ms(ns) / static_cast<double>(perf.frames); };
+    log(std::format("perf {} frames: ghost pass {:.3f} ms/frame (max {:.2f}), builds {} ({:.3f} ms/frame, max {:.2f} ms each; "
+                    "new {} looked-at {} changed {} mesh-gone {} incomplete {}), checks {} ({:.3f} ms/frame), check/scan {:.3f} ms/frame, "
+                    "blended pass {:.3f} ms/frame, sections {}, never-built waiting avg {:.1f} max {}, looked-at latency avg {:.0f} ms max {:.0f} ms; "
+                    "prepare {:.3f}, faces {:.3f}, lines {:.3f}, block actors {:.3f}, frames {:.3f}, entities {:.3f}, name tags {:.3f} ms/frame; "
+                    "blended frames {}, re-sorts {}, camera moves {}",
+                    perf.frames, per(perf.frameNs), ms(perf.maxFrameNs), perf.builds, per(perf.buildNs), ms(perf.maxBuildNs), perf.reasons[0],
+                    perf.reasons[1], perf.reasons[2], perf.reasons[3], perf.reasons[4], perf.checks, per(perf.checkNs), per(perf.scanNs),
+                    per(perf.blendNs), perf.sections, static_cast<double>(perf.waiting) / static_cast<double>(perf.frames), perf.maxWaiting,
+                    perf.dueCount ? ms(perf.dueLatencyNs) / static_cast<double>(perf.dueCount) : 0., ms(perf.maxDueLatencyNs),
+                    per(perf.prepareNs), per(perf.facesNs), per(perf.linesNs), per(perf.actorsNs), per(perf.framesNs), per(perf.entitiesNs),
+                    per(perf.extrasNs), perf.blendedFrames, perf.orderChanges, perf.cameraMoves));
+    perf = Perf{};
+}
+#endif
 
 LL_TYPE_INSTANCE_HOOK(GhostPass, ll::memory::HookPriority::Normal, LevelRendererPlayer,
     &LevelRendererPlayer::$renderEntityEffects, void, BaseActorRenderContext& context) {
     origin(context);
+    if (++ghostFrame == 600) log(std::format("block entity alpha pass ran {} times in 600 frames", alphaCalls));
+#ifdef LAMIUM_SCHEMATIC_PERF_TRACE
+    auto frameStart = std::chrono::steady_clock::now();
+    struct FrameEnd {
+        std::chrono::steady_clock::time_point start;
+        ~FrameEnd() {
+            auto took = static_cast<std::uint64_t>((std::chrono::steady_clock::now() - start).count());
+            perf.frameNs += took;
+            perf.maxFrameNs = std::max(perf.maxFrameNs, took);
+            ++perf.frames;
+            perfReport();
+        }
+    } frameEnd{frameStart};
+#endif
     auto& runtime = Runtime::instance();
     if (releaseRequested.exchange(false)) { release(); stopSave(); }
-    if (!runtime.enabled() || !runtime.snapshot()->schematic.enabled) {
+    if (!runtime.enabled() || !runtime.snapshot()->schematic.enabled || !hasRenderCamera(context)) {
         stopSave();
         if (!sections.empty() || !resolved.empty()) release();
         return;
@@ -1553,11 +838,32 @@ LL_TYPE_INSTANCE_HOOK(GhostPass, ll::memory::HookPriority::Normal, LevelRenderer
     auto* player = client.getLocalPlayer();
     if (!player) return;
     try {
+        // A new graphics mode rebuilds the sections (mistake faces differ).
+        // The graphics mode, the ghost tint and the outline width are built
+        // into the sections: a change rebuilds them.
+        auto const& look = runtime.snapshot()->schematic;
+#if defined(LAMIUM_SDK_26_20_7)
+        int graphics = 0;
+#else
+        int graphics = static_cast<int>(client.getOptions().getGraphicsMode());
+#endif
+        if (int mode = (graphics * 101 + look.ghostTint) * 4 + look.ghostLines; mode != lastGraphicsMode) {
+            if (lastGraphicsMode >= 0) release();
+            lastGraphicsMode = mode;
+            // The graphics mode alone: the combined key made every mode look
+            // like Vibrant Visuals, and mistake faces then hid their outlines.
+            buildCamera.vibrant = graphics >= static_cast<int>(GraphicsMode::Advanced);
+        }
         drawPlacements(context, client, *player);
-        drawPoint(context.mScreenContext, context.mCameraPosition);
+        // Faces of the point, the selection and waiting columns: the overlay's
+        // face material for the graphics mode (the hologram one is not shown
+        // under Vibrant Visuals or in Simple).
+        auto faces = overlay::faceMaterial(client);
+        Vec3 const camera = renderCamera(context);
+        drawPoint(context.mScreenContext, camera, faces.material, faces.twoSided);
         stepSave(player->getDimensionBlockSource(), *player);
-        drawSelection(context.mScreenContext, context.mCameraPosition, static_cast<int>(player->getDimensionId()));
-        drawWaitingColumns(context.mScreenContext, context.mCameraPosition);
+        drawSelection(context.mScreenContext, camera, static_cast<int>(player->getDimensionId()), faces);
+        drawWaitingColumns(context.mScreenContext, camera, faces.material, faces.twoSided);
     } catch (std::exception const& error) {
         static bool reported = false;
         if (!std::exchange(reported, true)) log(std::string("drawing failed: ") + error.what());
@@ -1565,51 +871,64 @@ LL_TYPE_INSTANCE_HOOK(GhostPass, ll::memory::HookPriority::Normal, LevelRenderer
 }
 }
 
-void wantProgress() { progressWanted = steadyMs(); }
-std::optional<Tally> progress(SavedPlacement const& placement) {
-    std::lock_guard lock(progressMutex);
-    auto found = progressDone.find(drawKey(placement));
-    if (found == progressDone.end()) return std::nullopt;
-    return found->second;
-}
-std::shared_ptr<Verification const> verification() {
-    std::lock_guard lock(resultMutex);
-    return published;
-}
-bool save(SaveRequest request) {
-    std::lock_guard lock(saveMutex);
-    if (saveBusy) return false;
-    saveBusy = true;
-    pendingSave = std::move(request);
-    return true;
-}
-std::optional<SaveStatus> saveStatus() {
-    std::lock_guard lock(saveMutex);
-    return status;
-}
-void stopSaving() { stopRequested = true; }
-std::optional<std::string> takeSaveMessage() {
-    std::lock_guard lock(saveMutex);
-    return std::exchange(saveMessage, std::nullopt);
-}
-void point(Point cell) {
-    std::lock_guard lock(pointMutex);
-    pointAt = cell;
-    pointUntil = Clock::now() + std::chrono::seconds(30);
+std::optional<Mismatch> mismatchAt(BlockSource& region, Point world) { return checkedCell(region, world, resolved); }
+std::optional<GhostAt> ghostAlong(BlockSource& region, int dimension, double x, double y, double z, double dx, double dy,
+                                  double dz, double reach) {
+    auto& runtime = Runtime::instance();
+    if (!runtime.enabled() || !runtime.snapshot()->schematic.enabled) return std::nullopt;
+    auto snapshot = session::snapshot();
+    for (auto const& cell : cellsAlong(x, y, z, dx, dy, dz, reach)) {
+        BlockPos pos{cell.x, cell.y, cell.z};
+        if (!region.getChunkAt(pos)) return std::nullopt;
+        // A real block hides the ghosts behind it; one standing in its own
+        // cell is the card's ordinary schematic line.
+        if (!region.getBlock(pos).isAir()) return std::nullopt;
+        for (size_t i = 0; i < snapshot.placements.size() && i < resolved.size(); ++i) {
+            auto const& shown = snapshot.placements[i];
+            if (resolved[i].structure != shown.structure.get()) continue;
+            auto index = overlap::paletteAt(shown, dimension, cell);
+            if (!index || static_cast<size_t>(*index) >= resolved[i].blocks.size()) continue;
+            if (auto const* block = resolved[i].blocks[static_cast<size_t>(*index)])
+                return GhostAt{cell, block, shown.placement.name};
+        }
+    }
+    return std::nullopt;
 }
 void start() {
+    if (capabilities::registry().status(capabilities::Id::SchematicBlocks).runtime.reason == capabilities::Reason::RemovalFailed
+        || capabilities::registry().status(capabilities::Id::SchematicEntities).runtime.reason == capabilities::Reason::RemovalFailed) return;
     if (installed) return;
+    capabilities::begin(capabilities::Id::SchematicBlocks);
+    capabilities::begin(capabilities::Id::SchematicEntities);
+    capabilities::begin(capabilities::Id::SchematicBlend);
+    capabilities::begin(capabilities::Id::SchematicActorLight);
     installed = GhostPass::hook(true) == 0;
-    if (!installed) throw std::runtime_error("Could not install the schematic ghost pass");
+    if (!installed) {
+        capabilities::hooks(capabilities::Id::SchematicBlocks,false);
+        capabilities::hooks(capabilities::Id::SchematicEntities,false);
+        throw std::runtime_error("Could not install the schematic ghost pass");
+    }
+    capabilities::hooks(capabilities::Id::SchematicBlend,
+        capabilities::attachHook<GhostBlendPass>(blendInstalled,{capabilities::Id::SchematicBlend}));
+    capabilities::hooks(capabilities::Id::SchematicActorLight,startActorLight());
     exitListener = ll::event::EventBus::getInstance().emplaceListener<ll::event::ClientExitLevelEvent>(
         [](auto&) { releaseRequested = true; items::forget(); selection::clear(); });
+    capabilities::ready(capabilities::Id::SchematicBlocks);
+    capabilities::ready(capabilities::Id::SchematicEntities);
 }
 void stop() {
+    capabilities::stop(capabilities::Id::SchematicBlocks);
+    capabilities::stop(capabilities::Id::SchematicEntities);
+    capabilities::stop(capabilities::Id::SchematicBlend);
+    capabilities::stop(capabilities::Id::SchematicActorLight);
     if (exitListener) {
         ll::event::EventBus::getInstance().removeListener(exitListener);
         exitListener.reset();
     }
-    if (installed && GhostPass::unhook(true)) installed = false;
+    capabilities::detachHook<GhostBlendPass>(blendInstalled,{capabilities::Id::SchematicBlend});
+    stopActorLight();
+    capabilities::detachHook<GhostPass>(installed,{capabilities::Id::SchematicBlocks,capabilities::Id::SchematicEntities});
     releaseRequested = true;
 }
+void invalidateResources() { releaseRequested = true; }
 }

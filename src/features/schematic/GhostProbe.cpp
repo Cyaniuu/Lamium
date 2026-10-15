@@ -310,17 +310,26 @@ void draw(BaseActorRenderContext& context, ScreenContext& screen, IClientInstanc
                 // Round 10: BlockActor::create from NBT returned null for every id
                 // on the client. Round 11 asks the vanilla factory for the
                 // block type's default block entity instead.
+#if defined(LAMIUM_SDK_26_20_7)
+                actor = VanillaBlockActorFactory::createBlockActor(
+                    block->getBlockType().getBlockEntityType(), pos, block->getBlockType());
+#else
                 actor = VanillaBlockActorFactory::createBlockActor(pos, block->getBlockType());
+#endif
                 once(std::format("{}: block entity {}", name, actor ? "created" : "not created"));
             }
             if (!actor) { outlines.push_back({cell, 1.f, .2f, .2f}); continue; }
-            auto* component = actor->_getRenderComponent();
-            if (!component) { once(name + ": no render component"); outlines.push_back({cell, 1.f, .2f, .2f}); continue; }
             Vec3 renderPos{static_cast<float>(pos.x - camera.x), static_cast<float>(pos.y - camera.y),
                 static_cast<float>(pos.z - camera.z)};
             mce::MaterialPtr none(mce::RenderMaterialGroup::common(), HashedString{"lamium_no_forced_material"});
             once(name + ": rendering through the dispatcher");
+#if defined(LAMIUM_SDK_26_20_7)
+            dispatcher.render(context, region, *actor, *block, renderPos, pos, false, none, nullptr, 0, std::nullopt);
+#else
+            auto* component = actor->_getRenderComponent();
+            if (!component) { once(name + ": no render component"); outlines.push_back({cell, 1.f, .2f, .2f}); continue; }
             dispatcher.render(context, region, *component, *block, renderPos, pos, false, none, nullptr, 0, std::nullopt);
+#endif
             once(name + ": rendered");
             if (look == OutlinedAlphaTest) outlines.push_back({cell, .35f, .85f, 1.f});
         } catch (std::exception const& error) {

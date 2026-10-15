@@ -1,4 +1,5 @@
 #include "features/schematic/EntityModels.h"
+#include "overlay/LineColor.h"
 #include "features/schematic/RestPose.h"
 #include "overlay/FaceMaterial.h"
 #include "app/Runtime.h"
@@ -16,6 +17,9 @@
 #include "mc/deps/minecraft_renderer/resources/UIThumbnailMeshOffscreenCaptureDescription.h"
 #include "mc/deps/minecraft_renderer/resources/UIMeshOffscreenCaptureDescription.h"
 #include "mc/deps/minecraft_renderer/resources/UIStructureVolumeOffscreenCaptureDescription.h"
+#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
+#include "mc/deps/minecraft_renderer/resources/OffscreenCaptureDescription.h"
+#endif
 #include "mc/common/client/renderer/helpers/MeshHelpers.h"
 #include "mc/deps/core_graphics/enums/PrimitiveMode.h"
 #include "mc/deps/minecraft_renderer/renderer/MaterialPtr.h"
@@ -349,9 +353,9 @@ Entry& entry(IClientInstance& client, std::string const& id) {
 } // namespace
 
 std::vector<bool> draw(ScreenContext& screen, IClientInstance& client, Vec3 const& camera, std::vector<Spot> const& spots,
-                       std::function<void(std::function<void()> const&)> const& inWorld) {
+                       std::function<void(std::function<void()> const&)> const& inWorld, bool outlines) {
     std::vector<bool> drawn(spots.size(), false);
-    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
+    mce::MaterialPtr lineMaterial = overlay::lines::material();
     // The faces of skinless models use the overlay's face material, which
     // changes with the graphics mode (the hologram one draws nothing in Simple).
     auto tint = overlay::faceMaterial(client);
@@ -385,9 +389,21 @@ std::vector<bool> draw(ScreenContext& screen, IClientInstance& client, Vec3 cons
         using Texture = std::variant<std::monostate, mce::TexturePtr, mce::ClientTexture, mce::ServerTexture>;
         Texture texture{static_cast<mce::TexturePtr const&>(model.renderer->mDefaultSkin)};
         inWorld([&] {
+#if defined(LAMIUM_INPUT_UPDATE_PROBE) || defined(LAMIUM_SDK_26_20_7)
             if (model.tinted) MeshHelpers::renderMeshImmediately(screen, faces, tintMaterial, std::monostate{});
             else MeshHelpers::renderMeshImmediately(screen, faces, material, texture, std::monostate{});
-            if (lineMaterial.mRenderMaterialInfoPtr) MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, std::monostate{});
+#else
+            if (model.tinted) MeshHelpers::renderMeshImmediately(screen, faces, tintMaterial, OffscreenCaptureDescription{});
+            else MeshHelpers::renderMeshImmediately(screen, faces, material, texture, OffscreenCaptureDescription{});
+#endif
+            if (outlines && lineMaterial.mRenderMaterialInfoPtr)
+                overlay::lines::colored(screen, .35f, .85f, 1.f, [&] {
+#if defined(LAMIUM_INPUT_UPDATE_PROBE) || defined(LAMIUM_SDK_26_20_7)
+                    MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, std::monostate{});
+#else
+                    MeshHelpers::renderMeshImmediately(screen, lines, lineMaterial, OffscreenCaptureDescription{});
+#endif
+                });
         });
         drawn[i] = true;
         ++count;

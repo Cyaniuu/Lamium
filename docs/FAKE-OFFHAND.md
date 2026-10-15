@@ -6,6 +6,20 @@ Timed secondary use was excluded on 2026-10-07; the broader extension scope
 below is the earlier research record, not a promise of support. Confirmed
 runtime coverage and remaining checks are in [VALIDATION.md](VALIDATION.md).
 
+## Primary-use regressions (L-198, 2026-10-15)
+
+The maintainer reported three cases: a primary block prevented fireworks
+while gliding and aiming into air; with blocks in both slots the secondary
+placed instead of the primary; secondary blocks prevented primary eating.
+The current fix applies the primary-pass check to placement as well as
+instant use, and rejects placement while a primary timed use is active.
+A normal primary block passes in air even if its native item reports a use
+duration; liquid-placed and wearable/known air-use items keep their checks.
+Block aim keeps the primary placement. Pure regression tests cover these
+decisions. The maintainer's local checklist on `d5978e2` passed all three
+reported cases. Server outcomes remain unchecked. Native duration is still
+a defensive classifier fix, not an observed trace of the reported block.
+
 ## Extension scope (chosen 2026-10-06)
 
 The maintainer chose broad secondary-hand capability, rather than one item
@@ -46,6 +60,22 @@ uses sneak rather than ordinary use (official platform behavior reference:
 [Taking Inventory: Shield](https://www.minecraft.net/en-us/article/taking-inventory--shield)).
 No external mod implementation is used.
 
+## Right-click fallback feedback (2026-10-14)
+
+[L-189](BACKLOG.md) records a request to invoke the configured Fake Offhand
+item when a primary-hand right-click has no **meaningful applicable effect**.
+Reported examples include fireworks while full or when holding a shovel/axe.
+This is **not** a firework-specific binding and is not implemented here.
+
+The existing target-priority rule already distinguishes a primary-hand
+pass from a failure, but the newly requested no-op cases may be reported
+as handled or otherwise consume input without a useful action. Research
+the actual game result and state-change boundary, including air/block/entity
+targets, before deciding when to fall through. A negative bool alone is
+not permission to double-use. Preserve a genuine primary use, prevent
+accidental activation, and validate server-authoritative outcomes. No
+choice of dispatch strategy, default or release is made yet.
+
 ## First instant-use adapter (2026-10-06, single clicks checked)
 
 Eligibility is classified from item properties (2026-10-07), replacing the
@@ -69,6 +99,44 @@ Primary (selected slot) passes when its ordinary use cannot act:
 | Any | Empty hand; vanilla sword/pickaxe tags (checked in game, though swords report a 72000 use duration) | Non-`minecraft:` or unreadable items; wearables; known air-use identities (fishing rod, firework, empty map, books, ender eye, shield, elytra, bundles, carved pumpkin, heads) |
 | Air (NoHit) | Every other block item except liquid-placed ones; any item without a use duration, projectile, bucket or liquid-clip property; food at confirmed full hunger | Timed, projectile, bucket and liquid-clip items; hungry, always-edible, creative or unreadable food |
 | Ordinary block | Non-block items with none of the properties above and no planter, fertilizer, dye or durability property, and not a known block-use identity (seeds, doors, signs, redstone, string, spawn eggs, minecarts, boats, honeycomb, books, discs, lodestone compass, resin clump, ...), aimed at a solid block without a block entity (2026-10-07) | Block items (placement), food (some plant crops), damageable tools, the listed identities, and every such material aimed at a block with a block entity (decorated pot, lectern, sign, chiseled bookshelf, vault, ...) or a non-solid block |
+
+### Target-specific primary uses (L-189, decided and built 2026-10-15)
+
+Maintainer 2026-10-15: include as much as possible, and prefer the game's
+own checks to hand-kept lists. Built, not checked in game. On top of the
+table above, a primary item whose use only acts on certain blocks or in
+certain states passes when the game says it cannot act now; anything
+unread keeps vanilla priority. Block targets still have to be plain (no
+block entity, and solid or a collision that fills the cell, such as
+leaves); interactive blocks and entities are decided first.
+- Planters (seeds, carrots, potatoes, nether wart, berries, cocoa beans):
+  the planted block's `mayPlace` and `canSurvive` on the aimed face, with
+  air there; when the planted block is unknown, crops need the top of
+  farmland and nether wart the top of soul sand (`plantsOn`); else the
+  component's `canUseOn`. One log line per planter item says how it was
+  judged. Wheat seeds and carrots report neither the planter
+  property nor its component, so vanilla planters also count by name
+  (`plants`: `_seeds`, carrots, potatoes, pitcher pods, nether wart, sweet
+  and glow berries, cocoa beans).
+- Fertilizers (bone meal): the block's `canBeFertilized` with the block
+  above.
+- Minecarts: the block's `isRailBlock`.
+- Honeycomb: the block's copper behaviour, not waxed yet. Axes: an
+  unstripped log, wood, stem, hyphae or bamboo block (by name), or copper
+  that is waxed or oxidized.
+- Shovels (tag), hoes (tag) and shears: short vanilla block lists
+  (`shovelChanges`, `hoeChanges`, `shearsChange` in FakeOffhandPlan.h).
+- Empty buckets and glass bottles: water or lava along the aim within
+  reach (the hit's liquid flag stayed unset aimed at water). Food at confirmed full hunger passes on plain blocks unless
+  it plants and its planter could be used there. Dyes, ink sacs and books
+  pass on plain blocks (their uses need block entities).
+- A Riptide trident out of water and rain, a bow without arrows or an
+  uncharged crossbow without arrows or fireworks (survival; inventory and
+  offhand searched), aimed anywhere; aimed at nothing, a firework while not
+  gliding and an empty bucket or bottle with no liquid along the aim.
+The planter component, the copper fields and the block checks are gated
+as "Fake Offhand (item use targets)" (GAME-UPDATES.md); on an unverified
+game the block rules fall back to the table above.
 
 Entities, active primary timed use and interactive blocks (unless sneaking)
 are decided before this and stay vanilla. The block-target identity list is

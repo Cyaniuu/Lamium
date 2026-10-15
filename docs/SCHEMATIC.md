@@ -18,21 +18,92 @@ selection, checking and materials. A radial menu exposes placement and
 save-area operations; a separate held adjust key repeats the last stepper
 operation with the wheel. Dedicated keys remain available, all unbound.
 
-The default ghost look is tinted with a light-blue outline. Checking,
+The default ghost look is tinted with a light-blue outline. Since 2026-10-15
+(L-186) the tint strength is a 0-100% setting, 70% by default (100% is the
+earlier look, 0% leaves the outline alone), and the outline is normal by
+default, or thin (game lines) or thick; normal and thick are solid bars on the edges (game lines are one pixel). Where neighbors' bars
+meet, only the stronger result's copy is drawn within a section, and its bar
+is slightly wider to cover the other across sections: wrong block, unknown
+block, wrong state, then ghost/missing. Checking,
 materials, the optional HUD, target-card line and nearest-mistake marker are
 built. Materials include carried shulker-box contents. File entities use named
 dashed frames and are checked by type near their recorded spot, within client
 observation range; pose, equipment and contents are not verified.
 
+Target-card presentation (2026-10-15, revised the same day): the stacked and
+side-by-side sections were removed after the maintainer found them hard to
+read; the card keeps its ordinary single layout (DESIGN "Target and
+Schematics"). Target Info's "Show schematic information" (saved as the bool
+`information.targetSchematic`; a number from the earlier test builds reads
+as on unless 0) turns ghost picking and difference rows on or off. A ghost hit
+first is the target, named in light blue with "Schematic: Not placed yet" and
+no placement name; the real block behind it is not paired with it. A real
+block's differences are read live for that cell after checking the selected
+placement's revision, visibility, dimension and shown layers, rather than from
+the capped background list. Difference rows come first on the card, starting
+with "Schematic: Wrong block / Extra block / Wrong state" in the check's color.
+
 Area save reads bounded chunk columns and waits for unloaded ones as the
-player approaches; it can be stopped. Blocks, states and the water layer are
-saved, without block entity contents. Optional entities retain type, position
+player approaches; it can be stopped. Blocks, states, the water layer and
+block entity data as the client knows it are saved (since 2026-10-09). Optional entities retain type, position
 and facing. Existing files require a second press to overwrite.
 
 Known rendering gaps include half-drawn beds and outlines for heads, doors
 and honey blocks. Schematic neighbors, the translucent look, the Check tab's
 colored preview and the Files tab's rotatable 3D preview remain follow-ups.
 Local checks do not establish server, other-dimension or large-file coverage.
+
+## Player feedback to investigate (2026-10-14)
+
+The following are reports and design requests, **not verified fixes** or
+approval to build. Current status and questions live in
+[BACKLOG.md](BACKLOG.md); the original chat included screenshots but those
+images are not embedded in this repository.
+
+- **L-177, L-178, L-179 (bugs):** a world-space mismatch highlight can point
+  at the wrong cell; a piston ghost's face texture can imply an extending
+  surface where the mesh does not extend; shulker-box ghosts can ignore their
+  saved facing. Treat overlay transforms, mesh texture mapping and saved
+  orientation as separate hypotheses. Check original and rotated/mirrored
+  placements. L-179 finding (2026-10-14, from code): a shulker box keeps its
+  opening in block entity data (`facing`, a face byte), not in a block state,
+  so the game's block-state transform never turned it and the ghost loaded
+  the file's value unchanged. Ghosts now turn it with the placement's mirror
+  and quarter turns (`toWorldFace`, tested against the cell transform); the
+  mirror follows block states (X swaps east and west). Not checked in game;
+  whether unturned placements were also wrong is still unknown. The Check also compares
+  a placed box's opening with the turned file value (a gated read of the
+  block actor; unreadable keeps the block-only result), listed as a
+  `facing` state difference.
+- **Schematics off (maintainer 2026-10-14):** the R menu and schematic keys
+  did nothing visible while the feature was off. Now schematic keys show a
+  toast saying how to turn it on; the radial menu opens at Show, where the
+  feature switch is, with a toast, and runs only the switch, the HUD switch
+  and screen items until the feature is on.
+- **L-182 (crash):** settings opened with the default L key can sometimes
+  crash while working with an active schematic check. Reproduce with
+  logs/stack before attributing cause to the check or settings screen.
+- **L-183 (Design):** let builders temporarily suppress selected strict
+  check mismatches, especially transient redstone states during construction.
+  Do not mutate the file, physical world or global block-state rules.
+- **L-184 (Design/Research):** inspect the ghost under the crosshair,
+  including expected name, state/facing and retained Block Entity data.
+  Containers (barrels, hoppers) and data relevant to comparator output should
+  be understandable. Choose a compact/expanded presentation based on the
+  available data, not an assumed always-on HUD.
+- **L-185 (Design/Research):** an explicit, permission-gated action loads a
+  placed schematic's blocks into the world like structure-block Load. Server
+  permissions, replacements, entities, contents and confirmation are open.
+- **L-186 (Design/Research):** the pink concrete example was hard to
+  distinguish from the light-blue ghost overlay; both its native color and
+  whether it was a ghost were unclear. Compare improvements to the current
+  outline/tint/depth treatment against **translucent rendering reconsidered**
+  as a potential mode. Translucency was previously not chosen as the default;
+  dense transparent layers might instead increase clutter. Test real/ghost
+  separation and graphics modes before settling on opacity or display modes.
+
+These requests complement L-93 and L-114. The world ghost's appearance is
+not the same question as the Check-tab 3D preview's missing-block styling.
 
 ## Screen review against the mockup (decided 2026-10-08)
 
@@ -106,13 +177,473 @@ Built 2026-10-08 (not yet checked in game):
 - Entities: solid light-blue box with faint faces (both windings, the face
   material culls); every missing entity within the draw distance is named.
 
+## Check tab review (decided 2026-10-08)
+
+Against [demos/schematic-check.html](demos/schematic-check.html):
+- Layout A: the 3D preview sits at a fixed size at the top of the right
+  pane; the counts and the selected mistake's details go below it (they
+  scroll when long), so the preview no longer resizes with the text.
+- The preview follows the kind chips above the list (only the filtered
+  kinds are marked).
+- How mistakes are drawn is open: the translucent looks were doubtful in
+  the world ghosts. The selected mistake must be findable even underground
+  or inside a build: candidates are cutting the view at its layer, drawing
+  it through other blocks, or a beam like the nearest-mistake marker.
+- Wanted besides the mockup: what was confused with what (expected vs the
+  block in the world) readable at the selected mistake; layers in the
+  preview ("up to layer N" along any axis), tried from several angles.
+- Wheel zoom in both previews (the draw order depends only on the view
+  direction, so zoom and pan do not disturb it).
+- Preview scope for 0.1.8 (decided 2026-10-08): "view" (turn, zoom, move,
+  back to the whole, cut at a layer) and "inspect" (click a block in the
+  preview for its name, states and check result; in the Check tab it picks
+  the row and leads to "show in world"). Editing blocks in the preview is a
+  separate, later feature. None of the three layer-control variants of
+  schematic-preview-layers.html felt right; proposed instead: Shift+wheel
+  peels layers along the axis the view looks down, a small "layer n/m"
+  corner label resets it, the Check tab may cut at the selected mistake's
+  layer, right or middle drag moves the view.
+- Release plan (maintainer, 2026-10-08, also in their notes): 0.1.8
+  finishes Schematics: the current screen work, then improving the
+  schematic rendering with LHolo as a reference (GPL-3.0: behavior and the
+  maintainer's notes only; its source is not opened while writing Lamium
+  code, see PROVENANCE.md), then small features and polish. Parts that
+  depend on how blocks are drawn (the mistake look, see-through emphasis)
+  wait for that rendering work.
+
+## Rendering and compatibility plan for 0.1.8 (proposed 2026-10-09)
+
+Decided by the maintainer 2026-10-09: A is Ready; liquids are drawn in the
+screen previews too; the check stays strict (D); the internal approach is
+left to the agent. Nothing below is built yet. Written from the
+reference project's public README, changelog and development notes (its
+source was not opened) and Lamium's code at `450d746`. The comparison itself
+is in the maintainer's notes. Order follows the maintainer's 2026-10-08
+priority: file compatibility, then ghost drawing; placing assistance and
+Java files later.
+
+A. File compatibility (Ready, chosen 2026-10-09):
+- Saved files say `format_version` 1 (`Structure.h` default) but write
+  `block_indices` as `List<IntArray>`, the shape that goes with version 2;
+  the maintainer's vanilla export says 2. Write 2. A large area save
+  failed to load in another tool at the vanilla structure loader; confirm
+  the cause with a copy changed to 2 before calling it fixed.
+- Headers read 2026-10-09 (files in the instance's schematics folder):
+  vanilla exports `mixture` (4x2x4) and `broken_village_house` (10x5x8)
+  have version 2 and one IntArray layer; every Lamium save (`schematic`,
+  `terrain big` 122x39x203, `terrain big 2` 276x14x232, `desert village`
+  122x69x112) has version 1 and two layers, the second all void when
+  nothing is waterlogged. So also write the second layer only when a cell
+  holds a liquid. How vanilla 26.51 writes a waterlogged block (a second
+  layer, or something else) is not known yet: the maintainer exports a
+  small structure with waterlogged stairs from a structure block for the
+  agent to read. Read 2026-10-09: the maintainer's vanilla export
+  `water_and_lava` (7x2x10, copied into the schematics folder) has version
+  2 and one layer; water and lava are ordinary palette entries in that
+  layer (`minecraft:water` with `liquid_depth` 0-7 for the flow, lava 0, 2,
+  4, 6 here), next to `minecraft:air`. So plain liquids need no second
+  layer; only waterlogged blocks are still unknown (that file has none).
+  Read 2026-10-09: `submerged` (7x2x10, vanilla structure block on the
+  maintainer's LeviLamina + Lamium instance, copied into the schematics
+  folder) settles it: version 2 with **two** IntArray layers when
+  something is waterlogged. The second layer is -1 everywhere except
+  waterlogged cells, which hold the palette index of
+  `minecraft:water` `liquid_depth` 0 (the same entry plain water uses in
+  the first layer). Waterlogged there: fence, fence gate, stairs,
+  trapdoor, iron bars, sign, copper golem statue, ladder, spawner, chest,
+  scaffolding, sea pickle, seagrass, rail, slab, glass pane; infested
+  stone is not. One first-layer air cell also has water in the second
+  layer, and the palette lists a jungle door that no cell uses (the door's
+  upper half was outside the area). So: write version 2; write the second
+  layer only when some cell has a liquid in it, with -1 elsewhere (what
+  `SaveArea` already fills); a palette entry no cell uses is valid. The
+  structure block's own preview did not draw the water around these
+  blocks. All three large saves are wider than the structure
+  block's 64-block limit in X and Z, so also test a small Lamium save
+  (`schematic`, 3x2x3) with version 2 to separate a version problem from a
+  size limit.
+- After a save, hand the written NBT to the game's own loader
+  (`StructureTemplate::load(CompoundTag const&)`) and report failure in the
+  save prompt; keep the file either way. Check whether the loader has a
+  size limit for very large areas, apart from the version.
+- Reading already accepts one or two layers and an empty second layer.
+  Add: reject a layer whose length is not the volume (already) and a
+  second layer that names palette entries out of range, with a message.
+- Built 2026-10-09 (`d37bd6d`) and checked in game the same day (VALIDATION-LOG):
+  `writeStructure` always writes
+  version 2 (`writtenFormatVersion`; a version 1 file read in is written
+  back as 2) and the second layer only when some cell in it is not -1.
+  Layer errors name the layer ("the second block layer has N cells",
+  "... names palette entry N, the palette has M"); water over an air cell
+  and unused palette entries read as valid. After writing, the save hands
+  the same bytes to `StructureTemplate::load` on a throwaway template
+  (the level's unknown-block registry); a rejection keeps the file and the
+  prompt says "Saved ..., but the game's structure loader rejected it"
+  (`schematic.save.gameRejected`); the log line names the size, layer count
+  and result. Tests: `structureWrittenShape`, the layer rejections, and
+  `LAMIUM_SAMPLE_STRUCTURES` (a folder or `;`-separated files, e.g. the
+  vanilla `submerged` and `water_and_lava`) reads each file, writes it back
+  and checks both layers, the version and the layer count. Seen in game:
+  saves of 3x2x3, 7x2x10 (waterlogged) and 66x53x65 were accepted by the
+  game's loader, placed correctly by the structure block (the first two)
+  and read by the reference tool. A version 2 copy of the 122x39x203
+  save that failed there before (only the version and the empty second
+  layer changed) loaded in it and in the game's structure block, while
+  both version 1 originals still failed there: the version 1 header was
+  the cause, and the game's loader takes 122x39x203. A is done; files
+  saved before `d37bd6d` stay version 1 until saved again.
+
+B. Ghost drawing (Research, strong model; one runtime round per step):
+1. Schematic neighbors: `BlockTessellator` reads neighbors through
+   `mRegion` (`setRegion(BlockSource&)`) and `BlockSource::getBlock` is
+   virtual. Spike: tessellate one door and one fence against a view that
+   answers from the placement (cells outside fall back to the real world
+   or air). If a subclass cannot be built safely, the fallback is a
+   thread-scoped hook on the region read, active only while Lamium
+   tessellates. Hypothesis to test: doors and beds draw half or nothing
+   because the partner half is not where the tessellator looks; fences
+   and panes take their connections from neighbors; walls also store
+   connection states, so the verifier must compare them after the same
+   recomputation (or ignore them).
+   Spike built 2026-10-09 (not yet checked in game): `SchematicRegion`
+   derives from `BlockSource` (built with the exported constructor on the
+   world's level, dimension and chunk source, not public) and overrides
+   both `getBlock` overloads and `getMaterial`; links and loads with the
+   SDK's prelink. Ghosts: the private tessellator reads through it; a cell
+   answers the placement's (rotated/mirrored) block where a ghost is drawn
+   (shown layer, real cell air), else the world. Opaque full ghosts that
+   must not hide a neighbor's face (no mesh, or the cell or the drawn cell
+   next to the camera) read as the world, so the camera rule in
+   `cullAgainstGhosts` still decides those faces. Ghost-to-ghost face
+   culling now also happens in the tessellator (glass next to glass may
+   lose the shared face). Files/Check previews: the view answers the
+   file's block at the spot above the build limit where each cell is
+   tessellated. Liquids (second layer) are untouched (B3). If the shapes
+   stay wrong in game, the tessellator or the block code reads neighbors
+   without the virtual call; then try the thread-scoped hook.
+   Checked 2026-10-09 (VALIDATION-LOG): doors and beds draw both halves;
+   no regressions. 26.51 files store fence/pane connections
+   (`minecraft:connection_*`) and stair corners (`minecraft:corner`) as
+   block states, so those shapes come from the file's states turned by
+   `transformBlock`, not from neighbors. That check also showed the mirror
+   axes swapped: the game's `Mirror::Z` flips east-west states, so
+   Lamium's X maps to it and Z to `Mirror::X` (fixed after `0486186`).
+   Checked on `54c6a8a`: X, Z and mirror plus 90 degrees match a structure
+   block for blocks. Open: a door or bed whose partner lies outside the
+   file draws nothing; under the X mirror an armor stand facing south stays
+   south in Lamium (`toWorldYaw`, a true reflection) but the structure block
+   turns it north (maintainer to choose which to follow).
+   Decided 2026-10-09 (maintainer): follow the structure block for entity
+   facing, and supply a missing other half. Built (not yet checked):
+   `toWorldYaw` mirrors on the other axis (a true mirror turned half
+   round; X: 180 - yaw, Z: -yaw), on the assumption that the game makes
+   the same axis swap for entities as for block states (one sample, yaw 0
+   under X). `otherHalf` (`Structure.h`) gives a two-block-tall block's
+   other half (`upper_block_bit` flipped, one step up or down); while a
+   ghost or a preview cell with one is tessellated, that cell answers the
+   other half unless the real half is placed there, so a door at the
+   area's edge or under water draws its own half. Only the drawn half is
+   shown; nothing is drawn outside the placement. Beds are drawn per half
+   by the block-entity renderer against the real world and are unchanged.
+   Checked on `a32a49f` (VALIDATION-LOG): both changes pass; the armor
+   stand matched under X, Z and mirror plus 90 degrees, confirming the
+   axis-swap assumption for entity facing. B1 is done; left unchecked: a
+   bed with one half outside the file, redstone (no sample).
+2. Render layers: build each section's ghosts into separate meshes by
+   the block's render layer (opaque, alpha-test, blended) and draw the
+   blended ones last, sorted back to front by section. This is the base
+   for the translucent look, honey and slime blocks, and real translucent
+   blocks behind ghosts.
+   Built 2026-10-09 (not yet checked in game): each ghost is tessellated
+   once per render layer it draws in (`BlockType::getRenderLayer`, then
+   each bit of `getExtraRenderLayers` as a further layer), with the
+   tessellator's `mRenderingLayer` set for that call and restored. Blend
+   and blend-to-opaque layers go into a second mesh per section (`blend`),
+   its quads sorted far to near from the camera at build time; the other
+   layers stay in the alpha-tested mesh as before. Blended sections are
+   drawn after everything else, far to near, with the moving-block
+   renderer's blend material, fully bright and tinted like the rest.
+   `coversNeighbors` counts only non-blended layers, so a honey block no
+   longer hides its neighbors' faces. Liquids keep the single default pass
+   (B3). The Files/Check previews tessellate every layer into their one
+   mesh. The log names the tessellator's default layer and each palette
+   entry with extra layers, to read if honey or slime still draw wrong.
+   Expected limits: quads inside one blended section are ordered for the
+   camera at the build (far sections are rebuilt rarely), and real
+   translucent blocks behind ghosts may still vanish where ghosts write
+   depth.
+   Checked 2026-10-09 (VALIDATION-LOG, final `59fc02c`): honey draws its
+   real look; no regressions. Follow-ups made in that round: the
+   tessellator's current shape is cleared around each call; ghost faces
+   against real opaque blocks are dropped unless the block is blended;
+   `coversNeighbors` needs the unblended mesh to reach all six sides
+   (`sidesReached`); mistake marks are white concrete boxes, recolored and
+   pushed 0.01 out, inside the sorted blended mesh (a separate translucent
+   draw swapped order with blended ghosts each frame), except over a real
+   blended block, where they keep the holo material without depth writes
+   so that block stays visible; a mark leaves out its face against a ghost
+   that fills that side (`Resolved::boxed`). Known limit: that last kind of
+   mark still swaps order with a blended ghost beside it. Removing it needs
+   a blended material without depth writes, the same research as real
+   translucent blocks behind ghosts. B2 done.
+3. Liquids: water and lava from the second layer and from water/lava
+   cells drawn by Lamium as simple shells textured from the terrain atlas
+   (shared faces between same liquids dropped, faces against opaque
+   blocks dropped), blended; only where the liquid is missing. The
+   Files and Check previews draw the file's liquids as well (decided
+   2026-10-09).
+   Built 2026-10-09 (not yet checked in game): `liquidShell` tessellates a
+   white concrete cube at the cell (so every vertex stream is filled and
+   faces against opaque blocks are already culled), then leaves out faces
+   toward the same liquid (`liquidAt`: the file's either layer in shown
+   layers, or the world's block or extra block), lowers the top to 0.875
+   unless the same liquid is above, maps the faces' UVs onto the liquid's
+   own `BlockGraphics` textures (slot 0 bottom, 1 top, 2 sides) and colors
+   water blue at alpha 0.55, lava white at 0.75. Shells go into the sorted
+   blended mesh. World: a first-layer liquid cell where the world is air,
+   and a second-layer liquid where neither the world's block nor its extra
+   block is that liquid (also under a ghost or a real block). Liquid cells
+   get no outline. Previews: liquid cells and waterlogged cells get the
+   same shell against the file's neighbors. The log names the water
+   texture's UV rectangle once, to read if the texture comes out wrong.
+   First check 2026-10-09 (`0f164ee`): water and lava draw textured and
+   whole, waterlogged ghosts show their water, no shell in real water; the
+   preview drew liquids but hid waterlogged blocks and the floor under
+   water, and no flow was shaped. Then: each top corner is set by
+   `liquids::corner` (`LiquidShape.h`, tested): the four cells around it,
+   the same liquid above any of them making it full, sources weighing ten
+   times flowing cells (surface `1 - (depth + 1) / 9`, falling as a
+   source), open cells pulling it down, solid ones ignored. In the
+   preview a cell's liquid quads sort after its block's, so a waterlogged
+   block shows. Known preview limit: its one pass keeps the first
+   fragment at a spot, so water is opaque there and hides what lies under
+   it (a floor); translucency there needs another depth approach.
+   Checked 2026-10-09 (VALIDATION-LOG): shapes and slopes match the real
+   liquids; sloped tops (sources beside a flow too) take the side slot's
+   flowing texture turned downhill, still pools the still texture. The
+   flowing texture's atlas cell is one block's texture (16x16): sampling
+   its middle half looked 8x8 and fast, so `96fe71f` maps it whole
+   (scaled down only for diagonal flow). B3 done apart from the preview
+   limit, deferred (maintainer, 2026-10-09) into one research item with
+   B2's leftover: a translucent path that does not hide what is behind it
+   (a blended material without depth writes in the world pass; real depth
+   or another order in the preview pass). Its most visible case: a yellow
+   mark over real water of another flow level (holo material, its own
+   draw) flickers against ghost liquid shells. `liquidAt` takes the file's
+   cells inside the placement (shown layers, not structure void) and the
+   world only elsewhere, so real liquids beside a ghost do not bend it
+   (checked on `be48f75`). B3 done. Open question for the maintainer: a
+   cell whose real liquid has another flow level gets a yellow mark and
+   no shell, so a thin real flow there shows almost nothing of the
+   file's surface; drawing the file's shell inside such marks too would
+   show it.
+   Deferred research, world part, done 2026-10-09 (VALIDATION-LOG): the
+   blended mesh, with every mistake mark in it, is drawn from a hook on
+   `LevelRendererCamera::$renderBlockEntities` when `renderAlphaLayer` is
+   set (once a frame, after the world's translucent blocks; the player
+   override is MCFOLD and not hooked) with `beacon_beam_transparent`
+   (blended, no depth writes, both sides). Real water, honey and glass stay
+   visible inside and behind marks and ghosts, and one sorted mesh fixes
+   their order, so the flicker of marks over real see-through blocks is
+   gone. Liquid shells never keep a face against an opaque block. Left:
+   the previews' translucency.
+   Update 2026-10-14 (L-192, L-193): sections keep their blended quads on
+   the CPU and one mesh of every section's is sorted far to near from the
+   current camera, re-sorted after a quarter-block move (at most every 50
+   ms, 250 ms past 20000 quads) or when the quads change. Only sections
+   whose nearest point is within 24 blocks join it; farther ones draw their
+   own build-order meshes far to near (a whole large liquid ghost re-sorted
+   halved the frame rate). Ghost faces that a
+   real see-through block's face covers are left out like faces against
+   opaque blocks.
+   Faces seen from inside and near ghosts (checked 2026-10-09): in a cell
+   the camera is in, a ghost keeps only faces turned toward the camera
+   (`dropBackFaces`, like real blocks: from inside a door, spawner or stair
+   the block is not drawn), which ended the flicker there, the stair's two
+   half-height faces included. Near the camera, a pair of ghost faces in
+   one plane keeps only the face toward the camera; for pairs other than
+   opaque full blocks this is a choice (`pairAllGhostFaces`): on, no
+   flicker where a see-through block such as a spawner meets another, but
+   from just outside that spawner face is missing while it shows from
+   afar; off, the same faces near and far with a little flicker there,
+   as real blocks have. Decided 2026-10-09 (maintainer): on, because the
+   ghosts flickered more often than real blocks; keep the switch so it
+   can be turned off quickly.
+   Previews (2026-10-09, VALIDATION-LOG): real but shallow depth read from
+   the UI pass's matrices (UI z 0 is normalized -1 there; the build spans
+   0.25-0.75), one mesh sorted far to near, drawn with
+   `beacon_beam_transparent` (no depth writes), lava opaque, a liquid
+   cell's quads ordered around its surface. Water now shows the floor and
+   waterlogged blocks. Open: in `submerged_lamium` parts above the water
+   look submerged; neither the in-cell order nor vertex alpha (255) is the
+   cause. Closed 2026-10-09 (`fe82509`): the cause was the beacon
+   material, which writes no depth, so the far-to-near order alone decided
+   and erred inside cells; the depth-writing block blend material is back.
+   Accepted limits (maintainer): its empty texels write depth, so through
+   seagrass or a spawner's cage parts behind can be missing (seagrass
+   shows two of its quad sides by angle). Possible later: sort by the exact
+   view direction instead of the octant, or two materials if their draw
+   order can be fixed. The deferred research item is closed.
+   Block entities and entities in the previews, spike 2026-10-09 (`d07d158`,
+   not yet checked): cells whose block draws no mesh are kept with their
+   block; after the mesh, inside the preview's model matrix, each gets a
+   block actor with the file's data (`ghosts::makeBlockActor`) drawn by its
+   renderer (`ghosts::renderBlockActor`, full brightness) against a
+   SchematicRegion answering the file's blocks where the cells were
+   tessellated; the file's entities go through `models::draw` in model
+   space. The world ghosts use the same two helpers. Checked 2026-10-09
+   (`3889c2a`, VALIDATION-LOG): files without any mesh preview too; no
+   entity outlines in previews (`models::draw(..., outlines)`); block
+   entities and entities are drawn before the mesh, so a mesh's empty
+   texels (campfire flames) no longer hide them, with no draw order
+   flicker seen.
+4. Block entities with their data: load the schematic's block entity
+   NBT into the created block actor before drawing (bed color and part,
+   skull type and rotation, sign text, banner pattern).
+   Built 2026-10-09 (not yet checked in game): a ghost drawn by its
+   block-entity renderer keeps a copy of its cell's `block_entity_data`;
+   when its actor is created (`VanillaBlockActorFactory`), the data gets
+   the world cell as x/y/z, a `Rotation` float turned like entity facing
+   (`toWorldYaw`), and is loaded with `BlockActor::load` and a
+   `DefaultDataLoadHelper`. Only files that carry the data show it:
+   vanilla structure block exports do; Lamium's own area saves did not
+   until `438e24a` (decided 2026-10-09: save it).
+   First check 2026-10-09 (`79198e1`, a vanilla export `block-like`): beds
+   and signs (standing, wall, hanging) show their color, text and angle;
+   banners showed their pattern but the wrong mount and facing, and heads
+   drew nothing: the renderer reads the block at the cell, which was the
+   world's air. `8ba47e6` renders each ghost actor against a
+   SchematicRegion answering the ghost's block at its cell. Saves now
+   store each cell's block entity (`BlockActor::save` with a clone save
+   context, as the client knows it: a container's items only if synced).
+   Reported, unclear: a "cushion" whose color is wrong. Vanilla exports
+   leave a bed's or door's other half blank (outside the area).
+   Checked on `438e24a` (VALIDATION-LOG): banners and heads right, also
+   turned and mirrored; Lamium saves carry the data. B4 done.
+5. Lighting regressions to keep in the check list: ghosts the same at
+   night, underground and looking straight down; Vibrant Visuals uses its
+   own material path or is named as unsupported.
+   Checked 2026-10-09 (`b55aa03`): straight down fine. Vibrant Visuals is
+   named as supported with limits: ghosts draw but without their tint,
+   outlines thin and black, the honey ghost black. The structure block's
+   outline keeps its color and width there, so a material path for it
+   exists; finding it is a later research item (BACKLOG).
+   Started 2026-10-09: the placement frames on `selection_box` (the block
+   selection outline's material, colored by the current shader color) kept
+   their light blue under Vibrant Visuals, same width (`fce6057`). Built
+   next (not yet checked): every schematic line goes through
+   `LineColor.h` (selection_box, one color per draw: section outlines are
+   one mesh per color; selection corners, waiting columns, entity frames,
+   the shown point and entity model outlines likewise); under Vibrant
+   Visuals (graphics mode Advanced or ray traced) mistake faces are plain
+   quads on the overlay face material, which shapes already use there, and
+   the selection, waiting-column and point faces use that material in every
+   mode; a graphics mode change rebuilds the sections. Ghost face tint and
+   the black honey ghost remain.
+   Checked on `3995e2a`: normal mode unchanged; under Vibrant Visuals every
+   line keeps its color and mistake faces are colored; switching modes is
+   safe. But the faces flickered: the overlay material there draws both
+   sides, and each face also had a reversed twin in its plane; now one quad
+   a face when the material is two-sided (not yet checked). Faces and
+   lines glow after closing the inventory until the player moves; shapes
+   do the same, so it is left as a Vibrant Visuals limit.
+   Seen 2026-10-09: ghosts drawn by block-entity renderers (chest, bed,
+   banner, sign, head) follow the world's light. A hook on
+   `BlockSource::getLightColor` crashed the game at start twice (its
+   `Brightness` argument is passed by value in the game, by reference in
+   this SDK's type); one on `getBrightnessPair` loaded but changed nothing.
+   Built (not yet checked): a hook on the static
+   `ActorShaderManager::setupShaderParameters(screen, source, pos, ...)`
+   (references and scalars only) replaces it with the fully bright setup
+   the other ghosts use when the source is the ghost actors' view; their
+   SchematicRegion also answers `getBrightness` 1. Checked: banners, signs
+   and heads lit fully at night and underground; chests and beds stayed
+   dark (they compute their light and pass it in), so the overload taking
+   a `BrightnessPair const&` is hooked the same way: checked on `9e9178b`,
+   all block-entity ghosts lit as by day. Then: their light-blue outline
+   follows the block's own selection outline (`getOutline` through the
+   view) instead of the whole cell, checked on `417ccd1`.
+
+C. Updates (after B1-B2, measure first, L-105):
+- Measured 2026-10-09 (perf trace `schematic_perf_trace`, several large
+  placements, about 730 sections; VALIDATION-LOG): 30-50 fps against 60
+  with them hidden. The ghost pass took 5-6 ms a frame with nothing
+  changing (about 4 ms of it drawing: faces, lines and a light setup per
+  section), 7-12 ms while building or flying (rebuilds 2-7.5 ms, single
+  sections up to 21 ms, frames up to 36 ms); hash checks only 0.4 ms,
+  verification scan about 1 ms. Built next (not yet checked): faces drawn
+  in one pass with one light setup (the blended pass too), outlines only
+  within 48 blocks, rebuilds limited by time (3 ms a frame, at most 8
+  sections) instead of 3 sections. Then 40-55 fps (35 flying fast inside a
+  placement); the outline distance became a setting (default 48, 0 all).
+  Finer trace with nothing rebuilt (4.8 ms a frame): frames, entity
+  models and name tags 1.6 ms, verification scan 1.0, prepare (wanted
+  sections) 0.6, hash checks 0.45, block actors 0.34, blended 0.2, faces
+  and lines 0.23. While placing blocks, rebuilds add 3-6 ms a frame: one
+  changed block re-tessellates a whole 16x16x16 section (4-12 ms).
+  A crash when changing a setting came from a `static` block pointer in
+  `liquidShell` kept across a registry reload; it is looked up each time.
+  Checked: changing the outline distance no longer crashes; 0 and 192 draw
+  far outlines. Built next (not yet checked): 8-block sections (a changed
+  block re-tessellates an eighth of the cells), the wanted list kept
+  between frames (listed again on a new camera cell, new placements or
+  every 0.5 s; per frame only split by view), section lookups by key
+  instead of scans of all sections, checks 32 and at most 32 rebuilds a
+  frame (still 3 ms). The trace now splits frames, entities and name tags.
+  Measured on `2521ec2`: single rebuilds at most 2-5 ms and frames at most
+  14-21 ms (were 22 and 25-36), but about 4900 sections cost more to draw
+  (faces up to 1.9 ms, lines 0.8, blended 0.6) and filled in slower after
+  placing; frames 1.3 ms (dashed frames rebuilt each frame), entity models
+  0.3, name tags 0. The frames are now one mesh built again only on a new
+  revision, selection or dimension. Result (VALIDATION-LOG): 45-60 fps,
+  dips to about 40 (was 30-50). C stops here (maintainer, 2026-10-09):
+  rebuilding on block-change events instead of the hash checks was the
+  plan, but the checks measured only 0.35 ms; the looked-at rebuilds
+  already react to placing and breaking. Left if more is wanted: the face
+  draws (a section size between 8 and 16), the verification scan (a time
+  budget), the per-frame view split of the wanted list.
+- Rebuild on block change events (a section and its six neighbors) instead
+  of the 0.25 s / 2 s hash timers; fixes the known border-cell limit.
+  Moving a placement should move its meshes, not rebuild them.
+- A background mesh worker only if measurement shows tessellation is the
+  cost; results carry a world/dimension/placement generation and are
+  dropped when stale.
+
+D. Check accuracy (pure rules with tests, small):
+- Strict (maintainer, 2026-10-09): every differing state stays a
+  mistake, including states the game changes on its own (growth, leaf
+  decay bits); no ignore table.
+- Waterlogging: compare the second layer with the world's extra block.
+  Built 2026-10-09 (not yet checked in game): once a cell's block is
+  right, its second layer must match the world's extra block, none on
+  both sides included (`withLiquid`, tested); a difference is a state
+  mistake whose row reads `waterlogged: true -> false` (or the reverse).
+  A first-layer air cell with water in the second layer expects water
+  standing there. In the world, a placed block whose waterlogging differs
+  from the file's either way gets a yellow mark; liquid shells for the
+  second layer are drawn only under ghosts (the world's cell empty), since
+  a shell around a placed block looked like real water (maintainer,
+  2026-10-09). Checked in game on `edbd7f5` (VALIDATION-LOG).
+- One material identity for the material list, the check and later
+  placing assistance (already one pick-item rule; keep it that way).
+
+Later (not 0.1.8 unless chosen): placing assistance (looked-at missing
+block, area fill), Java `.litematic` files, layers by material.
+
 ## Technical entry points
 
 - `src/features/schematic/Nbt.*`, `Structure.*`: NBT and structure read/write.
 - `Placement.h`: transforms/layers; `Verify.h`, `Verification.h`: pure rules
   and progressive checking/material publication.
-- `GhostRenderer.cpp`: section caches, culling, private tessellation and
-  shared-face removal. Neighbor-dependent meshes use real-world neighbors.
+- `GhostRenderer.cpp`: the ghost pass (L-136 split, 2026-10-11): which
+  sections to build and draw, lifecycle. `GhostMesh.*`: section meshes,
+  culling, private tessellation and shared-face removal (neighbor-dependent
+  meshes read schematic neighbors through `SchematicRegion`). `GhostVerify.*`:
+  the check, progress and entity spots. `AreaSave.*`: saving an area.
+  `GhostMarks.*`: frames, the save area, missing entities, name tags, the
+  point. `GhostBlocks.cpp`, `GhostActors.*`, `ResolvedPlacement.*`: shared
+  block helpers, ghost block actors, a placement's resolved palette.
+  `GhostFaces.h`, `Verify.h`: their pure rules.
 - `MenuModel.h`, `src/ui/RadialLayout.h`: menu operations and geometry.
 - `tests/SchematicTests.cpp`: pure logic; `LAMIUM_SAMPLE_STRUCTURES` optionally
   supplies real exports.

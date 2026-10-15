@@ -8,6 +8,18 @@ runtime coverage is in [VALIDATION.md](VALIDATION.md), with evidence in
 
 ## Current implementation
 
+Bug fix checked locally (2026-10-15, L-199, `d5978e2`): world-marker distance,
+range filtering and near/far ordering follow the rendered FreeCamera eye;
+outside FreeCamera they retain the player's horizontal feet distance.
+The maintainer's local distance/range/restoration checklist passed; server
+coverage remains open.
+
+World-map binding fix (L-201, 2026-10-15): the opener closes the map for
+mouse buttons and ordered chords as well as a single key. Only a fresh
+completing press can close it; waypoint name/coordinate editing and prompts
+retain input. The maintainer's local M/Mouse 5/chord and editing checklist
+passed on `d5978e2`; server coverage remains open.
+
 Experimental, default off. The minimap, cave view, radar, waypoints and world
 map are built. The map uses received chunks and recorded map data; seed-based
 terrain, biomes and structures remain a non-goal. FreeCamera moves the minimap
@@ -39,9 +51,52 @@ declares `updateTextureInPlace`, so replacement map textures currently unload
 and upload again. Texture continuity and upload cost have not been rechecked
 in game. The input-update diagnostic build also bypasses the old Hide HUD
 lookup; do not use it to validate marker visibility.
+Map layers (L-139, built 2026-10-11; passed the 0.2.0 regression check on `2aea267`): schematic
+placements and shapes are marks from the features that own them
+(`MapLayers.cpp`), keyed by layer and session id (`MapMarks.h`). The world
+map selects and acts on them (placements: select, show/hide, open in the
+Placed tab; shapes: show/hide, open in the Shapes view); the minimap draws
+placements, and shapes with the minimap's Shapes option (off by default).
+Overlapping marks take the cursor in a fixed order: waypoints and the death
+point, placements, shapes, the smallest footprint first.
+Names on the world map (maintainer 2026-10-11, after names crowded on
+`2aea267`): a mark's name shows while the pointer is over it (the mark the
+cursor order picks), for the selected one and for the one with a menu
+open, on a dark plate; the world map option "Always show names" (off by
+default) shows them all. Player names from the radar stay always shown.
+Layer switches (L-146, passed in game 2026-10-15): the top bar's
+Waypoints / Schematics / Shapes switches (`map.worldMapWaypoints`,
+`worldMapSchematics`, `worldMapShapes`, default on) filter the world map's
+marks through `layerShown` (`MapMarks.h`); a footprint whose layer turns
+off is no longer drawn but stays selectable from the side panel list.
+Side panel lists (L-204, passed in game 2026-10-15): `map.worldMapList` picks the
+listed layer (`listKind`, `MapMarks.h`); `State::allAreas` keeps the
+placements and shapes before the layer switches for the list and details.
+
+## World map zoom-out (L-187, 2026-10-14)
+
+Maintainer 2026-10-14: zoom out far enough that **everything explored fits on
+one screen**. It shows more of the already recorded world at once; it does
+not extend exploration, cache radius or data collection.
+
+Built (not checked in game): ten steps past 1/8 continue the same 1.5x/1.33x
+curve down to 1/256 GUI units per block (about 100,000 blocks across a
+400-unit screen). They open only as far as needed: the farthest step is the
+closest one at which the layer's explored bounds (whole regions) fit the map
+area between the bars and beside the side panel, and never nearer than 1/8,
+so small maps zoom as before. Image levels go to 8 (65,536 blocks per
+image). On joining a world the worker lists the saved region files once;
+images wait for that list, then skip tiles with no region under them without
+touching the disk. A coarse image is rebuilt from its previous pixels: only
+quarters whose regions changed are built again, so recording near the player
+rebuilds one path down rather than every region under a far view. The image
+LRU keeps coarse levels longer and also trims during a build. Not measured:
+time to build the first far view of a very large map, and memory/IO on it.
 
 ## Technical entry points
 
+- `MapMarks.h`, `MapLayers.cpp`: mark keys, hit order and the footprint
+  providers with their shared actions (L-139).
 - `src/features/map/Minimap.cpp`: bounded scanning, terrain colors, cave
   tiles, radar and runtime texture composition.
 - `MapStore.cpp`, `MapRegion.h`: region/image cache, disk worker and format.

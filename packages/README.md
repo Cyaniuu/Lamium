@@ -1,14 +1,12 @@
 # Client SDK recipe
 
 `levilamina-client-sdk.lua` prepares the SDK for Windows x64, LeviLamina Client
-26.51.5. Both the source archive and the official release archive have pinned
+26.20.7. Both the source archive and the official release archive have pinned
 SHA-256 checksums. The release DLL is used only to generate an import library;
 it is not copied into Lamium's package or installed into a game instance.
 
-The normal upstream package recipe builds the entire runtime from source. With
-this tag and MSVC 14.44 headers, that build fails in `ExecuteCommandEvent.cpp`
-because the defaulted `MinecraftCommands` destructor deletes an incomplete
-`CommandRegistry`. A pre-existing SDK cache can hide this failure.
+Lamium uses the release DLL only to generate an import library; it does not build
+the LeviLamina runtime from source.
 
 The local recipe copies the public API and Minecraft headers, overlaying the
 client headers in the same order as the upstream build. It generates a module
@@ -23,7 +21,7 @@ normal dependency and `bedrock_runtime.dll` as a delay-load dependency. The pack
 checker rejects additional DLLs and linker inputs in the distributable directory.
 
 Dependencies are explicitly listed, with Bedrock runtime data
-`v26.51.1-client.6` matching this release's source build. Package repository
+`v26.20.4-client.7` matching the pinned SDK headers. Package repository
 revisions and transitive versions remain in the project's dependency lock.
 Review the source headers, runtime exports, dependencies and checksums together
 when upgrading the SDK. Never substitute an unrelated local runtime DLL.

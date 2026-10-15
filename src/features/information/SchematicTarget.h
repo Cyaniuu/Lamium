@@ -25,6 +25,14 @@ inline StateName stateName(std::string const& key, std::string const& raw, std::
     if (!row || row->progress) return {key, raw};
     return {row->label, row->valueIsKey ? translate(row->value) : row->value, true};
 }
+// The card's row for a schematic ghost under the crosshair, in the ghost's
+// light blue (L-184). The header already names the block to place.
+inline TargetInfo::DetailRow ghostRow() {
+    TargetInfo::DetailRow row{"target.schematic", "target.schematicMissing", true};
+    row.kind = DetailKind::Schematic;
+    row.tone = Tone::Missing;
+    return row;
+}
 inline std::vector<TargetInfo::DetailRow> schematicRows(schematic::CellState state, std::string const& expectedName,
     std::string const& icon, std::vector<schematic::StateDifference> const& differences, std::string_view identifier,
     Translate const& translate) {
@@ -40,11 +48,26 @@ inline std::vector<TargetInfo::DetailRow> schematicRows(schematic::CellState sta
         r.icon = std::move(withIcon);
         rows.push_back(std::move(r));
     };
+    // First what is wrong, as "Schematic: <kind>", then what it should be.
+    auto status = [&](std::string kind, Tone tone) {
+        row("target.schematic", std::move(kind), true, tone);
+        rows.back().valueIsKey = true;
+    };
     switch (state) {
-    case CellState::Wrong: row("schematic.shouldBe", expectedName, true, Tone::Wrong, icon); break;
-    case CellState::Extra: row("schematic.shouldBe", translate("schematic.air"), true, Tone::Wrong); break;
-    case CellState::Missing: row("schematic.placeHere", expectedName, true, Tone::Missing, icon); break;
+    case CellState::Wrong:
+        status("target.schematicWrong", Tone::Wrong);
+        row("schematic.shouldBe", expectedName, true, Tone::Wrong, icon);
+        break;
+    case CellState::Extra:
+        status("target.schematicExtra", Tone::Wrong);
+        row("schematic.shouldBe", translate("schematic.air"), true, Tone::Wrong);
+        break;
+    case CellState::Missing:
+        status("target.schematicMissing", Tone::Missing);
+        row("schematic.placeHere", expectedName, true, Tone::Missing, icon);
+        break;
     case CellState::State:
+        status("target.schematicState", Tone::State);
         // One row per differing state: "<state>: <now> -> <should be>", the
         // arrow drawn by the card (the fonts lack U+2192).
         for (auto const& d : differences) {
@@ -53,7 +76,6 @@ inline std::vector<TargetInfo::DetailRow> schematicRows(schematic::CellState sta
             auto const& named = now.labelIsKey ? now : want;
             row(named.label, want.value, named.labelIsKey, Tone::State, {}, now.value);
         }
-        if (differences.empty()) row("target.schematic", translate("schematic.kind.state"), true, Tone::State);
         break;
     default: break;
     }

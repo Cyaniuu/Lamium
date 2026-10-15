@@ -3,6 +3,7 @@
 #include "features/interaction/PermanentSneak.h"
 #include "features/interaction/PeriodicInput.h"
 #include "features/inventory/FakeOffhand.h"
+#include "features/inventory/RepeatTrades.h"
 #include "input/Binding.h"
 #include "input/Actions.h"
 #include "app/Runtime.h"
@@ -17,11 +18,12 @@
 #include "ll/api/event/render/UIRenderEvent.h"
 #include "ll/api/memory/Hook.h"
 #include "ll/api/service/TargetedBedrock.h"
-#include "ll/api/thread/ClientThreadExecutor.h"
+#include "app/ClientTasks.h"
 #include "mc/client/game/ClientInstance.h"
 #include "mc/client/game/MinecraftGame.h"
 #include "mc/deps/input/HIDController.h"
 #include "mc/deps/input/MouseAction.h"
+#include <algorithm>
 #include <mutex>
 #include <stdexcept>
 #include <utility>
@@ -52,7 +54,7 @@ void post(Action action, bool press) {
     queued.emplace_back(action, press);
     if (flushScheduled) return;
     flushScheduled = true;
-    ll::thread::ClientThreadExecutor::getDefault().execute(flush);
+    clientTasks::post(flush);
 }
 HeldInputs held;
 ChordSet previous;
@@ -70,6 +72,7 @@ bool opensMenu(Action action) {
         || action == Action::SaveSchematicArea || action == Action::SchematicMenu;
 }
 void invalidate() {
+    inventory::repeatTrades::cancel();
     interaction::periodic::interrupt();
     inventory::fakeOffhand::rightChord(false);
     inventory::game::TransferSession::cancel();
@@ -105,12 +108,13 @@ bool process(Token token, bool down, bool cancelled, bool textEditing = false) {
         return false;
     }
     bool const gameplay = gameplayScreen(current->getScreenName());
+    bool const outside = outsideWorldMenu(current->getScreenName(), current->getLocalPlayer() != nullptr);
     auto& tracker = inventory::game::ScreenTracker::getInstance();
     bool const container = tracker.current() && !inventory::game::TextInputTracker::getInstance().isEditing(tracker.currentView());
     ChordSet allowed;
     bool const freeCamera = CameraSessions::instance().blocksPerspective();
     for (size_t i = 0; i < allowed.size(); ++i)
-        if (actionAllowed(static_cast<Action>(i), gameplay, container, freeCamera)) allowed[i] = previous[i];
+        if (actionAllowed(static_cast<Action>(i), gameplay, container, freeCamera, outside)) allowed[i] = previous[i];
     // A different consumer (notably Zoom's wheel adjustment) may own this
     // event. Preserve held inputs, but always observe key-up releases.
     auto result = dispatch.update(allowed, held.value(), down && !cancelled ? std::optional<Token>(token) : std::nullopt, fresh);
@@ -137,12 +141,20 @@ bool process(Token token, bool down, bool cancelled, bool textEditing = false) {
 }
 }
 void resetCustomInput() { invalidate(); }
+void queuePress(int action) { post(static_cast<Action>(action), true); }
 void startCustomInput() {
     if (installed) return;
     if (CustomInputFocusLost::hook(true) != 0) throw std::runtime_error("Could not install input focus hook");
     installed = true;
     auto& bus = ll::event::EventBus::getInstance();
     listeners[0] = bus.emplaceListener<ll::event::input::KeyInputEvent>([](auto& event) {
+        // Auto-repeat of a held key (Shift for Shift + right click) is not new input.
+        static std::vector<int> physical;
+        if (!event.isDown()) std::erase(physical, event.keyCode());
+        else if (std::ranges::find(physical, event.keyCode()) == physical.end()) {
+            physical.push_back(event.keyCode());
+            inventory::repeatTrades::cancel();
+        }
         bool consumed = process({Device::Key, event.keyCode()}, event.isDown(), event.isCancelled(),
             event.controller().mTextboxIsFocused || event.controller().mTextboxIsSelected);
         if (!event.isDown() && (event.keyCode() == 0x10 || event.keyCode() == 0x11
@@ -159,17 +171,22 @@ void startCustomInput() {
         Token token = wheel ? Token{Device::Wheel, event.buttonData() > 0 ? 1 : -1}
             : Token{Device::Mouse, button > MouseAction::ActionWheel ? button - 1 : button};
         bool down = wheel || event.buttonData() == MouseAction::DataDown;
+        if (down) inventory::repeatTrades::cancel();
         bool consumed = process(token, down, event.isCancelled());
         auto const& keys = held.value();
         bool shift = contains(keys, Token{Device::Key, 0x10}) || contains(keys, Token{Device::Key, 0xA0})
             || contains(keys, Token{Device::Key, 0xA1});
         bool control = contains(keys, Token{Device::Key, 0x11}) || contains(keys, Token{Device::Key, 0xA2})
             || contains(keys, Token{Device::Key, 0xA3});
+        bool alt = contains(keys, Token{Device::Key, 0x12}) || contains(keys, Token{Device::Key, 0xA4})
+            || contains(keys, Token{Device::Key, 0xA5});
         bool transfer = wheel
-            ? inventory::game::TransferSession::wheel(event.buttonData() > 0 ? 1 : -1, shift,
+            ? inventory::game::TransferSession::wheel(event.buttonData() > 0 ? 1 : -1, shift, control,
                                                        event.isCancelled() || consumed)
-            : inventory::game::TransferSession::mouseButton(button, down, shift, control,
-                                                             event.isCancelled() || consumed);
+            : inventory::game::TransferSession::mouseButton(button, down, shift, control, alt,
+                std::ranges::any_of(keys, [](Token key) {
+                    return key.device == Device::Key && inventory::game::TransferSession::dropKey(key.code);
+                }), event.isCancelled() || consumed);
         if ((consumed && down) || transfer) event.cancel();
     });
     listeners[2] = bus.emplaceListener<ll::event::BeforeUIRenderEvent>([](auto& event) { sync(event.uiRenderContext().mClient); });

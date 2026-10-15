@@ -43,6 +43,7 @@ struct TargetInfo {
     std::vector<DetailRow> details;
     struct BlockPosition { int x, y, z; };
     std::optional<BlockPosition> blockPosition = std::nullopt;
+    bool ghost = false; // A schematic ghost, not a real block: the name takes the ghost's color.
 };
 enum class StateKind { Integer, Text };
 // Max growth/age stage for common crops; unknown blocks show the value only.
@@ -119,7 +120,7 @@ inline std::optional<TargetInfo::DetailRow> interpretBlockState(std::string_view
 // A camera ray for detached views; without one the game's own hit is used.
 struct ViewRay { double x, y, z, dx, dy, dz; double reach; };
 std::optional<TargetInfo> collectTargetInfo(IClientInstance&, bool includeStates = false,
-                                            std::optional<ViewRay> ray = std::nullopt);
+                                            std::optional<ViewRay> ray = std::nullopt, bool includeSchematic = true);
 // Drops per-world icon lookups on world exit.
 void startTargetIcons();
 void stopTargetIcons();

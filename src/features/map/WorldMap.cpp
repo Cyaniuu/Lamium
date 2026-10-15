@@ -5,7 +5,8 @@
 #include "features/map/RadarFaces.h"
 #include "features/map/Minimap.h"
 #include "features/map/WaypointSession.h"
-#include "features/map/SchematicMarks.h"
+#include "app/SessionIds.h"
+#include "features/map/MapLayers.h"
 #include "features/map/WorldMapView.h"
 #include "features/map/SeedLink.h"
 #include "features/map/Teleport.h"
@@ -17,7 +18,9 @@
 #include "features/information/InfoHud.h"
 #include "app/Runtime.h"
 #include "ui/Localization.h"
+#include "ui/NumberInput.h"
 #include "ui/SearchQuery.h"
+#include "ui/ListViewWidgets.h"
 #include "ui/Widgets.h"
 #include "mc/client/game/IClientInstance.h"
 #include "mc/client/gui/GuiData.h"
@@ -84,7 +87,11 @@ struct Slot {
     unsigned version = 0;
     bool uploaded = false;
     double used = 0;
+    // A slot given another tile still shows the old tile's image for a few
+    // frames (the in-place update lands later): drawn from this frame on.
+    unsigned readyAt = 0;
 };
+unsigned tileFrame = 0;
 std::array<Slot, slotCount> slots;
 bool upload(IClientInstance& client, ResourceLocation const& location, std::vector<std::uint32_t> const& pixels, int side,
             bool replace) {
@@ -105,28 +112,42 @@ void unload(IClientInstance& client, ResourceLocation const& location) {
 
 enum class Target {
     None, Overworld, Nether, End, BandDown, BandUp, Center, Waypoints, Close, Menu,
+    LayerWaypoints, LayerSchematics, LayerShapes, // The layer switches (L-146).
     // The side panel: its background, header buttons, list and editor.
-    Panel, PanelAdd, PanelClose, Row, RowVisible, Name, Step, MoveHere, Swatch, Keep, Delete, OpenScreen
+    Panel, PanelAdd, PanelClose, Row, RowVisible, Name, Step, Coordinate, MoveHere, Swatch, Keep, Delete, OpenScreen,
+    PanelKind, PanelKindItem // The list's layer menu (L-204) and its items.
 };
 struct Hit {
     float x, y, w, h;
     Target target;
     int item = -1;
+    MarkKey mark{}; // List rows and their switches: the entry they stand for.
 };
-enum class MenuKind { Ground, Waypoint, Death };
+enum class MenuKind { Ground, Waypoint, Death, Placement, Shape };
 struct Menu {
     MenuKind kind;
     float x, y;    // Screen, where it was opened.
-    int index = -1; // Waypoint: into the set.
+    MarkKey mark{}; // Any but Ground: the mark it was opened on.
     int worldX = 0, worldY = 0, worldZ = 0;
     bool known = false; // Ground: the height came from the saved map.
     bool armed = false; // Delete pressed once.
 };
-struct Marker {
-    float x, y;
-    MenuKind kind;
-    int index;
-};
+MenuKind menuKind(MarkKey mark) {
+    switch (mark.layer) {
+    case MarkLayer::Death: return MenuKind::Death;
+    case MarkLayer::Placement: return MenuKind::Placement;
+    case MarkLayer::Shape: return MenuKind::Shape;
+    default: return MenuKind::Waypoint;
+    }
+}
+// The waypoint a key names, or null when it is gone (or not a waypoint).
+Waypoint const* waypointOf(WaypointSet const& set, MarkKey mark) {
+    if (mark.layer != MarkLayer::Waypoint) return nullptr;
+    int index = indexOfId(set.waypoints, mark.id);
+    return index < 0 ? nullptr : &set.waypoints[static_cast<size_t>(index)];
+}
+// The footprint a key names in this dimension, or null when it is gone.
+AreaMark const* areaOf(MarkKey mark);
 struct State {
     bool open = false;
     IClientInstance* client = nullptr;
@@ -136,23 +157,31 @@ struct State {
         float x, y;
         double centerX, centerZ;
         bool moved = false;
-        std::optional<Marker> marker; // Pressed on a marker: a click selects it.
+        std::optional<MarkKey> marker; // Pressed on a mark: a click selects it.
     };
     std::optional<Drag> drag;
     std::optional<Menu> menu;
     std::vector<Hit> hits;
-    std::vector<Marker> markers;
+    std::vector<ScreenMark> markers; // every mark as last drawn, for the cursor
+    std::vector<AreaMark> areas;     // placements and shapes drawn in this dimension (L-139)
+    std::vector<AreaMark> allAreas;  // the same before the layer switches, for the side panel (L-204)
+    bool kindMenu = false;           // The side panel's layer menu is open.
+    float kindX = 0, kindY = 0, kindW = 0;
+    std::array<int, 3> kindCounts{};
     glm::vec2 pointer{};
     std::string notice;
     double noticeAt = 0, openedAt = 0;
     float top = rowHeight; // The top bar, one or two rows.
     double pixelsPerUnit = 1; // Screen pixels per GUI unit, as last drawn.
     float panelWidth = 0;  // The side panel as last drawn; 0 when closed.
-    int selected = -2;     // Side panel: -2 none, -1 the death point, else into the set.
+    std::optional<MarkKey> selected; // Side panel: the death point, a waypoint, a placement or a shape.
     int listFirst = 0;
     bool deleteArmed = false;
     bool editingName = false;
     ui::SearchQuery name;
+    // A coordinate typed into its field (0-2 for X, Y, Z; -1 when none).
+    int editingAxis = -1;
+    ui::NumberInput coordinate;
     glm::vec2 namePosition{};
     float listTop = 0, listBottom = 0;
     float arrowAngle = NAN;
@@ -229,20 +258,50 @@ void act(Target target) {
     default: break;
     }
 }
+LayerSwitches layers() {
+    auto const& map = Runtime::instance().preferences().map;
+    return {map.worldMapWaypoints, map.worldMapSchematics, map.worldMapShapes};
+}
+void toggleLayer(Target target) {
+    auto value = Runtime::instance().preferences();
+    bool& on = target == Target::LayerWaypoints ? value.map.worldMapWaypoints
+        : target == Target::LayerSchematics ? value.map.worldMapSchematics : value.map.worldMapShapes;
+    on = !on;
+    if (!Runtime::instance().save(value)) log("could not save the layer switches");
+}
 bool panelOpen() { return Runtime::instance().preferences().map.worldMapPanel; }
+int shownList() { return clampListKind(Runtime::instance().preferences().map.worldMapList); }
+void setShownList(int kind) {
+    auto value = Runtime::instance().preferences();
+    if (value.map.worldMapList == kind) return;
+    value.map.worldMapList = kind;
+    state.listFirst = 0;
+    if (!Runtime::instance().save(value)) log("could not save the side panel list");
+}
 void setPanelOpen(bool open) {
     auto value = Runtime::instance().preferences();
     if (value.map.worldMapPanel == open) return;
     value.map.worldMapPanel = open;
     if (!Runtime::instance().save(value)) log("could not save the side panel state");
 }
+bool changeSelected(std::function<void(Waypoint&)> const& apply);
+void commitCoordinate() {
+    int axis = std::exchange(state.editingAxis, -1);
+    if (axis < 0) return;
+    auto value = state.coordinate.parsedPrecise(-coordinateLimit, coordinateLimit, true);
+    if (!value) return; // Incomplete or out of range: the waypoint keeps its place.
+    changeSelected([&](Waypoint& w) { (axis == 0 ? w.x : axis == 1 ? w.y : w.z) = static_cast<int>(*value); });
+}
+// Ends whatever is being typed in the side panel, keeping it.
 void commitName() {
+    commitCoordinate();
     if (!std::exchange(state.editingName, false)) return;
     auto text = state.name.value();
-    int index = state.selected;
-    if (text.find_first_not_of(' ') == std::string::npos || index < 0) return;
+    auto mark = state.selected;
+    if (text.find_first_not_of(' ') == std::string::npos || !mark || mark->layer != MarkLayer::Waypoint) return;
     if (!waypoints::change([&](WaypointSet& set) {
-            if (index >= static_cast<int>(set.waypoints.size())) return false;
+            int index = indexOfId(set.waypoints, mark->id);
+            if (index < 0) return false;
             set.waypoints[static_cast<size_t>(index)].name = text;
             return true;
         })) say(ui::translated("waypoint.saveError"));
@@ -252,31 +311,68 @@ void focus(double x, double z) {
     state.view.centerX = x + state.panelWidth / 2 / state.view.scale();
     state.view.centerZ = z;
 }
-void select(int index, bool move) {
+void select(std::optional<MarkKey> mark, bool move) {
     commitName();
-    state.selected = index;
+    state.selected = mark;
     state.deleteArmed = false;
-    if (!move) return;
+    if (mark) setShownList(listKind(mark->layer));
+    if (!move || !mark) return;
     auto set = waypoints::current();
-    if (index == -1 && set.death) focus(set.death->x + .5, set.death->z + .5);
-    else if (index >= 0 && index < static_cast<int>(set.waypoints.size())) {
-        auto const& w = set.waypoints[static_cast<size_t>(index)];
-        if (auto at = shownPosition(w.x, w.y, w.z, w.dimension, state.dimension, true)) focus(at->x, at->z);
-    }
+    if (mark->layer == MarkLayer::Death && set.death) focus(set.death->x + .5, set.death->z + .5);
+    else if (auto const* w = waypointOf(set, *mark)) {
+        if (auto at = shownPosition(w->x, w->y, w->z, w->dimension, state.dimension, true)) focus(at->x, at->z);
+    } else if (auto const* area = areaOf(*mark))
+        focus((area->area.x0 + area->area.x1) / 2.0, (area->area.z0 + area->area.z1) / 2.0);
 }
-bool changeSelected(std::function<void(Waypoint&)> const& apply) {
-    int index = state.selected;
+AreaMark const* areaOf(MarkKey mark) {
+    for (auto const& area : state.allAreas) if (area.key == mark) return &area;
+    return nullptr;
+}
+// A change to one waypoint, found by its id when the change runs: an
+// entry added or removed meanwhile cannot redirect it.
+bool changeWaypoint(MarkKey mark, std::function<void(Waypoint&)> const& apply) {
     bool saved = waypoints::change([&](WaypointSet& set) {
-        if (index < 0 || index >= static_cast<int>(set.waypoints.size())) return false;
+        int index = mark.layer == MarkLayer::Waypoint ? indexOfId(set.waypoints, mark.id) : -1;
+        if (index < 0) return false;
         apply(set.waypoints[static_cast<size_t>(index)]);
         return true;
     });
     if (!saved) say(ui::translated("waypoint.saveError"));
     return saved;
 }
+bool changeSelected(std::function<void(Waypoint&)> const& apply) {
+    return state.selected && changeWaypoint(*state.selected, apply);
+}
+// Keeps the death point as an ordinary waypoint; its new key, if saved.
+std::optional<MarkKey> keepDeath(WaypointSet const& set) {
+    if (!set.death) return std::nullopt;
+    auto death = *set.death;
+    Waypoint w{ui::translated("waypoint.deathName"), nextColor(set.lastColor), death.x, death.y, death.z, death.dimension, true};
+    bool saved = waypoints::change([&](WaypointSet& s) {
+        s.waypoints.push_back(w);
+        s.lastColor = w.color;
+        s.death.reset();
+        return true;
+    });
+    if (!saved) { say(ui::translated("waypoint.saveError")); return std::nullopt; }
+    auto now = waypoints::current();
+    return now.waypoints.empty() ? std::nullopt : std::optional(waypointKey(now.waypoints.back().id));
+}
+// Deletes the death point or a waypoint by its key.
+bool deleteMark(MarkKey mark) {
+    return waypoints::change([&](WaypointSet& s) {
+        if (mark.layer == MarkLayer::Death) { s.death.reset(); return true; }
+        int index = indexOfId(s.waypoints, mark.id);
+        if (mark.layer != MarkLayer::Waypoint || index < 0) return false;
+        s.waypoints.erase(s.waypoints.begin() + index);
+        return true;
+    });
+}
 Request panelAction(Hit const& hit) {
     Request request;
-    if (hit.target != Target::Name) commitName();
+    // A click on the field being typed in keeps typing (L-172 moves the caret).
+    bool sameField = (hit.target == Target::Name && state.editingName) || (hit.target == Target::Coordinate && hit.item == state.editingAxis);
+    if (!sameField) commitName();
     if (hit.target != Target::Delete) state.deleteArmed = false;
     auto set = waypoints::current();
     switch (hit.target) {
@@ -289,26 +385,32 @@ Request panelAction(Hit const& hit) {
         w.dimension = spot->dimension;
         w.color = nextColor(set.lastColor);
         w.name = defaultWaypointName(set.waypoints, [](int n) { return ui::translated("waypoint.defaultName", n); });
-        if (waypoints::add(w)) {
+        if (auto id = waypoints::add(w)) {
             showDimension(w.dimension);
-            select(static_cast<int>(set.waypoints.size()), false);
+            select(waypointKey(id), false);
         } else say(ui::translated("waypoint.saveError"));
         break;
     }
-    case Target::Row: select(hit.item, true); break;
-    case Target::RowVisible: {
-        int keep = state.selected;
-        state.selected = hit.item;
-        changeSelected([](Waypoint& w) { w.visible = !w.visible; });
-        state.selected = keep;
+    case Target::Row:
+        if (hit.mark.layer == MarkLayer::Placement) selectPlacement(hit.mark);
+        select(hit.mark, true);
         break;
-    }
+    case Target::RowVisible:
+        if (pointLayer(hit.mark.layer)) changeWaypoint(hit.mark, [](Waypoint& w) { w.visible = !w.visible; });
+        else toggleVisible(hit.mark);
+        break;
     case Target::Name:
-        if (state.selected >= 0 && state.selected < static_cast<int>(set.waypoints.size()) && !state.editingName) {
+        if (auto const* w = state.selected ? waypointOf(set, *state.selected) : nullptr; w && !state.editingName) {
             state.editingName = true;
             state.name.clear();
-            state.name.append(set.waypoints[static_cast<size_t>(state.selected)].name);
+            state.name.append(w->name);
             state.name.selectAll();
+        }
+        break;
+    case Target::Coordinate:
+        if (auto const* w = state.selected ? waypointOf(set, *state.selected) : nullptr; w && state.editingAxis != hit.item) {
+            state.editingAxis = hit.item;
+            state.coordinate.begin(static_cast<float>(hit.item == 0 ? w->x : hit.item == 1 ? w->y : w->z));
         }
         break;
     case Target::Step: {
@@ -328,36 +430,20 @@ Request panelAction(Hit const& hit) {
         break;
     case Target::Swatch: changeSelected([&](Waypoint& w) { w.color = clampColor(hit.item); }); break;
     case Target::Keep:
-        if (set.death) {
-            auto death = *set.death;
-            Waypoint w{ui::translated("waypoint.deathName"), nextColor(set.lastColor), death.x, death.y, death.z,
-                       death.dimension, true};
-            if (waypoints::change([&](WaypointSet& s) {
-                    s.waypoints.push_back(w);
-                    s.lastColor = w.color;
-                    s.death.reset();
-                    return true;
-                })) select(static_cast<int>(set.waypoints.size()), false);
-            else say(ui::translated("waypoint.saveError"));
-        }
+        if (auto kept = keepDeath(set)) select(kept, false);
         break;
     case Target::Delete: {
         if (!state.deleteArmed) { state.deleteArmed = true; break; }
         state.deleteArmed = false;
-        int index = state.selected;
-        bool saved = waypoints::change([&](WaypointSet& s) {
-            if (index == -1) { s.death.reset(); return true; }
-            if (index < 0 || index >= static_cast<int>(s.waypoints.size())) return false;
-            s.waypoints.erase(s.waypoints.begin() + index);
-            return true;
-        });
-        if (!saved) say(ui::translated("waypoint.saveError"));
-        else state.selected = -2;
+        if (!state.selected) break;
+        if (!deleteMark(*state.selected)) say(ui::translated("waypoint.saveError"));
+        else state.selected.reset();
         break;
     }
     case Target::OpenScreen:
-        request.kind = Request::Kind::OpenWaypoints;
-        request.index = state.selected;
+        request.kind = !state.selected || pointLayer(state.selected->layer) ? Request::Kind::OpenWaypoints
+            : state.selected->layer == MarkLayer::Placement ? Request::Kind::OpenSchematic : Request::Kind::OpenShape;
+        request.mark = state.selected;
         break;
     default: break;
     }
@@ -391,15 +477,15 @@ void copySeed() {
 struct TeleportTarget { int x, y, z; };
 std::optional<TeleportTarget> teleportTarget(Menu const& menu, WaypointSet const& set) {
     auto* player = state.client ? state.client->getLocalPlayer() : nullptr;
-    if (!player) return std::nullopt;
+    if (!player || menu.kind == MenuKind::Placement || menu.kind == MenuKind::Shape) return std::nullopt;
     int dimension = state.dimension, x = menu.worldX, y = menu.worldY, z = menu.worldZ;
     if (menu.kind == MenuKind::Death) {
         if (!set.death) return std::nullopt;
         dimension = set.death->dimension; x = set.death->x; y = set.death->y; z = set.death->z;
     } else if (menu.kind == MenuKind::Waypoint) {
-        if (menu.index < 0 || menu.index >= static_cast<int>(set.waypoints.size())) return std::nullopt;
-        auto const& w = set.waypoints[static_cast<size_t>(menu.index)];
-        dimension = w.dimension; x = w.x; y = w.y; z = w.z;
+        auto const* w = waypointOf(set, menu.mark);
+        if (!w) return std::nullopt;
+        dimension = w->dimension; x = w->x; y = w->y; z = w->z;
     }
     auto& level = player->getLevel();
     bool cheats = level.getLevelData().mCheatsEnabled, commands = level.hasCommandsEnabled();
@@ -443,9 +529,14 @@ std::vector<std::string> menuItems(Menu const& menu, WaypointSet const& set) {
         }
     } else if (menu.kind == MenuKind::Death) {
         items = {ui::translated("waypoint.keep"), ui::translated(menu.armed ? "worldMap.deleteArmed" : "worldMap.delete")};
+    } else if (menu.kind == MenuKind::Placement || menu.kind == MenuKind::Shape) {
+        auto const* area = areaOf(menu.mark);
+        auto visibility = ui::translated(area && area->visible ? "worldMap.hide" : "worldMap.show");
+        if (menu.kind == MenuKind::Placement) items = {ui::translated("worldMap.select"), visibility, ui::translated("worldMap.openPlaced")};
+        else items = {visibility, ui::translated("worldMap.openShapes")};
     } else {
-        bool visible = menu.index >= 0 && menu.index < static_cast<int>(set.waypoints.size())
-            && set.waypoints[static_cast<size_t>(menu.index)].visible;
+        auto const* w = waypointOf(set, menu.mark);
+        bool visible = w && w->visible;
         items = {ui::translated("worldMap.edit"), ui::translated(visible ? "worldMap.hide" : "worldMap.show"),
                  ui::translated(menu.armed ? "worldMap.deleteArmed" : "worldMap.delete")};
     }
@@ -479,19 +570,26 @@ Request chooseMenu(int item) {
         d.name = defaultWaypointName(set.waypoints, [](int n) { return ui::translated("waypoint.defaultName", n); });
         return request;
     }
+    if (menu.kind == MenuKind::Placement || menu.kind == MenuKind::Shape) {
+        state.menu.reset();
+        if (!areaOf(menu.mark)) return request; // Gone meanwhile: nothing to act on.
+        int action = menu.kind == MenuKind::Shape ? item + 1 : item; // 0 select, 1 show/hide, 2 open
+        if (action == 0) {
+            selectPlacement(menu.mark);
+            setPanelOpen(true);
+            select(menu.mark, false);
+        } else if (action == 1) {
+            toggleVisible(menu.mark);
+        } else {
+            request.kind = menu.kind == MenuKind::Placement ? Request::Kind::OpenSchematic : Request::Kind::OpenShape;
+            request.mark = menu.mark;
+        }
+        return request;
+    }
     if (menu.kind == MenuKind::Death) {
         if (item == 0 && set.death) {
             state.menu.reset();
-            auto death = *set.death;
-            Waypoint w{ui::translated("waypoint.deathName"), nextColor(set.lastColor), death.x, death.y, death.z,
-                       death.dimension, true};
-            bool saved = waypoints::change([&](WaypointSet& s) {
-                s.waypoints.push_back(w);
-                s.lastColor = w.color;
-                s.death.reset();
-                return true;
-            });
-            say(ui::translated(saved ? "waypoint.added" : "waypoint.saveError", w.name));
+            if (keepDeath(set)) say(ui::translated("waypoint.added", ui::translated("waypoint.deathName")));
         } else if (item == 1) {
             if (!menu.armed) { state.menu->armed = true; return request; }
             state.menu.reset();
@@ -500,29 +598,20 @@ Request chooseMenu(int item) {
         }
         return request;
     }
-    int index = menu.index;
-    if (index < 0 || index >= static_cast<int>(set.waypoints.size())) { state.menu.reset(); return request; }
-    auto name = set.waypoints[static_cast<size_t>(index)].name;
+    auto const* w = waypointOf(set, menu.mark);
+    if (!w) { state.menu.reset(); return request; }
+    auto name = w->name;
     if (item == 0) {
         state.menu.reset();
         setPanelOpen(true);
-        select(index, false);
+        select(menu.mark, false);
     } else if (item == 1) {
         state.menu.reset();
-        if (!waypoints::change([&](WaypointSet& s) {
-                if (index >= static_cast<int>(s.waypoints.size())) return false;
-                auto& w = s.waypoints[static_cast<size_t>(index)];
-                w.visible = !w.visible;
-                return true;
-            })) say(ui::translated("waypoint.saveError"));
+        changeWaypoint(menu.mark, [](Waypoint& v) { v.visible = !v.visible; });
     } else if (item == 2) {
         if (!menu.armed) { state.menu->armed = true; return request; }
         state.menu.reset();
-        bool saved = waypoints::change([&](WaypointSet& s) {
-            if (index >= static_cast<int>(s.waypoints.size())) return false;
-            s.waypoints.erase(s.waypoints.begin() + index);
-            return true;
-        });
+        bool saved = deleteMark(menu.mark);
         say(ui::translated(saved ? "worldMap.deleted" : "waypoint.saveError", name));
     }
     return request;
@@ -533,18 +622,10 @@ Hit const* hitAt(float x, float y) {
         if (x >= it->x && y >= it->y && x < it->x + it->w && y < it->y + it->h) return &*it;
     return nullptr;
 }
-std::optional<Marker> markerAt(float x, float y) {
-    std::optional<Marker> best;
-    float bestDistance = 6;
-    for (auto const& m : state.markers) {
-        float d = std::hypot(m.x - x, m.y - y);
-        if (d < bestDistance) { bestDistance = d; best = m; }
-    }
-    return best;
-}
+std::optional<MarkKey> markerAt(float x, float y) { return markAt(state.markers, x, y); }
 void openMenu(float x, float y) {
-    if (auto marker = markerAt(x, y)) {
-        state.menu = Menu{marker->kind, x, y, marker->index};
+    if (auto mark = markerAt(x, y)) {
+        state.menu = Menu{menuKind(*mark), x, y, *mark};
         return;
     }
     int wx = blockFloor(state.view.worldX(x)), wz = blockFloor(state.view.worldZ(y));
@@ -585,6 +666,8 @@ void cross(MinecraftUIRenderContext& context, float cx, float cy) {
 }
 void smallLabel(MinecraftUIRenderContext& context, float cx, float y, std::string const& text, Rgb color) {
     float scale = .75f, w = ui::textWidthScaled(context, text, scale);
+    // A dark plate keeps small names readable on bright terrain (sand, snow).
+    if (!text.empty()) ui::fill(context, std::round(cx - w / 2) - 2, y - 1, std::round(w) + 4, 10 * scale + 2, Rgb{0, 0, 0}, .5f);
     ui::labelScaled(context, cx - w / 2, y, w + 2, text, scale, color, ui::Align::Left, true);
 }
 float button(MinecraftUIRenderContext& context, float x, float y, std::string const& text, Target target, bool on,
@@ -609,6 +692,11 @@ void drawTiles(MinecraftUIRenderContext& context, glm::vec2 size, double pixelsP
     store::want(layer, tiles);
     double time = now();
     int budget = time - state.openedAt < 1 ? uploadsWhileOpening : uploadsPerFrame;
+    ++tileFrame;
+    auto ready = [&](int index) {
+        auto const& slot = slots[static_cast<size_t>(index)];
+        return slot.uploaded && tileFrame >= slot.readyAt;
+    };
     std::vector<bool> usedNow(slotCount, false);
     auto findSlot = [&](TileKey tile) -> int {
         for (int i = 0; i < slotCount; ++i)
@@ -641,7 +729,8 @@ void drawTiles(MinecraftUIRenderContext& context, glm::vec2 size, double pixelsP
                 double oldest = INFINITY;
                 for (int i = 0; i < slotCount; ++i) {
                     auto const& s = slots[static_cast<size_t>(i)];
-                    if (usedNow[static_cast<size_t>(i)]) continue;
+                    // Shown this frame, or still waiting for its image to land.
+                    if (usedNow[static_cast<size_t>(i)] || (s.uploaded && tileFrame < s.readyAt)) continue;
                     double age = s.tile ? s.used : -INFINITY;
                     if (age < oldest) { oldest = age; index = i; }
                 }
@@ -650,7 +739,12 @@ void drawTiles(MinecraftUIRenderContext& context, glm::vec2 size, double pixelsP
                 auto& slot = slots[static_cast<size_t>(index)];
                 --budget;
                 try {
+                    bool moved = !slot.tile || slot.tile->first != layer || slot.tile->second != tile;
                     if (upload(client, slotLocation(index), *image->pixels, regionBlocks, slot.uploaded)) {
+                        if (moved) slot.readyAt = tileFrame + 3;
+                        // Newest now, so it is not taken again before it shows.
+                        slot.used = time;
+                        usedNow[static_cast<size_t>(index)] = true;
                         slot.uploaded = true;
                         slot.tile = std::pair{layer, tile};
                         slot.version = image->version;
@@ -658,17 +752,17 @@ void drawTiles(MinecraftUIRenderContext& context, glm::vec2 size, double pixelsP
                 } catch (...) { slot = Slot{}; }
             }
         }
-        if (index >= 0 && slots[static_cast<size_t>(index)].uploaded && slots[static_cast<size_t>(index)].tile
+        if (index >= 0 && ready(index) && slots[static_cast<size_t>(index)].tile
             && slots[static_cast<size_t>(index)].tile->second == tile) {
             drawSlot(index, rectOf(tile), 0, 0, 1);
             ++shown;
             continue;
         }
         // Not ready: a coarser image already on the GPU stands in.
-        for (int up = 1; up <= 2; ++up) {
+        for (int up = 1; tile.lod + up <= maxLod; ++up) {
             TileKey parent{tile.lod + up, tile.x >> up, tile.z >> up};
             int at = findSlot(parent);
-            if (at < 0 || !slots[static_cast<size_t>(at)].uploaded) continue;
+            if (at < 0 || !ready(at)) continue;
             float span = 1.f / static_cast<float>(1 << up);
             drawSlot(at, rectOf(tile), (tile.x - (parent.x << up)) * span, (tile.z - (parent.z << up)) * span, span);
             break;
@@ -677,12 +771,26 @@ void drawTiles(MinecraftUIRenderContext& context, glm::vec2 size, double pixelsP
     (void)size;
 }
 
-// Schematic placements (L-93): footprint, faint fill and name, under the
-// other markers. Hidden ones stay faint, like hidden waypoints.
-void drawPlacements(MinecraftUIRenderContext& context) {
+// A mark's name, drawn after every mark when it is wanted (drawNames).
+struct MarkName {
+    MarkKey key;
+    float cx, y;
+    std::string text;
+    Rgb color;
+};
+// Footprints (L-139): shapes, then schematic placements over them, each a
+// faint fill, a frame and its name, under the other markers. Hidden ones
+// stay faint, like hidden waypoints; the selected one is framed white.
+void drawAreas(MinecraftUIRenderContext& context, std::vector<MarkName>& names) {
     auto& view = state.view;
-    auto color = rgb(placementColor);
-    for (auto const& mark : placementMarks(state.dimension)) {
+    auto on = layers();
+    state.allAreas = shapeMarks(state.dimension);
+    auto placements = placementMarks(state.dimension);
+    state.allAreas.insert(state.allAreas.end(), placements.begin(), placements.end());
+    state.areas.clear();
+    for (auto const& mark : state.allAreas)
+        if (layerShown(on, mark.key.layer)) state.areas.push_back(mark);
+    for (auto const& mark : state.areas) {
         auto const& a = mark.area;
         float x0 = std::round(static_cast<float>(view.screenX(a.x0))), y0 = std::round(static_cast<float>(view.screenY(a.z0)));
         float x1 = std::round(static_cast<float>(view.screenX(a.x1))), y1 = std::round(static_cast<float>(view.screenY(a.z1)));
@@ -691,18 +799,41 @@ void drawPlacements(MinecraftUIRenderContext& context) {
         float w = std::max(x1 - x0, 4.f), h = std::max(y1 - y0, 4.f);
         x0 = cx - w / 2; y0 = cy - h / 2;
         if (x0 + w < -20 || y0 + h < -20 || x0 > view.width + 20 || y0 > view.height + 20) continue;
+        auto color = rgb(mark.color);
+        bool chosen = mark.selected || (state.panelWidth > 0 && state.selected == mark.key);
         float opacity = mark.visible ? 1.f : .35f;
         ui::fill(context, x0, y0, w, h, color, .16f * opacity);
         ui::frame(context, x0 - 1, y0 - 1, w + 2, h + 2, Rgb{0, 0, 0}, .6f * opacity);
-        ui::frame(context, x0, y0, w, h, mark.selected ? ui::palette::white : color, opacity);
+        ui::frame(context, x0, y0, w, h, chosen ? ui::palette::white : color, opacity);
         auto name = mark.visible ? mark.name : mark.name + " " + ui::translated("worldMap.hidden");
-        smallLabel(context, cx, y0 + h + 2, name, mark.visible ? ui::palette::text : ui::palette::faint);
+        names.push_back({mark.key, cx, y0 + h + 2, std::move(name), mark.visible ? ui::palette::text : ui::palette::faint});
+        state.markers.push_back({mark.key, x0, y0, x0 + w, y0 + h});
+    }
+}
+// Many names overlap where marks crowd, so by default a name shows only for
+// the mark under the pointer, the selected one and the one with a menu open.
+void drawNames(MinecraftUIRenderContext& context, std::vector<MarkName> const& names, bool always) {
+    auto p = state.pointer;
+    bool onMap = p.y > state.top && p.y < state.view.height - bottomHeight && p.x < state.view.width - state.panelWidth
+        && !(state.drag && state.drag->moved);
+    auto hovered = onMap ? markerAt(p.x, p.y) : std::nullopt;
+    for (auto const& name : names) {
+        bool wanted = always || name.key == hovered || (state.panelWidth > 0 && state.selected == name.key)
+            || (state.menu && state.menu->kind != MenuKind::Ground && state.menu->mark == name.key);
+        if (wanted) smallLabel(context, name.cx, name.y, name.text, name.color);
     }
 }
 void drawMarkers(MinecraftUIRenderContext& context, Settings::Map const& settings) {
     auto& view = state.view;
     state.markers.clear();
-    drawPlacements(context);
+    std::vector<MarkName> names;
+    drawAreas(context, names);
+    // A footprint whose provider turned off, or whose entry is gone, takes
+    // its selection and menu with it; one only switched off on the map stays
+    // selectable from the side panel (L-204).
+    if (state.selected && !pointLayer(state.selected->layer) && !areaOf(*state.selected)) state.selected.reset();
+    if (state.menu && (state.menu->kind == MenuKind::Placement || state.menu->kind == MenuKind::Shape) && !areaOf(state.menu->mark))
+        state.menu.reset();
     auto spot = playerSpot();
     if (settings.radar && settings.radarPlayers && spot && spot->dimension == state.dimension) {
         faces::frame();
@@ -721,7 +852,7 @@ void drawMarkers(MinecraftUIRenderContext& context, Settings::Map const& setting
                 smallLabel(context, x, y + (head ? 6 : 3), dot.name, dot.distant ? ui::palette::dim : Rgb{.59f, .88f, 1.f});
         }
     }
-    if (settings.waypoints) {
+    if (settings.waypoints && layers().waypoints) {
         auto set = waypoints::current();
         for (size_t i = 0; i < set.waypoints.size(); ++i) {
             auto const& w = set.waypoints[i];
@@ -731,21 +862,22 @@ void drawMarkers(MinecraftUIRenderContext& context, Settings::Map const& setting
             if (x < -20 || y < -20 || x > view.width + 20 || y > view.height + 20) continue;
             // Hidden ones stay faint here so they can be shown again.
             float opacity = w.visible ? 1.f : .35f;
-            if (state.panelWidth > 0 && state.selected == static_cast<int>(i)) diamond(context, x, y, 13, ui::palette::white, 1);
+            if (state.panelWidth > 0 && state.selected == waypointKey(w.id)) diamond(context, x, y, 13, ui::palette::white, 1);
             diamond(context, x, y, 9, rgb(waypointColors[static_cast<size_t>(clampColor(w.color))]), opacity);
             auto name = w.visible ? w.name : w.name + " " + ui::translated("worldMap.hidden");
-            smallLabel(context, x, y + 6, name, w.visible ? ui::palette::text : ui::palette::faint);
-            state.markers.push_back({x, y, MenuKind::Waypoint, static_cast<int>(i)});
+            names.push_back({waypointKey(w.id), x, y + 6, std::move(name), w.visible ? ui::palette::text : ui::palette::faint});
+            state.markers.push_back({waypointKey(w.id), x, y, x, y});
         }
         if (set.death && set.death->dimension == state.dimension) {
             float x = std::round(static_cast<float>(view.screenX(set.death->x + .5)));
             float y = std::round(static_cast<float>(view.screenY(set.death->z + .5)));
-            if (state.panelWidth > 0 && state.selected == -1) ui::frame(context, x - 5, y - 5, 10, 10, ui::palette::white);
+            if (state.panelWidth > 0 && state.selected == deathKey) ui::frame(context, x - 5, y - 5, 10, 10, ui::palette::white);
             cross(context, x, y);
-            if (hovering(x - 5, y - 5, 10, 10)) smallLabel(context, x, y + 5, ui::translated("waypoint.death"), ui::palette::text);
-            state.markers.push_back({x, y, MenuKind::Death, -1});
+            names.push_back({deathKey, x, y + 5, ui::translated("waypoint.death"), ui::palette::text});
+            state.markers.push_back({deathKey, x, y, x, y});
         }
     }
+    drawNames(context, names, settings.worldMapNames);
     if (spot && spot->dimension == state.dimension) {
         // The arrow is drawn into a small texture, uploaded again when it turns.
         constexpr int side = 32;
@@ -767,6 +899,17 @@ void drawMarkers(MinecraftUIRenderContext& context, Settings::Map const& setting
     }
 }
 
+// A footprint as the map draws it, small: a faint fill in its frame.
+void footprintIcon(MinecraftUIRenderContext& context, float x, float cy, Rgb color, float alpha) {
+    ui::fill(context, x, cy - 3, 7, 6, color, .16f * alpha);
+    ui::frame(context, x, cy - 3, 7, 6, color, alpha);
+}
+constexpr std::uint32_t shapeSymbolColor = packColor(242, 204, 61);
+// A layer's symbol in the top bar and the list menu.
+void layerSymbol(MinecraftUIRenderContext& context, int kind, float x, float cy, float alpha) {
+    if (kind == 0) diamond(context, x + 4, cy, 7, rgb(waypointColors[0]), alpha);
+    else footprintIcon(context, x, cy, rgb(kind == 1 ? placementColor : shapeSymbolColor), alpha);
+}
 void drawBars(MinecraftUIRenderContext& context, glm::vec2 size, MapLayer layer, size_t pending, bool recording) {
     auto spot = playerSpot();
     float inset = ui::boxTextInset();
@@ -781,13 +924,31 @@ void drawBars(MinecraftUIRenderContext& context, glm::vec2 size, MapLayer layer,
         dimTexts[static_cast<size_t>(d)] = (spot && spot->dimension == d ? "* " : "") + ui::translated(dims[static_cast<size_t>(d)].second);
         dimsW += widthOf(dimTexts[static_cast<size_t>(d)]) - 1;
     }
-    auto centerText = ui::translated("worldMap.center"), waypointsText = ui::translated("nav.waypoints");
+    auto centerText = ui::translated("worldMap.center"), waypointsText = ui::translated("worldMap.list");
     float closeW = 13, rightW = widthOf(centerText) + 3 + widthOf(waypointsText) + 3 + closeW + 3;
     auto layerText = ui::translated("worldMap.layer", layer.band * bandHeight, layer.band * bandHeight + bandHeight - 1);
     float layerW = state.dimension == 1 ? 10 + ui::textWidth(context, layerText) + 10 + 10 + 8 : 0;
+    // Layer switches (L-146): the mark's own symbol and the layer's name.
+    constexpr std::array<std::pair<Target, std::string_view>, 3> switches{{
+        {Target::LayerWaypoints, "nav.waypoints"}, {Target::LayerSchematics, "nav.schematics"}, {Target::LayerShapes, "nav.shapes"}}};
+    auto shownLayers = layers();
+    std::array<bool, 3> switchOn{shownLayers.waypoints, shownLayers.schematics, shownLayers.shapes};
+    std::array<std::string, 3> switchTexts;
+    float switchesW = 1;
+    for (size_t i = 0; i < 3; ++i) {
+        switchTexts[i] = ui::translated(switches[i].second);
+        switchesW += 12 + widthOf(switchTexts[i]) - 1;
+    }
     float brandW = ui::textWidth(context, "Lamium") + 6;
-    bool oneRow = 4 + brandW + dimsW + layerW + rightW + 4 <= size.x;
-    state.top = oneRow || state.dimension != 1 ? rowHeight : 2 * rowHeight;
+    // Too narrow for the named switches: their symbols alone, named in the
+    // bottom bar on hover; narrower still, the Nether layer and the named
+    // switches move to a second row.
+    constexpr float iconW = 15;
+    auto fits = [&](float width) { return 4 + brandW + dimsW + layerW + width + 8 + rightW + 4 <= size.x; };
+    bool const compact = !fits(switchesW) && fits(1 + 3 * (iconW - 1));
+    if (compact) switchesW = 1 + 3 * (iconW - 1);
+    bool oneRow = fits(switchesW);
+    state.top = oneRow ? rowHeight : 2 * rowHeight;
     ui::fill(context, 0, 0, size.x, state.top, ui::palette::panel, .85f);
     ui::fill(context, 0, state.top - 1, size.x, 1, ui::palette::white, .14f);
     float x = 4, y = 2;
@@ -808,8 +969,8 @@ void drawBars(MinecraftUIRenderContext& context, glm::vec2 size, MapLayer layer,
                 hovering(bx, y, widthOf(text), buttonHeight));
         }
     x += 8;
+    if (!oneRow) { x = 4; y = rowHeight + 2; }
     if (state.dimension == 1) {
-        if (!oneRow) { x = 4; y = rowHeight + 2; }
         float w = 10;
         ui::fill(context, x, y, w, buttonHeight, ui::palette::keyFill);
         ui::frame(context, x, y, w, buttonHeight, ui::palette::keyEdge);
@@ -826,6 +987,7 @@ void drawBars(MinecraftUIRenderContext& context, glm::vec2 size, MapLayer layer,
         ui::frame(context, x, y, w, buttonHeight, ui::palette::keyEdge);
         ui::arrow(context, x + 3, y + 2.5f, false, hovering(x, y, w, buttonHeight) ? ui::palette::text : ui::palette::dim);
         state.hits.push_back({x, y, w, buttonHeight, Target::BandUp});
+        x += w + 8;
     }
     float right = size.x - 4 - closeW;
     {
@@ -842,6 +1004,30 @@ void drawBars(MinecraftUIRenderContext& context, glm::vec2 size, MapLayer layer,
     button(context, right, 2, waypointsText, Target::Waypoints, panelOpen(), hovering(right, 2, widthOf(waypointsText), buttonHeight));
     right -= 3 + widthOf(centerText);
     button(context, right, 2, centerText, Target::Center, false, hovering(right, 2, widthOf(centerText), buttonHeight));
+    if (oneRow) { x = right - 8 - switchesW; y = 2; }
+    std::array<float, 3> switchX{};
+    for (size_t i = 0; i < 3; ++i) {
+        switchX[i] = x;
+        x += (compact ? iconW : 12 + widthOf(switchTexts[i])) - 1;
+    }
+    std::optional<size_t> overSwitch;
+    // Neighbours share a border column: switches that are on are drawn last, keeping their accent frames whole.
+    for (int pass = 0; pass < 2; ++pass)
+        for (size_t i = 0; i < 3; ++i) {
+            bool on = switchOn[i];
+            if (on != (pass == 1)) continue;
+            float bx = switchX[i], bw = compact ? iconW : 12 + widthOf(switchTexts[i]);
+            bool over = hovering(bx, y, bw, buttonHeight);
+            if (over) overSwitch = i;
+            ui::fill(context, bx, y, bw, buttonHeight, on ? ui::palette::accentDeep : over ? Rgb{.23f, .23f, .24f} : ui::palette::keyFill, .9f);
+            ui::frame(context, bx, y, bw, buttonHeight, on ? ui::palette::accent : ui::palette::keyEdge);
+            float alpha = on ? 1.f : .4f, iy = y + buttonHeight / 2;
+            layerSymbol(context, static_cast<int>(i), bx + 4, iy, alpha);
+            if (!compact)
+                ui::label(context, bx + 12, y + inset, bw - 12, switchTexts[i], on || over ? ui::palette::text : ui::palette::faint,
+                          ui::Align::Center);
+            state.hits.push_back({bx, y, bw, buttonHeight, switches[i].first});
+        }
 
     // Bottom bar: the place under the cursor on the left; the scale bar on
     // the right with the hints before it, dropped when they would meet.
@@ -863,7 +1049,8 @@ void drawBars(MinecraftUIRenderContext& context, glm::vec2 size, MapLayer layer,
             }
         if (!biome.empty()) where += "  " + biome;
         else if (!column) where += "  " + ui::translated("worldMap.unrecorded");
-    }
+    } else if (overSwitch)
+        where = ui::translated("worldMap.layerShown", switchTexts[*overSwitch], ui::translated(switchOn[*overSwitch] ? "on" : "off"));
     float whereW = where.empty() ? 0 : ui::textWidth(context, where);
     ui::label(context, 4, textY, whereW + 2, where, ui::palette::dim);
     int blocks = scaleBarBlocks(state.view.scale(), 30);
@@ -907,7 +1094,7 @@ void drawPanel(MinecraftUIRenderContext& context, glm::vec2 size) {
     float inset = ui::boxTextInset(), inner = w - 2 * pad, x = x0 + pad, y = top + 2;
 
     // Rows: the death point here, then this dimension's waypoints, nearest first.
-    std::vector<int> entries;
+    std::vector<int> entries; // -1 the death point, else into the set
     if (set.death && set.death->dimension == state.dimension) entries.push_back(-1);
     std::vector<int> listed;
     for (size_t i = 0; i < set.waypoints.size(); ++i)
@@ -918,33 +1105,93 @@ void drawPanel(MinecraftUIRenderContext& context, glm::vec2 size) {
     };
     std::stable_sort(listed.begin(), listed.end(), [&](int a, int b) { return distance(a) < distance(b); });
     entries.insert(entries.end(), listed.begin(), listed.end());
-    if (state.selected >= static_cast<int>(set.waypoints.size()) || (state.selected == -1 && !set.death)) state.selected = -2;
+    if (state.selected && pointLayer(state.selected->layer)
+        && (state.selected->layer == MarkLayer::Death ? !set.death : !waypointOf(set, *state.selected)))
+        state.selected.reset();
+    // Or this dimension's placements or shapes (L-204), nearest first.
+    int const kind = shownList();
+    auto areaDistance = [&](AreaMark const& area) {
+        return spot && spot->dimension == state.dimension
+            ? std::hypot((area.area.x0 + area.area.x1) / 2.0 - spot->x, (area.area.z0 + area.area.z1) / 2.0 - spot->z) : 0.0;
+    };
+    std::vector<AreaMark const*> areaRows;
+    state.kindCounts = {static_cast<int>(listed.size()), 0, 0};
+    for (auto const& area : state.allAreas) {
+        int k = listKind(area.key.layer);
+        ++state.kindCounts[static_cast<size_t>(k)];
+        if (k == kind) areaRows.push_back(&area);
+    }
+    std::stable_sort(areaRows.begin(), areaRows.end(),
+                     [&](AreaMark const* a, AreaMark const* b) { return areaDistance(*a) < areaDistance(*b); });
+    int const rows = kind == 0 ? static_cast<int>(entries.size()) : static_cast<int>(areaRows.size());
 
-    auto title = ui::translated("nav.waypoints");
-    ui::label(context, x, y + inset, inner - 30, title);
-    ui::label(context, x + ui::textWidth(context, title) + 4, y + inset, 20, std::to_string(listed.size()), ui::palette::faint);
+    // The header names the listed layer and opens the menu of layers.
+    constexpr std::array<std::string_view, 3> kindNames{"nav.waypoints", "nav.schematics", "nav.shapes"};
+    auto title = ui::translated(kindNames[static_cast<size_t>(kind)]);
+    auto count = std::to_string(state.kindCounts[static_cast<size_t>(kind)]);
+    float headW = std::min(ui::textWidth(context, title) + 4 + ui::textWidth(context, count) + 14, inner - 30);
+    bool headOver = hovering(x - 2, y, headW, buttonHeight);
+    if (headOver || state.kindMenu) ui::fill(context, x - 2, y, headW, buttonHeight, Rgb{.23f, .23f, .24f}, .9f);
+    ui::frame(context, x - 2, y, headW, buttonHeight, state.kindMenu ? ui::palette::accent : ui::palette::keyEdge);
+    ui::label(context, x, y + inset, headW - 12, title);
+    float countX = x + ui::textWidth(context, title) + 4;
+    if (countX < x - 2 + headW - 12) ui::label(context, countX, y + inset, x - 2 + headW - 12 - countX, count, ui::palette::faint);
+    for (int i = 0; i < 3; ++i) // A small triangle pointing down.
+        ui::fill(context, x - 2 + headW - 9 + i, y + 4 + i, 5 - 2 * i, 1, headOver || state.kindMenu ? ui::palette::text : ui::palette::dim);
+    state.hits.push_back({x - 2, y, headW, buttonHeight, Target::PanelKind});
+    state.kindX = x - 2; state.kindY = y + buttonHeight; state.kindW = inner + 4;
     float bx = x0 + w - pad - 11;
     button(context, bx, y, ">", Target::PanelClose, false, hovering(bx, y, 11, buttonHeight));
     bx -= 3 + ui::textWidth(context, "+") + 8;
-    button(context, bx, y, "+", Target::PanelAdd, true, false);
+    if (kind == 0) button(context, bx, y, "+", Target::PanelAdd, true, false);
     y += buttonHeight + 3;
     ui::fill(context, x0 + 1, y, w - 1, 1, ui::palette::white, .14f);
     y += 1;
+    // A layer switched off on the map keeps its list, where it is found.
+    if (!layerShown(layers(), kind == 0 ? MarkLayer::Waypoint : kind == 1 ? MarkLayer::Placement : MarkLayer::Shape)) {
+        // Its own line, clear of the first row's highlight.
+        ui::labelScaled(context, x, y + 3, inner, ui::translated("worldMap.hiddenOnMap"), .75f, ui::palette::faint);
+        y += 13;
+    }
 
     int maxRows = std::max(3, static_cast<int>((bottom - y) * .4f / rowH));
-    state.listFirst = std::clamp(state.listFirst, 0, std::max(0, static_cast<int>(entries.size()) - maxRows));
+    state.listFirst = std::clamp(state.listFirst, 0, std::max(0, rows - maxRows));
     state.listTop = y;
     state.listBottom = y + maxRows * rowH;
-    if (entries.empty()) ui::label(context, x, y + 2, inner, ui::translated("worldMap.noWaypoints"), ui::palette::faint);
-    for (int r = 0; r < maxRows && state.listFirst + r < static_cast<int>(entries.size()); ++r) {
-        int index = entries[static_cast<size_t>(state.listFirst + r)];
+    if (!rows) {
+        constexpr std::array<std::string_view, 3> emptyTexts{"worldMap.noWaypoints", "worldMap.noPlacements", "worldMap.noShapes"};
+        ui::label(context, x, y + 2, inner, ui::translated(emptyTexts[static_cast<size_t>(kind)]), ui::palette::faint);
+    }
+    for (int r = 0; kind != 0 && r < maxRows && state.listFirst + r < rows; ++r) {
+        auto const& area = *areaRows[static_cast<size_t>(state.listFirst + r)];
         float ry = y + r * rowH;
-        bool selected = index == state.selected, over = hovering(x0, ry, w, rowH);
+        bool selected = area.key == state.selected, over = hovering(x0, ry, w, rowH);
         if (selected) {
             ui::fill(context, x0 + 1, ry, w - 1, rowH, ui::palette::accent, .16f);
             ui::fill(context, x0 + 1, ry, 2, rowH, ui::palette::accent);
         } else if (over) ui::fill(context, x0 + 1, ry, w - 1, rowH, ui::palette::white, .07f);
-        state.hits.push_back({x0, ry, w, rowH, Target::Row, index});
+        state.hits.push_back({x0, ry, w, rowH, Target::Row, -2, area.key});
+        footprintIcon(context, x + 1, ry + rowH / 2, rgb(area.color), area.visible ? 1.f : .4f);
+        float switchX = x0 + w - pad - ui::switchWidth;
+        std::string far;
+        if (spot && spot->dimension == state.dimension)
+            far = ui::translated("waypoint.meters", static_cast<int>(std::lround(areaDistance(area))));
+        float farW = far.empty() ? 0 : ui::textWidthScaled(context, far, .75f);
+        ui::label(context, x + 11, ry + inset, switchX - farW - 4 - x - 11, area.name, area.visible ? ui::palette::text : ui::palette::faint);
+        if (!far.empty()) ui::labelScaled(context, switchX - 3 - farW, ry + 3, farW + 2, far, .75f, ui::palette::dim);
+        ui::toggleSwitch(context, switchX, ry + 1, area.visible);
+        state.hits.push_back({switchX - 1, ry, ui::switchWidth + 2, rowH, Target::RowVisible, -2, area.key});
+    }
+    for (int r = 0; kind == 0 && r < maxRows && state.listFirst + r < rows; ++r) {
+        int index = entries[static_cast<size_t>(state.listFirst + r)];
+        auto mark = index == -1 ? deathKey : waypointKey(set.waypoints[static_cast<size_t>(index)].id);
+        float ry = y + r * rowH;
+        bool selected = mark == state.selected, over = hovering(x0, ry, w, rowH);
+        if (selected) {
+            ui::fill(context, x0 + 1, ry, w - 1, rowH, ui::palette::accent, .16f);
+            ui::fill(context, x0 + 1, ry, 2, rowH, ui::palette::accent);
+        } else if (over) ui::fill(context, x0 + 1, ry, w - 1, rowH, ui::palette::white, .07f);
+        state.hits.push_back({x0, ry, w, rowH, Target::Row, index, mark});
         if (index == -1) {
             cross(context, x + 4, ry + rowH / 2);
             ui::label(context, x + 11, ry + inset, inner - 11, ui::translated("waypoint.death"), ui::palette::text);
@@ -959,7 +1206,7 @@ void drawPanel(MinecraftUIRenderContext& context, glm::vec2 size) {
         ui::label(context, x + 11, ry + inset, switchX - farW - 4 - x - 11, p.name, p.visible ? ui::palette::text : ui::palette::faint);
         if (!far.empty()) ui::labelScaled(context, switchX - 3 - farW, ry + 3, farW + 2, far, .75f, ui::palette::dim);
         ui::toggleSwitch(context, switchX, ry + 1, p.visible);
-        state.hits.push_back({switchX - 1, ry, ui::switchWidth + 2, rowH, Target::RowVisible, index});
+        state.hits.push_back({switchX - 1, ry, ui::switchWidth + 2, rowH, Target::RowVisible, index, mark});
     }
     y = state.listBottom + 2;
     ui::fill(context, x0 + 1, y, w - 1, 1, ui::palette::white, .14f);
@@ -977,7 +1224,7 @@ void drawPanel(MinecraftUIRenderContext& context, glm::vec2 size) {
         return bw;
     };
     auto deleteText = ui::translated(state.deleteArmed ? "worldMap.deleteArmed" : "worldMap.delete");
-    if (state.selected == -1 && set.death) {
+    if (state.selected == deathKey && set.death) {
         auto const& d = *set.death;
         ui::labelScaled(context, x, y, inner, std::format("{}, {}, {}", d.x, d.y, d.z), .75f, ui::palette::dim);
         y += 10;
@@ -985,16 +1232,38 @@ void drawPanel(MinecraftUIRenderContext& context, glm::vec2 size) {
         small(x + used + 3, y, inner - used - 3, deleteText, Target::Delete, 0, true);
         return;
     }
-    if (state.selected < 0) {
+    if (auto const* area = state.selected ? areaOf(*state.selected) : nullptr) {
+        // A placement or a shape: what it covers, shown or not, and its own screen.
+        ui::label(context, x, y + inset, inner, area->name);
+        y += 12;
+        auto const& a = area->area;
+        ui::labelScaled(context, x, y, inner, std::format("X {}..{}  Z {}..{}", a.x0, a.x1 - 1, a.z0, a.z1 - 1), .75f, ui::palette::dim);
+        y += 9;
+        ui::labelScaled(context, x, y, inner, ui::translated("worldMap.areaSize", a.x1 - a.x0, a.z1 - a.z0), .75f, ui::palette::dim);
+        y += 11;
+        if (y + 12 < bottom) {
+            ui::label(context, x, y + inset, inner - 24, ui::translated("waypoint.shown"), ui::palette::dim);
+            float sx = x0 + w - pad - ui::switchWidth;
+            ui::toggleSwitch(context, sx, y + 1, area->visible);
+            state.hits.push_back({sx - 1, y, ui::switchWidth + 2, rowH, Target::RowVisible, 0, area->key});
+            y += 14;
+        }
+        if (y + 12 < bottom)
+            small(x, y, inner, ui::translated(area->key.layer == MarkLayer::Placement ? "worldMap.openPlaced" : "worldMap.openShapes"),
+                  Target::OpenScreen, 0);
+        return;
+    }
+    auto const* selectedWaypoint = state.selected ? waypointOf(set, *state.selected) : nullptr;
+    if (!selectedWaypoint) {
         ui::labelScaled(context, x, y, inner, ui::translated("worldMap.selectHint"), .75f, ui::palette::faint);
         return;
     }
-    auto const& p = set.waypoints[static_cast<size_t>(state.selected)];
+    auto const& p = *selectedWaypoint;
     // Name: click to type; Enter or a click elsewhere keeps it, Esc drops it.
     ui::fill(context, x, y, inner, 12, Rgb{0, 0, 0}, .4f);
     ui::frame(context, x, y, inner, 12, state.editingName ? ui::palette::accent : ui::palette::keyEdge);
-    std::string shown = !state.editingName ? p.name : state.name.selectedAll() ? "[" + state.name.value() + "]" : state.name.value() + "_";
-    ui::label(context, x + 3, y + 1 + inset, inner - 6, std::move(shown));
+    if (state.editingName) ui::drawEditField(context, x + 3, y, 12, inner - 6, state.name);
+    else ui::label(context, x + 3, y + 1 + inset, inner - 6, p.name);
     state.hits.push_back({x, y, inner, 12, Target::Name});
     state.namePosition = {x + 3, y};
     y += 14;
@@ -1015,7 +1284,12 @@ void drawPanel(MinecraftUIRenderContext& context, glm::vec2 size) {
             ui::label(context, bx2, y + inset, 9, side ? "+" : "-", ui::palette::text, ui::Align::Center);
             state.hits.push_back({bx2, y, 9, buttonHeight, Target::Step, axis * 2 + side});
         }
-        ui::label(context, sx + 9, y + inset, 52, std::to_string(value), ui::palette::text, ui::Align::Center);
+        // The value: click to type it (L-172 follow-up, 2026-10-13).
+        if (state.editingAxis == axis) {
+            ui::frame(context, sx + 9, y, 52, buttonHeight, ui::palette::accent);
+            ui::drawEditField(context, sx + 10, y, buttonHeight, 50, state.coordinate, ui::Align::Center);
+        } else ui::label(context, sx + 9, y + inset, 52, std::to_string(value), ui::palette::text, ui::Align::Center);
+        state.hits.push_back({sx + 9, y, 52, buttonHeight, Target::Coordinate, axis});
         y += 12;
     }
     if (y + 12 < bottom) { small(x, y, inner, ui::translated("waypoint.moveHere"), Target::MoveHere, 0); y += 13; }
@@ -1023,7 +1297,7 @@ void drawPanel(MinecraftUIRenderContext& context, glm::vec2 size) {
         ui::label(context, x, y + inset, inner - 24, ui::translated("waypoint.shown"), ui::palette::dim);
         float sx = x0 + w - pad - ui::switchWidth;
         ui::toggleSwitch(context, sx, y + 1, p.visible);
-        state.hits.push_back({sx - 1, y, ui::switchWidth + 2, rowH, Target::RowVisible, state.selected});
+        state.hits.push_back({sx - 1, y, ui::switchWidth + 2, rowH, Target::RowVisible, 0, *state.selected});
         y += 12;
     }
     if (y + 10 < bottom) {
@@ -1042,6 +1316,28 @@ void drawPanel(MinecraftUIRenderContext& context, glm::vec2 size) {
         small(x + used + 3, y, inner - used - 3, deleteText, Target::Delete, 0, true);
     }
 }
+// The side panel's menu of layers, under its header, with each one's count.
+void drawKindMenu(MinecraftUIRenderContext& context) {
+    if (!state.kindMenu || state.panelWidth <= 0) return;
+    constexpr float rowH = 12;
+    constexpr std::array<std::string_view, 3> names{"nav.waypoints", "nav.schematics", "nav.shapes"};
+    float x = state.kindX, y = state.kindY + 1, w = state.kindW;
+    ui::fill(context, x, y, w, 3 * rowH + 2, ui::palette::panel, .98f);
+    ui::frame(context, x, y, w, 3 * rowH + 2, ui::palette::keyEdge);
+    for (int i = 0; i < 3; ++i) {
+        float ry = y + 1 + i * rowH;
+        bool current = i == shownList(), over = hovering(x, ry, w, rowH);
+        if (current) ui::fill(context, x + 1, ry, w - 2, rowH, ui::palette::accent, .16f);
+        else if (over) ui::fill(context, x + 1, ry, w - 2, rowH, ui::palette::white, .07f);
+        layerSymbol(context, i, x + 3, ry + rowH / 2, 1.f);
+        auto count = std::to_string(state.kindCounts[static_cast<size_t>(i)]);
+        float countW = ui::textWidth(context, count);
+        ui::label(context, x + 14, ry + 1 + ui::boxTextInset(), w - 20 - countW, ui::translated(names[static_cast<size_t>(i)]),
+                  current || over ? ui::palette::text : ui::palette::dim);
+        ui::label(context, x + w - 4 - countW, ry + 1 + ui::boxTextInset(), countW + 2, count, ui::palette::faint);
+        state.hits.push_back({x, ry, w, rowH, Target::PanelKindItem, i});
+    }
+}
 void drawMenu(MinecraftUIRenderContext& context, glm::vec2 size) {
     if (!state.menu) return;
     auto set = waypoints::current();
@@ -1051,13 +1347,17 @@ void drawMenu(MinecraftUIRenderContext& context, glm::vec2 size) {
     if (m.kind == MenuKind::Ground)
         head = m.known ? std::format("{}, {}, {}", m.worldX, m.worldY, m.worldZ)
                        : std::format("{}, ?, {}  {}", m.worldX, m.worldZ, ui::translated("worldMap.unrecorded"));
-    else if (m.kind == MenuKind::Death) {
+    else if (m.kind == MenuKind::Placement || m.kind == MenuKind::Shape) {
+        auto const* area = areaOf(m.mark);
+        if (!area) { state.menu.reset(); return; }
+        head = area->name + "  " + ui::translated("worldMap.areaSize", area->area.x1 - area->area.x0, area->area.z1 - area->area.z0);
+    } else if (m.kind == MenuKind::Death) {
         if (!set.death) { state.menu.reset(); return; }
         head = ui::translated("waypoint.death") + std::format("  {}, {}, {}", set.death->x, set.death->y, set.death->z);
     } else {
-        if (m.index < 0 || m.index >= static_cast<int>(set.waypoints.size())) { state.menu.reset(); return; }
-        auto const& w = set.waypoints[static_cast<size_t>(m.index)];
-        head = w.name + std::format("  {}, {}, {}", w.x, w.y, w.z);
+        auto const* w = waypointOf(set, m.mark);
+        if (!w) { state.menu.reset(); return; }
+        head = w->name + std::format("  {}, {}, {}", w->x, w->y, w->z);
     }
     constexpr float itemHeight = 11, pad = 4;
     float width = ui::textWidthScaled(context, head, .75f) + 2 * pad;
@@ -1091,9 +1391,10 @@ void open(IClientInstance& client, bool resume) {
     state.markers.clear();
     state.notice.clear();
     state.editingName = false;
+    state.editingAxis = -1;
     state.openedAt = now();
     if (resume) return;
-    state.selected = -2;
+    state.selected.reset();
     state.deleteArmed = false;
     if (auto spot = playerSpot()) {
         state.dimension = spot->dimension;
@@ -1118,6 +1419,20 @@ void close() {
 Request press(float x, float y, bool right) {
     Request request;
     auto const* hit = hitAt(x, y);
+    // The side panel's layer menu: any press closes it, the header toggles it.
+    bool const kindWasOpen = std::exchange(state.kindMenu, false);
+    if (hit && hit->target == Target::PanelKind) {
+        if (!right) { commitName(); state.kindMenu = !kindWasOpen; }
+        return request;
+    }
+    if (hit && hit->target == Target::PanelKindItem) {
+        if (!right && hit->item != shownList()) {
+            setShownList(hit->item);
+            if (state.selected && listKind(state.selected->layer) != hit->item) select(std::nullopt, false);
+        }
+        return request;
+    }
+    if (kindWasOpen) return request;
     if (hit && hit->target == Target::Menu && state.menu) {
         if (right) return request;
         return chooseMenu(hit->item);
@@ -1138,6 +1453,9 @@ Request press(float x, float y, bool right) {
         switch (hit->target) {
         case Target::Close: request.kind = Request::Kind::Close; return request;
         case Target::Waypoints: setPanelOpen(!panelOpen()); return request;
+        case Target::LayerWaypoints:
+        case Target::LayerSchematics:
+        case Target::LayerShapes: toggleLayer(hit->target); return request;
         default: act(hit->target); return request;
         }
     }
@@ -1148,7 +1466,9 @@ void release() {
     // A click on a marker (no drag) selects it in the side panel.
     if (state.drag && !state.drag->moved && state.drag->marker) {
         setPanelOpen(true);
-        select(state.drag->marker->kind == MenuKind::Death ? -1 : state.drag->marker->index, false);
+        auto mark = *state.drag->marker;
+        if (mark.layer == MarkLayer::Placement) selectPlacement(mark);
+        select(mark, false);
     }
     state.drag.reset();
 }
@@ -1163,16 +1483,20 @@ void wheel(int direction) {
     // zoom about the pointer as last drawn.
     state.view.zoomAt(p.x, p.y, direction);
 }
-bool editingName() { return state.open && state.editingName; }
-void typeText(std::string const& text) { if (state.editingName) state.name.type(text); }
-void backspace() { if (state.editingName) state.name.backspace(); }
-void selectAllName() { if (state.editingName) state.name.selectAll(); }
+bool editingName() { return state.open && (state.editingName || state.editingAxis >= 0); }
+ui::TextEdit* nameField() {
+    if (!editingName()) return nullptr;
+    return state.editingAxis >= 0 ? static_cast<ui::TextEdit*>(&state.coordinate) : &state.name;
+}
+void typeText(std::string const& text) { if (auto* field = nameField()) field->type(text); }
+void backspace() { if (auto* field = nameField()) field->backspace(); }
+void selectAllName() { if (auto* field = nameField()) field->selectAll(); }
 glm::vec2 namePosition() { return state.namePosition; }
 Request key(int key, bool openKey) {
     Request request;
-    if (state.editingName) {
+    if (state.editingName || state.editingAxis >= 0) {
         if (key == 0x0d || key == 0x09) commitName();
-        else if (key == 0x1b) state.editingName = false;
+        else if (key == 0x1b) { state.editingName = false; state.editingAxis = -1; }
         return request;
     }
     if (key == 0x1b) {
@@ -1196,6 +1520,11 @@ void render(MinecraftUIRenderContext& context, glm::vec2 size, glm::vec2 pointer
     auto& view = state.view;
     view.width = size.x;
     view.height = size.y;
+    auto layer = shownLayer();
+    if (auto explored = store::exploredBounds(layer))
+        view.farthest = farthestScaleFor(explored->x1 - explored->x0, explored->z1 - explored->z0,
+                                         size.x - state.panelWidth, size.y - state.top - bottomHeight);
+    else view.farthest = alwaysFarthestScale;
     if (state.drag) {
         double dx = pointer.x - state.drag->x, dy = pointer.y - state.drag->y;
         if (std::abs(dx) + std::abs(dy) > 2) state.drag->moved = true;
@@ -1208,7 +1537,6 @@ void render(MinecraftUIRenderContext& context, glm::vec2 size, glm::vec2 pointer
     double inverse = client.getGuiData()->mInvGuiScale;
     double pixelsPerUnit = std::isfinite(inverse) && inverse > 0 ? 1 / inverse : 1;
     state.pixelsPerUnit = pixelsPerUnit;
-    auto layer = shownLayer();
     state.hits.clear();
     ui::fill(context, 0, 0, size.x, size.y, ground);
     int empty = 0, shown = 0;
@@ -1226,6 +1554,8 @@ void render(MinecraftUIRenderContext& context, glm::vec2 size, glm::vec2 pointer
     drawBars(context, size, layer, pending, settings.worldMap);
     context.flushText(0, std::nullopt);
     drawPanel(context, size);
+    context.flushText(0, std::nullopt);
+    drawKindMenu(context);
     context.flushText(0, std::nullopt);
     drawMenu(context, size);
     if (!state.notice.empty() && now() - state.noticeAt < 2.6) {

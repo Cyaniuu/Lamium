@@ -1,4 +1,6 @@
+#include "app/PausedFeatures.h"
 #include "ui/SettingsRows.h"
+#include "ui/HudEditorLayout.h"
 #include "ui/SettingsNavigation.h"
 #include "ui/Translations.h"
 #include <format>
@@ -19,6 +21,14 @@ void settingsRowsTests() {
         check(navigation.current == 4, "manual navigation from a dedicated screen becomes the normal destination");
     }
     auto translate = [](std::string_view key) { return std::string(ui::translations::find(key, "en_US")); };
+    {
+        auto rows = ui::buildSettingsRows(false, "section.information", {}, {"targetInfo"}, translate);
+        auto found = std::ranges::find_if(rows, [](auto const& row) {
+            return row.option && row.option->id == "information.targetSchematic";
+        });
+        check(found != rows.end() && found->kind == RowKind::Option && found->feature->id == "targetInfo",
+              "schematic display is a child option of Target Info in the settings row catalog");
+    }
     check(translate(ui::actionTranslationKey(input::Action::FreeCameraSpeedUp,true)) == "Increase speed"
           && translate(ui::actionTranslationKey(input::Action::FreeCameraSpeedDown,true)) == "Decrease speed"
           && translate(ui::actionTranslationKey(input::Action::FreeCameraSpeedUp)) == "Increase FreeCamera speed",
@@ -26,6 +36,72 @@ void settingsRowsTests() {
     check(ui::translations::find(ui::actionTranslationKey(input::Action::FreeCameraSpeedUp,true),"ja_JP") == "速度を上げる"
           && ui::translations::find(ui::actionTranslationKey(input::Action::FreeCameraSpeedDown,true),"ja_JP") == "速度を下げる",
           "Japanese detail speed action labels are natural commands");
+    {
+        using input::Device;
+        input::Chord z{{Device::Key, 0x5A}}, ctrlZ{{Device::Key, 0x11}, {Device::Key, 0x5A}};
+        check(input::chordUses(ctrlZ, z) && input::chordUses(ctrlZ, {{Device::Key, 0x5A}, {Device::Key, 0x11}})
+              && !input::chordUses(z, ctrlZ) && !input::chordUses(z, {}), "find by key matches bindings using every pressed input");
+        ui::KeyFilter keys{z, {}};
+        keys.bindings[static_cast<size_t>(input::Action::Zoom)] = z;
+        keys.bindings[static_cast<size_t>(input::Action::Hitboxes)] = ctrlZ;
+        auto found = ui::buildSettingsRows(true, {}, ui::SearchQuery{}, {}, translate, {}, {}, &keys);
+        std::vector<input::Action> listed;
+        for (auto const& row : found) if (row.action) listed.push_back(*row.action);
+        check(listed.size() == 2 && std::ranges::count(listed, input::Action::Zoom) && std::ranges::count(listed, input::Action::Hitboxes),
+              "Hotkeys found by key lists exactly the actions whose binding uses the key");
+        keys.pressed = {{Device::Key, 0x72}, {Device::Key, 0x47}}; // F3+G, Chunk Borders' default
+        found = ui::buildSettingsRows(true, {}, ui::SearchQuery{}, {}, translate, {}, {}, &keys);
+        check(std::ranges::any_of(found, [](auto const& row) { return row.action == input::Action::ChunkBorders; }),
+              "find by key sees default bindings");
+    }
+    // Every choice an option offers survives normalization: the Durability
+    // HUD offered "Per line" while normalize still reset it to the default.
+    for (auto const& option : settings::options) {
+        Settings value;
+        if (!std::holds_alternative<settings::ChoiceValue>(option.read(value))) continue;
+        for (int step = 0; step < 8; ++step) {
+            option.adjust(value, 1);
+            auto chosen = std::get<settings::ChoiceValue>(option.read(value)).label;
+            value.normalize();
+            check(std::get<settings::ChoiceValue>(option.read(value)).label == chosen,
+                  std::format("option {} keeps {} after normalization", option.id, chosen).c_str());
+        }
+    }
+    // Every name the UI resolves from the catalogs exists in all three
+    // languages (L-158): checked from the catalogs, not the tables.
+    for (auto locale : {"en_US", "ja_JP", "zh_CN"}) {
+        auto has = [&](std::string_view key, std::string_view what) {
+            check(!key.empty() && !ui::translations::find(key, locale).empty(),
+                  std::format("{} has a {} label ({})", what, locale, key).c_str());
+        };
+        for (auto section : ui::sections) has(section, section);
+        for (auto const& feature : ui::features) {
+            has(feature.name, feature.id);
+            has(feature.description, feature.id);
+        }
+        for (size_t i = 0; i < static_cast<size_t>(input::Action::Count); ++i) {
+            auto action = static_cast<input::Action>(i);
+            if (input::retired(action)) continue;
+            has(ui::actionTranslationKey(action), input::actions[i].id);
+            has(ui::actionTranslationKey(action, true), input::actions[i].id);
+            if (input::actions[i].behavior == input::Behavior::Toggle) has(ui::toggleToastKey(action), input::actions[i].id);
+        }
+        for (auto feature : paused::gatedFeatures) has(ui::featureNameKey(feature), feature);
+        // Search finds an action row by the child label it shows.
+        auto local = [&](std::string_view key) { return std::string(ui::translations::find(key, locale)); };
+        ui::SearchQuery shown;
+        shown.append(local(ui::actionTranslationKey(input::Action::FreeCameraSpeedUp, true)));
+        auto found = ui::buildSettingsRows(false, {}, shown, {}, local);
+        check(std::any_of(found.begin(), found.end(), [](auto const& row) { return row.action == input::Action::FreeCameraSpeedUp; }),
+              std::format("search finds the {} child action label", locale).c_str());
+        Settings value;
+        for (auto const& option : settings::options) {
+            if (!std::holds_alternative<settings::ChoiceValue>(option.read(value))) continue;
+            Settings cycled;
+            for (int step = 0; step < 32; ++step, option.adjust(cycled, 1))
+                has(std::get<settings::ChoiceValue>(option.read(cycled)).label, option.id);
+        }
+    }
     ui::SearchQuery query;
     std::set<std::string_view> expanded;
     for (auto const& feature : ui::features) expanded.insert(feature.id);
@@ -35,7 +111,8 @@ void settingsRowsTests() {
         if (auto primary = ui::primaryAction(feature))
             check(input::actions[static_cast<size_t>(*primary)].feature == feature.id
                 && (!feature.toggle.empty() || sessions.contains(feature.id) || feature.id == "settings"
-                    || feature.id == "caveView" || feature.id == "schematicMenu"), // Named commands: a key without a switch.
+                    || feature.id == "caveView" || feature.id == "schematicMenu" || feature.id == "playerList"
+                    || feature.id == "calculator"), // Named commands: a key without a switch.
                 "a parent key belongs to the feature's own state or screen opener");
     for (auto id : {"restrictions", "mapText"}) {
         auto found = std::find_if(ui::features.begin(), ui::features.end(),
@@ -59,8 +136,8 @@ void settingsRowsTests() {
         return row.heading() && row.feature->id == "hideEffects";
     });
     check(effectGroup != rows.end() && effectGroup->feature->toggle == "visuals.hideEffects"
-          && effectGroup->feature->primary == input::Action::ToggleHideEffects && effectGroup->children == 7,
-          "Hide effects has a master switch with its toggle key and seven independent child switches");
+          && effectGroup->feature->primary == input::Action::ToggleHideEffects && effectGroup->children == 9,
+          "Hide effects has a master switch with its toggle key and nine independent child switches");
     Settings effectSettings;
     check(ui::effectsPaused("hideEffects",effectSettings), "the master effect switch defaults off");
     effectSettings.visuals.hideEffects = true;
@@ -70,7 +147,8 @@ void settingsRowsTests() {
     check(ui::effectsPaused("hideEffects",effectSettings) && !ui::effectsPaused("freecamera",effectSettings),
           "only Hide effects children display the paused state when their master is off");
     for (auto id : {"visuals.hideWeather", "visuals.hideParticles", "visuals.hideBossBars", "visuals.hideNausea",
-                    "visuals.hideWater", "visuals.hideLava", "visuals.hidePowderSnow"}) {
+                    "visuals.hideWater", "visuals.hideLava", "visuals.hidePowderSnow", "visuals.hideDistanceFog",
+                    "visuals.hidePortal"}) {
         auto child = std::find_if(rows.begin(), rows.end(), [=](auto const& row) {
             return row.option && row.option->id == id;
         });
@@ -129,7 +207,8 @@ void settingsRowsTests() {
     check(options.size() == listed && actions.size() == live, "all settings and actions are reachable");
     check(input::retired(input::Action::CaptureBreaking) && input::retired(input::Action::ResetBreaking)
           && !input::retired(input::Action::CycleBreakingMode), "only the L-15 capture and reset actions are retired");
-    check(layouts.size() == 8, "every HUD element is reachable from the settings list");
+    check(layouts == std::set<ui::HudElementId>(ui::hud_editor::drawOrder.begin(), ui::hud_editor::drawOrder.end()),
+          "every HUD element is reachable from the settings list");
     {
         auto sort = std::find_if(rows.begin(), rows.end(), [](auto const& row) {
             return row.heading() && row.feature->id == "sorting";
@@ -145,7 +224,10 @@ void settingsRowsTests() {
             "breaking restriction key appears beside its own switch");
     }
     for (auto id : {"inventory.transferWheelOne", "inventory.transferWheelStack",
-                    "inventory.transferDragStack", "inventory.transferDragOne"})
+                    "inventory.transferDragStack", "inventory.transferDragOne", "inventory.transferWheelMatching",
+                    "inventory.transferWheelAll", "inventory.transferClickMatching", "inventory.transferClickAll",
+                    "inventory.transferDragKeepOne", "inventory.transferCursorMatching", "inventory.transferDropOne",
+                    "inventory.transferDropKeepOne", "inventory.transferDropAll", "inventory.transferDropMatching"})
         check(options.contains(id), "transfer gesture switches appear under Inventory Transfer");
     {
         Settings changed;

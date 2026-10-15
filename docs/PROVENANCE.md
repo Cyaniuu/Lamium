@@ -78,7 +78,31 @@ it) while doing so.
   Wheelie, Jade / WAILA, AppleSkin, Xaero's Minimap and World Map.
 - Continuity (Java): its design as described publicly is the source of the
   L-96 layering idea (connection rules apart from texture methods, a
-  47-tile method later). Its source is not opened.
+  47-tile method later) and of L-164's question (one quad per face with a
+  chosen sprite instead of split quads). Its source is not opened.
+- Librarian Trade Finder (Java, GPL-3.0): its repository description,
+  named by the maintainer 2026-10-12, is the source of the L-168 idea.
+  Its source is not opened.
+- enchant-order (a web tool, MIT): the problem it solves, named by the
+  maintainer 2026-10-12, is the source of the L-170 idea. Its source is not
+  opened; Lamium's anvil rules are checked against the game.
+- Quick Container (a Bedrock resource pack on CurseForge; its terms forbid
+  using its code without permission): named by the maintainer 2026-10-15 as
+  evidence that Bedrock can move everything or every matching item at once.
+  Its files are not opened. Only the game's behavior while the maintainer
+  uses it is observed, through Lamium's `transfer_trace` (vanilla handlers,
+  button ids, request timing), for L-169.
+- Item Scroller (Java, LGPL-3.0-only): the key list in its public Modrinth
+  description, read 2026-10-12 at the maintainer's request, is the source
+  of L-169's gesture proposal. Its source is not opened. Its public
+  description of favourite trades, named by the maintainer 2026-10-14, is
+  also a source of the L-166 part 2 proposal.
+- Autotrade Plus and Villager Trading Overhaul (Java; licenses not
+  checked): their public descriptions, named by the maintainer 2026-10-14,
+  are sources of the L-166 part 2 proposal (running favourites, remaining
+  uses, trade caps). Their source is not opened.
+- CalcMod (Java, MIT): its Modrinth description, named by the maintainer
+  2026-10-12, is the source of the L-171 idea. Its source is not opened.
 - Sodium, ImmediatelyFast, Lithium and EntityCulling (Java): their published
   approaches are the source of the L-105 hypotheses (mesh rebuild
   scheduling, batching, caching, occlusion culling). Their source is not

@@ -1,5 +1,6 @@
 #include "features/lighting/NightVision.h"
 #include "app/Runtime.h"
+#include "app/Versions.h"
 #include "ll/api/memory/Hook.h"
 #include "mc/client/renderer/ptexture/BaseLightData.h"
 #include "mc/client/renderer/ptexture/BaseLightTextureImageBuilder.h"
@@ -31,22 +32,26 @@ bool netherInstalled = false;
 NightVision& NightVision::instance() { static NightVision instance; return instance; }
 bool NightVision::start() {
     if (running) return true;
+    capabilities::begin(capabilities::Id::NightVision);
     try {
         if (!baseInstalled) baseInstalled = BaseLightHook::hook() == 0;
-        if (!baseInstalled) { stop(); return false; }
+        if (!baseInstalled) { capabilities::hooks(capabilities::Id::NightVision, false); stop(); return false; }
 #if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
         if (!netherInstalled) netherInstalled = NetherLightHook::hook() == 0;
-        if (!netherInstalled) { stop(); return false; }
+        if (!netherInstalled) { capabilities::hooks(capabilities::Id::NightVision, false); stop(); return false; }
 #endif
         running = true;
+        capabilities::ready(capabilities::Id::NightVision);
         return true;
     } catch (std::exception const& error) {
+        capabilities::hooks(capabilities::Id::NightVision,false);
         Runtime::instance().self().getLogger().error("Lighting initialization failed: {}", error.what());
         stop();
         return false;
     }
 }
 void NightVision::stop() {
+    capabilities::stop(capabilities::Id::NightVision);
     running = false;
 #if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
     if (netherInstalled && NetherLightHook::unhook()) netherInstalled = false;
@@ -56,11 +61,13 @@ void NightVision::stop() {
 #if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
         || netherInstalled
 #endif
-    )
+    ) {
+        capabilities::fail(capabilities::Id::NightVision,capabilities::Reason::RemovalFailed);
         Runtime::instance().self().getLogger().error("Could not remove a lighting hook");
+    }
 }
 void NightVision::apply(BaseLightData* data) const {
-    if (!data || !enabled()) return;
+    if (!data || !enabled() || !versionSensitiveAllowed(capabilities::Id::NightVision)) return;
     // Modify newly produced render data so the game's light-texture cache sees
     // the change on both enable and disable. No player effect is added.
     data->mNightvisionActive = true;
@@ -70,5 +77,12 @@ void NightVision::apply(BaseLightData* data) const {
     data->mPreviousDarkenWorldAmount = 0.0f;
     data->mDarknessFactor = 0.0f;
     data->mDarknessFactorPreviousFrame = 0.0f;
+    // A low Brightness darkens the light curve's low end, which Night Vision
+    // shows as dark rings around light sources (L-121). The texture is built
+    // with full gamma; the Brightness option itself stays as the player set it.
+    float gamma = data->mGamma;
+    if (gamma != loggedGamma.exchange(gamma))
+        try { Runtime::instance().self().getLogger().info("Night Vision: light gamma {} ({})", gamma, even.load() ? "even -> 1" : "vanilla"); } catch (...) {}
+    if (even.load() && gamma < 1.0f) data->mGamma = 1.0f;
 }
 }

@@ -15,6 +15,7 @@ The [agent guide](../AGENTS.md) is the working manual and the
 | Which build and observation support a result? | [VALIDATION-LOG.md](VALIDATION-LOG.md): append-only evidence, newest first |
 | What happened to a finished or closed L-item? | [BACKLOG-DONE.md](BACKLOG-DONE.md): retained task history |
 | How is Lamium packaged, updated and released? | [DISTRIBUTION.md](DISTRIBUTION.md): package contract and release checklist |
+| What does Lamium rely on in the game, and what to do on a game update? | [GAME-UPDATES.md](GAME-UPDATES.md): gated capabilities, update playbook and the hook inventory (script-checked) |
 | How are contributions and translations handled? | [CONTRIBUTING.md](../CONTRIBUTING.md), [TRANSLATING.md](TRANSLATING.md) |
 | Which outside sources may be used? | [PROVENANCE.md](PROVENANCE.md): dependencies and source-use boundaries |
 | Which mockup was adopted? | [demos/README.md](demos/README.md): demo status and links |
@@ -28,16 +29,20 @@ build named there and may include superseded experiments.
 | Area | Document |
 |---|---|
 | Settings, HUD and input foundation | [UX-FOLLOWUP.md](UX-FOLLOWUP.md) |
+| Native HUD chat placement | [CHAT-POSITION.md](CHAT-POSITION.md) |
 | Parent switches, command rows and keys | [SETTINGS-KEYMAP.md](SETTINGS-KEYMAP.md) |
 | Freelook and FreeCamera | [CAMERA.md](CAMERA.md) |
 | Shapes, chunk borders, hitboxes and persistence | [OVERLAYS.md](OVERLAYS.md) |
 | Light-level overlay | [LIGHT-OVERLAY.md](LIGHT-OVERLAY.md) |
 | Visual effect hiding | [VISUAL-EFFECTS.md](VISUAL-EFFECTS.md) |
+| In-world language selection and pack research | [LANGUAGE.md](LANGUAGE.md) |
 | Auto Attack/Use and permanent movement | [AUTOMATION.md](AUTOMATION.md) |
 | Breaking/placement restrictions and research | [RESTRICTIONS.md](RESTRICTIONS.md) |
 | Hand Restock | [HAND-RESTOCK.md](HAND-RESTOCK.md) |
 | Tool/Weapon Switch, Tool Protection and Auto Elytra | [EQUIPMENT.md](EQUIPMENT.md) |
 | Fake Offhand | [FAKE-OFFHAND.md](FAKE-OFFHAND.md) |
+| Villager trade helpers and L-166 diagnostics | [TRADE-HELPERS.md](TRADE-HELPERS.md) |
+| Item Transfer and L-169 native-handler investigation | [ITEM-TRANSFER.md](ITEM-TRANSFER.md) |
 | Minimap, radar, waypoints and world map | [MAP.md](MAP.md) |
 | Schematics, checking, materials and area save | [SCHEMATIC.md](SCHEMATIC.md) |
 | Integration between features (proposal, L-111) | [INTEGRATION.md](INTEGRATION.md) |

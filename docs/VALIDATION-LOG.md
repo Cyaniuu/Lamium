@@ -54,6 +54,2749 @@ Every shown sample had `sneaking=false`, `sprinting=false`, `riding=false` and
 `inWater=false`. This confirms the candidate hook is reached in those states,
 but does not establish press/release behavior or the rider/water paths; the
 probe changes no input state.
+## 0.2.3 release build check (2026-10-15)
+
+Maintainer checked the release build from `b80fa83` (version 0.2.3), DLL
+SHA-256 `DD3A7B861D8FF5566524B37AE3497B7A841D461A400718A3597BD5760392EAFD`,
+the same DLL as in `Lamium-0.2.3-client-windows-x64.zip`. Minecraft
+1.26.51.01, LeviLamina Client 26.51.7, Windows x64, local world. The title
+screen showed Lamium 0.2.3, `L` opened the settings, and the world map's
+layer switches and the new Item Transfer gestures in a chest worked. No
+issue reported. Not a full regression.
+
+## World map: compact layer switches and L-204 side panel lists (2026-10-15)
+
+Build `34d71ca`, normal build (DLL
+`1FACED1BF8C5D7BF481E115DF1D313F7760A83451E59110F1F3202166A9A674E`), local
+single player, Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64.
+The maintainer passed the checklist: at UI Profile 100% in the Nether the
+top bar stays one row with symbol-only switches named in the bottom bar on
+hover; the panel header menu lists the three layers with counts;
+placement and shape rows select, center and show/hide; the chosen list
+survives reopening; a layer switched off on the map keeps its list with the
+"Hidden on the map" line. That line touched the first row's highlight; it
+got its own line in the next commit. Servers were not checked.
+Follow-up `5ddab02` (DLL
+`6D231C13E05035425C2E24B91EE02176FC1D2CED2F731C10FCFBCC5169DC4362`): the
+note on its own line looked right to the maintainer.
+
+## L-169 held stack and drop gestures (2026-10-15)
+
+Build `9da5d9d`, normal build, traces off (DLL
+`D8D799B0B2E650F85A39DA44E8E98DA909F6D5DA564CE6965A53C8A1AFE2D627`), local
+single player, Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64.
+The maintainer passed the checklist in a chest: Shift + click on an empty
+slot with items held placed them and pulled the matching items from the
+inventory; drop key + Ctrl + left / Shift + right / Shift + left drags
+dropped one, all but one and the stack; Shift + click outside the window
+dropped the held stack and the matching items, hotbar included; each of the
+five new switches turned its gesture back to vanilla. Not checked: other
+screens, the inventory screen, servers, failure cases.
+
+## L-146 layer switches and the L-169 drop trace (2026-10-15)
+
+Build `0ba6e1d` with `--transfer_trace=y` (DLL
+`D153830793A4F479FFDA1E19AE2A72DA90006F79F6F54C1D3B058C97FA155D5C`), local
+single player, Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64.
+- L-146: the maintainer passed the checklist: three switches with symbols
+  left of "Center on me", the side panel button named "List"; a switch off
+  removes its marks from the world map (death point with waypoints); the
+  choices stay after reopening the map. Servers and narrow two-row layouts
+  were not checked.
+- L-169 vanilla observations (Item Transfer off), from the log: the drop key
+  over a slot calls `_handleDropItem` with ItemTransferAmount bytes
+  `01000000 02000000 00ffffff` and drops one item; Ctrl + drop key
+  `01000000 00000000 00ffffff` drops the stack. A left click outside the
+  window calls `_handleDropSelectedItem` with the stack bytes, a right click
+  with the one-item bytes (the cursor's items). Both reach
+  `ContainerManagerController::handleDrop`, one request each, accepted.
+  Shift + left click on an empty slot with items held called auto-place
+  with amount 2147483647 and moved nothing; the cursor stayed held.
+
+## Settings screen follow-ups after the L-197 review (2026-10-15)
+
+Maintainer passed each supplied check on these builds, same local
+environment (Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64,
+ordinary release build, traces off); deployed DLLs matched the builds.
+- `59e7252` (DLL `435E4F2A921C2E21AB3FB7986FA6A212D1F927357214CCFBD2ABCDBD24E099F0`):
+  a lone left/right click bound to the world map no longer closes it; a side
+  button still does. At a tiny window the warning stayed white only before
+  expanding, and the expanded footer did not scroll with the wheel (both
+  fixed next).
+- `d0924e5` (DLL `BAB997A344DA56CED0C20DD73EFCF4969CF8459D7177B2158F607AC80EDB71D9`):
+  warning color in the one-line footer, wheel scrolling over the footer,
+  numeric rows with help and range in white and controls in the faint hint
+  line, and F11 toggling fullscreen while the settings screen is open.
+- `21220bd` (DLL `2B8E29E285F1E8C60ABBADE22BA8D18E6C659F5E22F89C676FAF6FD22E6AAC71`):
+  a maximized 1080p window and a very small one both draw the sidebar
+  layout shrunk instead of tabs; clicks, wheel and search typing follow the
+  drawn positions; list and footer scrollbars drag; Schematics preview and
+  item icons stay inside their frames when shrunk.
+- `bc078fa` (DLL `6D6D002F753CA94F507987D254A10B69136BAD88C58571E621F9D87FB5C2A9BB`):
+  no Read full description button; two description lines; at a tiny window
+  an overflowing description shows a scrollbar and the wheel hint, scrolls
+  without moving the list, and restarts at the top on another row.
+Not seen: English and Simplified Chinese layouts, docked tool views while
+shrunk, HUD editor/world map unaffected by the shrink, IME caret position
+in shrunk text fields.
+
+## In-place description expansion (2026-10-15, L-197)
+
+Maintainer checked the in-place footer expansion on `b2885fb` and reported
+it mostly fine, with two issues: the operation hint, the button and their
+bottom margin shifted when expanding, and the expanded state persisted after
+the selection moved to another row. `c4b8f01` anchors the hint and button at
+the same bottom position and collapses/rewinds the description when the
+selected row changes; the wheel-scroll hint returns only when the expanded
+text overflows. The maintainer passed the supplied three-item check on
+`c4b8f01`, DLL SHA-256
+`4A49927A467C94C08AEBD15155718B6FA0599D296F72E19D016BE26B24F575EC`.
+Environment: Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64,
+local world, ordinary release build with traces off. Deployed DLL matched.
+- Expanding keeps the operation hint and the Collapse button at the same height.
+- Selecting another row while expanded returns to the collapsed footer and
+  "Read full description".
+- Overflowing expanded text shows the wheel hint and scrolls with the wheel.
+Not seen in this check: every window size/GUI scale and language combination,
+numeric-row help, and editing/capture/error states while expanded.
+
+## Help presentation and chat-return follow-up (2026-10-15, L-197/L-203)
+
+Maintainer passed both supplied checks on `f8c714b`, DLL SHA-256
+`9AB0A06CA4EDA61477092A03F339C9884B7E2928C5CC06B7CDDEA419ADE00636`.
+Same configured local environment: Minecraft 1.26.51.01, LeviLamina Client
+26.51.7, Windows x64, ordinary release build with traces/probes and forced-
+unverified mode off. Deployed DLL/PDB/manifest matched the build.
+- The compact translucent full-description panel's appearance, size,
+  scrolling and return interaction passed.
+- The chat-return check passed: repeated send/close and Esc-close, short/
+  wrapped messages and OFF restoration were supplied in that check. No
+  vanilla-position jump was reported. This closes L-203 in the local scope.
+
+The maintainer then replaced L-197's interaction contract: keep the existing
+settings screen visible, grow its own description footer to the measured
+text, and open/collapse it using the button only. Remove the separate panel
+and F1 shortcut. That subsequent implementation has no runtime result yet.
+Server and previously pending forced-unverified/failure checks remain open.
+
+## Post-0.2.2 normal-build local smoke (2026-10-15, L-197 through L-203)
+
+Maintainer checked items 1-14 from the deployment checklist on `d5978e2`,
+DLL SHA-256 `5ABB2DCC6B3EA3EB6AB8AE2D689E323D22BFECC4D96BE5DCF7B3EA88CBF71B2E`.
+Environment: Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64,
+local world, ordinary release build with traces/probes and the forced-
+unverified option off. The deployed DLL/PDB/manifest matched the build.
+
+The maintainer performed the checklist except server checks and reported
+it was mostly fine, with two exceptions:
+- L-197: full descriptions open/read/scroll/return, but the help panel is
+  opaque instead of matching Lamium's translucent surfaces and takes up
+  nearly the whole settings area. Presentation needs a follow-up.
+- L-203: returning from chat input can briefly draw HUD messages at the
+  vanilla upper-left position before the chosen chat placement returns.
+
+The checklist covered the three Fake Offhand regressions (L-198),
+FreeCamera waypoint/death-point distance and range/restoration (L-199),
+underground terrain and restoration (L-200), M/Mouse 5/chord map closing
+and editing (L-201), full-description interaction, load/settings and quiet
+waiting state, FreeCamera hand/hotbar/HUD hiding, visual adapters and
+resource reload, Edge Guard/trading/transfer, schematic world/3D preview,
+in-world language, feature toggles and world/dimension re-entry. This is a
+local smoke report, not an itemized exhaustive regression of every adapter.
+The ordinary log identifies loader 26.51.7 and records the terrain culler
+binding and native `3 -> 5` retention during this run.
+
+Server behavior/server-pack skipping, forced-unverified fallback and
+injected hook/cleanup failures were not established by this run. No result
+for the subsequent help presentation/chat-return fixes is claimed here.
+
+## Maintainer regression reports (2026-10-15, L-197 through L-201)
+
+Reported build/commit and DLL hash were not supplied. The local ordinary
+log identifies the configured Minecraft 1.26.51.01 instance and LeviLamina
+26.51.7; only the loader rejection below is tied to that log, not every
+reported reproduction. The maintainer reported:
+- Fake Offhand: primary blocks prevent fireworks while gliding and aiming
+  into air; with blocks in both slots secondary placement takes priority;
+  secondary blocks prevent eating primary food (L-198).
+- FreeCamera movement does not change waypoint distance (L-199), and
+  underground visibility has regressed (L-200). The log says
+  `FreeCamera terrain: vanilla visibility retained (unsupported loader version)`
+  after detecting 26.51.7; the code admitted only .5/.6.
+- Settings descriptions are cut off (L-197).
+- A world-map M binding opens/closes; Mouse 5 only opens (L-201).
+
+These reports reopen coverage for those exact cases. Fixes and pure tests
+are not a successful runtime recheck; the new build still awaits Minecraft
+validation. Server environment and other cases were not reported.
+
+## Placed list headers and 0.2.2 release build (2026-10-15)
+
+Maintainer report, local: the release build `6ae5977` (DLL `8d3d2fad...a6ac4`)
+starts and shows "Lamium 0.2.2"; on `bd28452` (DLL `71490ffc...5b7d`) the
+Schematics > Placed headers "Done" and "Shown" are apart and above their
+values and switches, also docked right and in Japanese (L-195).
+
+## Hotbar section and BDS pass for Item Transfer (2026-10-15, L-169)
+
+Maintainer report on `37c3745` (DLL `5786921f...ebfac`), traces off:
+- Local: "everything" over a hotbar slot moves the hotbar alone (chest and
+  Alt + Shift click), over the main inventory leaves the hotbar, and in the
+  inventory screen moves the hotbar into the main inventory.
+- BDS: the `7586995` checklist (everything both ways, matching coal by wheel
+  and Alt click, hotbar kept, Shift + right drag leaving one, furnace and
+  brewing stand routing) and the hotbar checklist above: no problems seen.
+Not itemized: rejections/timeouts, latency, other screen families.
+
+## Batched Item Transfer pass (2026-10-15, L-169)
+
+Maintainer report on `7586995` (DLL `d93cfd79...a376`), local, Quick
+Container off: everything both ways in a large chest, matching coal moves
+(wheel and Alt click), hotbar kept, Shift + right drag leaving one, furnace
+and brewing stand routing all behaved as expected. Not checked: a server.
+The maintainer then asked for the same "everything" move on the hotbar.
+
+## Bulk moves of a resource pack traced (2026-10-15, L-169)
+
+Trace build `917496b` (`transfer_trace=y`), DLL SHA-256
+`10e9df62f95d1df72201d223bf79b8f3c3af8b49ac8daebb37accbdadbda31f6`, local
+world, Item Transfer off, the Quick Container resource pack on (observed only,
+PROVENANCE). Maintainer's sequence in a large chest: one Shift + click, chest
+to inventory everything, inventory to chest everything, hotbar to chest
+everything, coal: chest to inventory and back, then the held coal put down.
+- Every pack operation was vanilla `_handleAutoPlace(INT_MAX, collection,
+  slot)`, called once per source slot (high slots first) within one click,
+  2-35 ms in total. No take-all, place-all or cursor handler ran for them.
+- No call waited for an answer: the unsent batch grew to 44 requests during
+  one click, went out together, and one response packet answered all of them
+  about 30-60 ms later (counts 44, 43, 9, 31, 13, 18). Every response was a
+  success. The matching moves called only the slots holding coal.
+- The ordinary Shift + click was the same handler for one slot (1 request).
+So Bedrock accepts many auto-place requests in one frame; Lamium's slowness
+comes from its own one-request-then-confirm pacing (DESIGN "Inventory
+transfer"), not from the game. Not checked: a server, rejections, furnaces.
+
+## L-169 normal-build smoke checklist passes locally (2026-10-15)
+
+Maintainer report: the requested checks are confirmed, all behaved as
+expected, on implementation commit
+`c8c1f1bc0ccfcc4a57340c16d0c3e8dbb797269c`. Built and installed DLL SHA-256
+both `2A6B0A52B397511108815C2BE4315EFBA84403343AAA242B632D2B9FEF6BE515`.
+Windows x64 release client, all traces/probes off; manifest still 0.2.1,
+no release tag. The log shows a local world and LeviLamina 26.51.7 against
+the verified Minecraft 1.26.51.01 target.
+
+The requested smoke checklist covered Ctrl + wheel matching moves,
+Ctrl + Shift + wheel everything with the player's hotbar retained,
+Alt + left / Alt + Shift + left moves from the clicked side, Shift + right
+drag leaving one, and individual switches passing through to vanilla.
+Chest and furnace/brewing/beacon checks were requested. The maintainer's
+blanket confirmation does not itemize each gesture/slot/screen combination,
+game mode or packs; it does not establish the full screen matrix, servers,
+controlled rejection/timeouts or unverified-game fallback.
+
+The captured normal log contains source-count-change stops in storage,
+player, furnace and brewing collections. Triggers were not specified;
+no controlled interruption result is inferred. No route-hook failure,
+request rejection or slot confirmation mismatch appears in that log.
+The implementation build, LamiumTests and game dependency inventory
+(60 files / 286 hooks) passed. L-169's 0.2.2 development part is complete;
+the remaining coverage is in ITEM-TRANSFER, VALIDATION and BACKLOG's
+Pre-release checks. Later Design scope remains in L-169.
+
+## L-169 native-handler checkpoint passes locally (2026-10-15)
+
+Maintainer report on e3f9276, `transfer_trace=y`, deployed DLL SHA-256
+`850CC7B7A8A053F24BE8D6C04A8B0BAB3497623765727A14C322EF54FEF3F103`:
+the requested chest and furnace/brewing/beacon checks are finished and
+behavior remains as before. The diagnostic log shows a local-world load
+and LeviLamina 26.51.7; game target is the verified 1.26.51.01 executable.
+Game mode and pack coverage were not stated. Item Transfer was to be off
+for observing vanilla; the logged tested clicks are not cancelled.
+
+Alt key code 18 reaches the loader, and Alt + left clicks reach take-all.
+Take-all changes cursor false to true with 64 oak stairs; place-all returns
+them and clears the cursor. These are cursor operations, not side sweeps.
+Shift transfer reaches auto-place with the whole-stack sentinel. Inventory,
+large chest, furnace, brewing stand and beacon report is-container true.
+The native orders identify player/storage collections, furnace fuel then
+ingredient, brewing fuel/ingredient/bottles, and beacon payment. Outputs
+route to the player inventory; player routes also contain hotbar/main
+fallbacks. An elytra was accepted into the furnace ingredient slot while
+charcoal occupied fuel. Beacon payment takes one emerald; coal instead
+follows a player-side fallback. See ITEM-TRANSFER.md for the selected path.
+
+Snapshots immediately after handlers are prediction. The user confirms
+unchanged visible vanilla behavior, not exact authoritative packet counts.
+No new Lamium gesture, native hover-field mapping or scoped manager route
+filter was tested in this build. Other screen families and servers remain
+unchecked. The 0.2.2 implementation's changed-feature smoke test is next.
+
+## L-169 vanilla slot-role observations (2026-10-15)
+
+Maintainer follow-up: chest Alt + left click, Shift + right drag and
+ordinary take/place remain as before. Vanilla Shift + left click routes
+items by role in furnace, brewing stand and beacon screens. A furnace's
+fuel slot also accepts an item that cannot burn; exact item/count was not
+given. Brewing/beacon slots appeared to accept suitable items only; this
+was not an exhaustive acceptance check. Local/server context, packs and
+the exact tested build were not stated.
+
+At follow-up, the installed DLL SHA-256 was
+`3664E3EF9B025885C9F56F899CBAA8E0BFFFC6E89DB73EA54CB34CBD49C33951`,
+different from e3f9276's prepared diagnostic DLL
+`850CC7B7A8A053F24BE8D6C04A8B0BAB3497623765727A14C322EF54FEF3F103`.
+The current log names LeviLamina 26.51.7 and has no L-169 diagnostic lines.
+The observations are not attributed to the diagnostic build and do not
+verify the new gestures, handler names, collection names or registered
+routes. ITEM-TRANSFER.md retains the pending diagnostic checkpoint.
+
+## L-169 vanilla input observations (2026-10-15)
+
+Maintainer report during the 0.2.2 implementation investigation: in a
+vanilla storage screen, Shift + right drag transfers the whole hovered
+stack; Alt + left click selects an item like an ordinary click. Exact
+screen, local/server context, game/loader versions, Lamium build and DLL
+hash were not recorded for this observation. No new L-169 gesture, native
+handler effect, additional screen or role-specific route was verified.
+The read-only diagnostic checkpoint is in ITEM-TRANSFER.md.
+
+## Ghost tint slider and shared outline edges pass (2026-10-15)
+
+Maintainer report on `ee196c6` (DLL `870e781a...1c45`), local: the checklist
+passed: the ghost tint is a percent slider, 40% looks like the former weak,
+0% and 100% work; wrong-state stairs over a missing dirt ghost no longer
+fight at the shared edge. The maintainer then chose 70% tint and Normal
+outlines as the new defaults.
+
+## Ranked outline bars, first check (2026-10-15)
+
+Maintainer report on `976a628` (DLL `0874f6d4...053b`), local: a wrong block
+beside a missing ghost no longer flickers. Wrong-state stairs above a missing
+dirt ghost: the yellow and light-blue lines still fought slightly at the
+shared edge. Fixed in the next build (strongest copy only), not checked yet.
+
+## Mistake outlines missing (2026-10-15)
+
+Maintainer report on `cdf288d` (DLL `6fab1a59...1c3d`), local: the outline
+around red and yellow mistake faces is gone; when it went is not known. Cause
+found in code: since `2515d62` the sections' rebuild key (graphics mode, tint,
+outline width) was also compared as the graphics mode, so every mode was
+treated as Vibrant Visuals and mistake marks used that path. Fixed in the next
+build, not checked yet. The target card should also name the mismatch
+("Schematic: Wrong block / Wrong state"); added in the same build.
+
+## Schematic sections on the target card rejected (2026-10-15)
+
+Maintainer feedback on the `771ba02` presentation (no new build or hash
+supplied): the Stacked and Side by side sections are hard to read. Keep the
+Target Info schematic setting and the ghost as a target; return to the
+ordinary single-card layout and polish its details and wording instead. No
+in-game result is recorded here; the replacement build awaits checks.
+
+## Corrected schematic target presentation accepted (2026-10-15)
+
+Maintainer accepted the corrected stacked presentation after the supplied
+`0b89cd2` build, DLL SHA-256
+`41c58dde3b3e237709dd57a93f89ee593a8164442bf0340734586dd14c248434`,
+then requested a None / Stacked / Side by side display option for Target Info.
+No individual test cases or new environment details were supplied. This is
+acceptance of that presentation, not a claim of complete regression coverage.
+The new display choices and their persistence/fallback still need runtime checks.
+
+## Target-card schematic feedback and Placed headers (2026-10-15)
+
+Maintainer feedback after the supplied `334889a` build, DLL SHA-256
+`584c3dec9090401a0e406fe5654df5776e8f61d56ab0cb3146011e85e0884b6f`:
+- L-184: a ghost hit before a real block paired the ghost's Missing status
+  with the rear real block at another coordinate. Both could be grass blocks,
+  making the display seem contradictory. The maintainer requested hiding the
+  rear block or showing air at the ghost cell; the correction chooses hiding
+  the rear block. Placement names are also to be removed from Target View.
+- L-195: the supplied English Schematics > Placed screenshot shows Done and
+  Shown headers touching/overlapping. Two placements show 0% and 1%; Lamium
+  0.2.1 is visible. The maintainer explicitly leaves this outside the current
+  Target View change.
+World/server and graphics mode were not supplied for this report. No overall
+target-card pass is claimed. The corrections and broader cases need another
+in-game check; the Placed layout is only recorded for later.
+
+## Ghost outline bars and whole-HUD hiding pass (2026-10-15)
+
+Maintainer report on `7d79bef` (DLL `c206411d...294c`), local: normal and
+thick ghost outlines look like one solid line up close; FreeCamera "Whole
+HUD" also hides Lamium's HUD and it returns when FreeCamera ends.
+Not checked: servers, controllers, Vibrant Visuals for the outline bars.
+
+## Ghost target, ghost look settings, FreeCamera hiding (2026-10-15)
+
+Maintainer report on `b5daa75` and earlier same-day builds, local:
+- Ghost target card (L-184 part): aiming at a ghost cell shows "Ghost of"
+  with the block; aiming at a real block shows the usual card.
+- Ghost tint and outline width (L-186 part): changing either applies at
+  once. Normal and thick outlines, then four offset copies of a 1 px line,
+  looked like parallel thin lines up close; replaced by bars afterwards
+  (not checked yet).
+- FreeCamera hiding (L-191): the hand hides while flying; "Hand and hotbar"
+  also hides the hotbar; "Whole HUD" left Lamium's own HUD drawn (fixed in
+  `a86fa68`, not checked yet); everything returns when FreeCamera ends.
+Not checked: servers, controllers, Vibrant Visuals for the new outlines.
+
+## L-189 passes (2026-10-15)
+
+Maintainer report on `a1a758e` (DLL `58377e90...8089`), local survival:
+wheat seeds on stone and dirt use the fake offhand and plant on farmland;
+a carrot at full hunger uses the fake offhand on dirt and plants on
+farmland. With the earlier rounds, every listed case is as expected.
+Not checked: hoes, shears, honeycomb, crossbows, Riptide tridents, primary
+fireworks, servers.
+
+## L-189 first check (2026-10-15)
+
+Maintainer report on `9c487e5` (DLL `47142c2e...82c1`), local, survival:
+passes as expected: bread at full hunger on wood and dirt; a shovel on wood
+(fake offhand) and on grass (path); wheat seeds in air (fake offhand) and on
+farmland (planted); bone meal on wood (fake offhand) and on grass (grass);
+an axe on a log (stripped), on oxidized copper (scraped) and on plain copper
+(fake offhand); a minecart on grass (fake offhand) and on a rail (placed);
+a bow without arrows aimed at the sky (fake offhand); an empty bucket aimed
+at the sky or grass (fake offhand).
+Not as expected: bread, a shovel and bone meal aimed at leaves did
+nothing (leaves are not solid, so not a plain target); wheat seeds on stone
+or dirt did nothing (no planter component on wheat seeds); a bow without
+arrows aimed at copper or grass did nothing (the no-arrows check was air
+only); an empty bucket aimed at water used the fake offhand instead of
+filling (the hit's liquid flag was unset). Fixes in the next build: plain
+also covers blocks whose collision fills the cell; planters ask the planted
+block's mayPlace; bows, crossbows and Riptide tridents are idle on blocks
+too; a liquid is looked for along the aim.
+- On `1b0cd47` (DLL `9adb2e08...40a9fc`): all as expected except wheat
+  seeds on stone or dirt, which still did nothing. Next build: the planted
+  block must also `canSurvive` there, a farmland / soul sand fallback when
+  the planted block is unknown, and one log line per planter item
+  ("Fake Offhand: planter ...") saying how it was judged.
+- On `572e7e4` (DLL `dda3f55e...e785`): wheat seeds on stone or dirt still
+  did nothing; seeds and carrots on farmland planted; a carrot at full
+  hunger on dirt used the fake offhand. No planter log line at all: neither
+  wheat seeds nor carrots report the planter property or component, so the
+  planter check was never reached (seeds hit the old `_seeds` rule; a carrot
+  at full hunger on farmland would have used the fake offhand). Next
+  build: vanilla planters also count by name.
+
+## L-182 reporter's doubt and the log timeline (2026-10-15)
+
+The reporter doubted the cause: the crashes were in the world where the
+schematic was first imported, the only one where schematics were used.
+Their `2026-10-14.4.log` (14:49:27-15:51:56, after the 14:49 crash) shows
+world joins ("World map: saving to ...") alternating between two world
+folders: JDce+B0LUjQ= 14:50:05, fBx9HspzF+c= 15:08:55, JDce 15:09:31, fBx9
+15:48:59, JDce 15:50:04, fBx9 15:50:51, JDce 15:51:46, then the crash at
+15:53:07. Rejoining any world (the same one included) is expected to be
+enough. Asked: the second world, and whether the earlier crashes followed
+a rejoin. Maintainer 2026-10-15: schematic drawing work pauses (L-192,
+L-193 far cases and L-194 remain open).
+
+## Blended members fix passes; corner over glass isolated (2026-10-15)
+
+Maintainer report on `621d879` (DLL `7a5722fa...d7a`):
+- Walking around terrain_water_lamium: no water sections blink, about
+  55 fps as before.
+- Corner marks: over air no change with position; over water and over
+  glass the look changes, across a block plane through the corner (left or
+  right of it, screenshot with a sandstone strip at the boundary), also for
+  a corner one block above glass wherever a glass face lies against the mark.
+  Reading: the seen-sides change at that plane; over air it shows nothing,
+  so the material's reaction to the real block's depth just behind is
+  suspected (the Fancy face material is the hologram pointer). Asked:
+  the same in Simple graphics?
+- Answer: it changes in Simple graphics too, so not the material. Next
+  build: the seen faces 0.02 out of the cell, and corners beside a
+  see-through block drawn after the world's translucent blocks.
+- On `8570986` (DLL `e58097ee...13e1`), four screenshots (Fancy and
+  Simple, each side of the line): still changes over glass and water. From
+  one side the real water behind the mark is hidden, from the other it shows
+  through; the line lies on Chunk Borders lines. Reading: some of the game's
+  translucent terrain is drawn after the block entity alpha pass depending
+  on the camera's chunk, and the mark's depth hides it. Next build: these
+  corners draw in the name tag pass (`GhostLatePass`).
+- On `8b7c76d` (DLL `b970c0b3...e62b`): unchanged over glass and water; the
+  0.02 outset made the faces look lifted over stone (screenshot). The late
+  pass, the alpha-pass move and the outset are reverted (`8d3cdae`,
+  `754a1d6`, and the following commit); parked as L-194.
+
+## Re-sort interval: faster, but water blinked by section (2026-10-15)
+
+Maintainer report on `dc38abd` (DLL `61a4a7d5...d6d5`): walking around
+terrain_water_lamium now runs at 55+ fps (about 40 before), but the water
+surface blinks out in 8-block sections, easily seen. Cause: a section that
+entered the sorted budget between sorts was in neither mesh. Fix in the
+next build. Real glass alone does not change with position or turning;
+only a corner mark over see-through glass does.
+
+## Perf trace of `2965ec8`: schematic frame cost (2026-10-14)
+
+Maintainer runs on the `schematic_perf_trace` build of `2965ec8` (DLL
+`48c0576e...d083`), Windows x64:
+- A nearly empty world: terrain_water_lamium about 60 fps still and about
+  40 fps moving; desert village 60 fps still, 55+ moving. Trace with the
+  water schematic (720 sections): ghost pass about 5 ms/frame still;
+  moving, the blended pass 6-7 ms/frame with a re-sort in 203 of 207
+  frames (the section set within the 30000-quad budget changed nearly every
+  frame and each change re-sorted at once; held to the interval in the next
+  build).
+- The busy test world (3086 sections): ghost pass 4-6 ms/frame even
+  standing still with no builds (prepare 0.5, faces 0.8, lines 0.3, block
+  actors 0.4, entities 0.7 ms): per-section draw calls are a standing cost
+  (L-105 material).
+- The far flicker and darkening remain there (likely past the sorted
+  budget with many placements shown). Corners over glass still change
+  colour with the camera position; adjacent corner lines are now stable.
+
+## Near-only sort, corner marks, schematic frame rate (2026-10-14)
+
+Maintainer report on `5723ac2` (DLL `67bee317...17e5`), one screenshot:
+- Frame rate about the same: about 30 fps with terrain_water_lamium, about
+  40 fps with desert village, as before today's changes; heavy schematic
+  drawing in general, not a regression of the sort (to be measured).
+- The flicker is gone near the camera but remains far away (beyond the
+  24-block sorted radius).
+- Corner 1/2 marks still change with the camera position (their faces more
+  than their lines). Two adjacent corners trade which edge line shows on top,
+  over glass and over stone alike.
+Changes in `2965ec8`: see-through corners draw after the world's
+translucent blocks; corner 1 pulled nearer than corner 2; the sorted mesh
+takes the nearest sections up to 30000 quads. Deployed as a
+`schematic_perf_trace` build of `2965ec8` (DLL `48c0576e...d083`) to
+measure the frame time with terrain_water_lamium and desert village.
+
+## L-192/L-193 pass with the global sort; its cost; corner mark (2026-10-14)
+
+Maintainer report on `995b704` (DLL `5006e9bc...bd80`), local world:
+- The flicker and the darkening are both gone.
+- `terrain_water_lamium.mcstructure` drops from 60 to about 30 fps;
+  `desert village.mcstructure` (with water) feels a little heavier than
+  before but far less. Fix in the next build: only sections within 24 blocks
+  are camera-sorted together.
+- New: the red mark of save corner 1 over a see-through block looks
+  different from different positions (two screenshots), not with turning,
+  not over time, and not over an opaque block such as stone. Reading: the
+  mark's far side is pulled toward the eye by a distance-dependent amount,
+  in front of or behind the real block's near face. Fix `82d8298`: only the
+  seen sides and their edges. Not checked.
+
+## L-192/L-193 after the real see-through fix (2026-10-14)
+
+Maintainer report on `171ed42` (DLL `9a2756f7...25ab8`), two screenshots:
+- The flicker over real glass is gone, and an area that used to darken no
+  longer does; glass ghosts still darken by camera position in another area
+  (beside piston ghosts and red mistake marks).
+- The flicker remains where see-through quads of different placements lie
+  behind one another on screen; one placement shaped for several layers
+  (`white_glass_L.mcstructure`) showed none from any angle.
+Reading: blended quads were sorted per section at build time and sections
+by their centers, so overlapping quads of two placements kept a fixed
+order, and a section's order stayed the build-time one after the camera
+moved. Fix in the next build: all blended quads sorted together from the
+current camera (re-sorted after a quarter-block move). Not checked.
+
+## L-192/L-193 isolated: real see-through blocks below (2026-10-14)
+
+Maintainer report on `59ac118` (DLL `93738313...7cfc`), three screenshots:
+- With one placement shown the border flicker does not occur. Glass ghosts
+  darken by camera position (L-192) only where a real see-through block
+  (glass) is below; jumping changes it only there. With two placements over
+  real glass the flicker is limited to some areas.
+- Simple graphics: the same. Vibrant Visuals: white glass ghosts do not
+  draw correctly, so no flicker there.
+- The flicker is irregular, every few frames at 60 fps, like an old
+  fluorescent lamp.
+Reading: real glass writes depth in the plane of the ghost's bottom face
+(both sides drawn, no depth writes, unpulled), so the two fight by float
+precision, which differs per section offset and camera position. Fix
+`cddccc2`: such ghost faces are left out like faces against opaque
+blocks. Not checked in game. Vibrant Visuals' wrong white glass ghost is a
+separate observation.
+
+## L-193 perf traces: Lamium's draw is constant while it flickers (2026-10-14)
+
+Maintainer runs of two `schematic_perf_trace` builds (DLL `aa18be08...265d`
+on `08118df`, then `82929ec8...343e` on `59ac118` with order and camera
+counters), standing still where the glass ghosts flicker; the flicker is
+seen from every angle and position nearby.
+- No section rebuilds in the still periods (builds 0 for 5-7 periods of
+  about 5 s); rebuilds seen only while looking around (looked-at).
+- Second build, seven still periods: blended order changes 0, camera moves
+  0, a blended draw every frame. Lamium draws the same thing each frame, so
+  the alternation comes from what the game draws around it.
+Next: isolate in game (one placement hidden, no water below, graphics
+setting, how fast it alternates). Normal build `59ac118` redeployed.
+
+## L-193 flicker remains on `08118df` (2026-10-14)
+
+Maintainer report on `08118df` (DLL `a83ddf23...121e`), two screenshots: the
+flicker remains. It also shows where faces do not meet directly (an air
+cell lies between the glass in the red circle and the near glass), and the
+view alternates between two looks. So it is not two faces in one plane
+alone. Next: the `schematic_perf_trace` build (DLL `aa18be08...265d`, from
+`08118df` with only that option) to see whether sections keep being
+rebuilt while the view alternates.
+
+## L-193 border log and piston state log (2026-10-14)
+
+Maintainer run on `59ee8da` (1.26.51.01 without LIP), log read here:
+- Piston ghosts: `file 1/1 state 2/2, loaded 0/0 state 2/2` for extended
+  ones: the game's load leaves progress at 0, so the restore in `46ff471`
+  is what draws them extended.
+- L-193: four lines, all "border face kept at -87 84 -60 side 0: neighbor
+  white_stained_glass sides 63 reaches true blended true/true near camera
+  true". The faces were kept by the near-camera pairing, not missed as
+  neighbours. Fix in the next build: same-kind see-through pairs drop both
+  faces even next to the camera.
+
+## L-182 and L-178 preview fixes pass; border flicker placements (2026-10-14)
+
+Maintainer report on `7ba2d82`, DLL SHA-256
+`539314b2ecf8b682fcf2f48c87b2bbea4fcf789edbabd82a195d60c17f4a6e01`,
+local world: leaving and rejoining with a checked placement and opening the
+Check tab preview repeatedly did not crash (L-182, the reporter not yet
+asked); preview piston heads draw, extended and retracted (L-178).
+The remaining flicker is between `pistons` (8x3x7 at -95 84 -60) and
+`shulkers` (5x5x5 at -87 84 -63), both unturned, all layers: their white
+glass ghosts face each other across x = -87 at y 84, z -60 and -59. A
+bounded log line ("border face kept at ...") is in the next build.
+
+## L-182 crash traces resolved; L-178/L-192 follow-up (2026-10-14)
+
+L-182: the reporter sent three CrashLogger traces and minidumps
+(13:59:00, 14:49:03, 15:53:07) from Lamium 0.2.1 on Minecraft 1.26.51 and
+LeviLamina 26.51.5. Resolved here with the 0.2.1 symbol asset
+(`Lamium-0.2.1-client-windows-x64.pdb.zip` from the GitHub release). All
+three: SettingsSceneRender detour -> settings render -> table_view
+renderTable -> schematics_view renderContent / drawSchematicsBody ->
+preview::draw -> preview drawActors -> makeBlockActor (14:49, 15:53;
+access at [rcx+0x30], rcx null or garbage) or renderBlockActor (13:59).
+Cause: the preview kept its blocks and block actors across worlds;
+preview::reset() was never called. Fixed in `95a09e0` (reset on world exit
+and stop); not reproduced or checked in game.
+
+Maintainer report on `5711cc3`, Windows x64, local world:
+- Piston ghosts in the world are right, extended included, and under
+  rotation and mirror. In the Schematics 3D preview the heads are still
+  missing (fix `27150e5`, unchecked).
+- The remaining z-fighting is between two adjacent placements (screenshot:
+  a vertical boundary between their glass ghosts).
+- L-192: the dark glass sections depend only on the current camera
+  position, not on where the camera was before; with the camera below the
+  floor both sides turn dark, back above only the right one; the 8-block
+  size was checked against Chunk Borders.
+
+## L-178 follow-up: piston heads, border faces, glass brightness (2026-10-14)
+
+Maintainer report on `c364a64`, DLL SHA-256
+`1c4bf8962539758de6881e8351b80cb81c8718f3a4e057d66a69745c7619b38a`,
+Windows x64, local world (screenshot).
+
+- Piston ghosts now draw their head, but extended ones draw it retracted.
+  Candidate fix and diagnostic in the next build: the file's progress and
+  state are put back into the ghost actor (gated) and logged once per kind
+  ("piston ghost: file .../... loaded ..."), and the renderer sees the arm
+  block's ghost in the head cell.
+- Z-fighting between white glass and piston ghosts of the same placement is
+  gone. Between white glass ghosts of two different placements it remains.
+- New: white glass ghosts change brightness with the camera position, in
+  world-aligned groups that look like the 8-block ghost sections, not per
+  block; moving the placement keeps the dark area at the same world
+  coordinates. Recorded as L-192.
+
+## L-180 Riptide launch and L-178 piston ghosts (2026-10-14)
+
+Maintainer report on `e8c5e3f`, DLL SHA-256
+`77d901375df4cf780f5910a45f7525fe1749f7a407df87c4668c5eabe4a57e0b`,
+1.26.51.01 LIP instance, Windows x64, local world.
+
+- L-180: a Riptide launch in water and in rain puts the elytra on; a jump in
+  the air glides; the chestplate returns a few seconds after landing; a
+  charge without a launch and the child off change nothing. All passed.
+- L-178 (on the earlier `253ff81` build, 1.26.51.01 without LIP): with
+  `pistons.mcstructure` (pistons and sticky pistons in six directions,
+  retracted and extended with their arms), the base draws correctly but the
+  pushing face and arm never draw, in any state. The earlier wording of the
+  report was the maintainer's reading of the reporter's screenshot. Cause:
+  ghosts drew a block actor only for blocks without a mesh. Fix `b9c9d69`,
+  not yet checked.
+- Z-fighting seen where a glass ghost meets a piston ghost of the same
+  placement, and where it meets another placement's glass ghost. Fix
+  `17d7201` (one face per plane for see-through ghosts, touching placements
+  counted), not yet checked.
+
+## L-187 and L-179 follow-up fixes pass (2026-10-14)
+
+Maintainer report on `7548f0f`, DLL SHA-256
+`3618cc102f78a6b9be17cfa56ed8552290d420c28058e8d571d2fbfc52ca3e4f`,
+both 1.26.51.01 instances deployed, Windows x64, local world: both checks
+passed (the whole world map turns sharp after zooming in from a far view;
+a shulker box opening another way gets the yellow mark, which goes away
+when it is placed the right way).
+
+## L-187 slot fix, L-179 opening check, Schematics off (2026-10-14)
+
+Maintainer report on `d9a016c`, DLL SHA-256
+`1388c732d6713ffa27f8d1c34ae3fbd903db1642c721d227a50253756b41d023`,
+both 1.26.51.01 instances deployed, Windows x64, local world.
+
+- The three requested checks were "mostly fine".
+- L-187: after zooming in, only part of the view became sharp; the rest
+  stayed coarse, enlarged far images (screenshot). Cause found in code:
+  `00be8f0` kept a waiting slot's last-use time old, so it was reassigned
+  every frame and the finer tiles never showed. Fixed in `f25188f`, not yet
+  checked.
+- L-179: the Check detects a shulker box opening another way (target card
+  `facing up -> east`, screenshot), but no yellow mark appeared on it in the
+  world while red marks showed elsewhere. Cause: the section marks judged the
+  block alone. Fixed in `c92d93a` (shared comparison, section rebuilt when
+  the opening arrives), not yet checked.
+- Schematics off guidance: no problem reported.
+
+## L-187, L-176, L-188, L-179 batch check (2026-10-14)
+
+Maintainer report on `9b3b8a9`, DLL SHA-256
+`b1ed4d6a708cbe9b91cad22c717d1435928fa51b3fae29ca46ba643efc151327`,
+deployed to both the 1.26.51.01 and 1.26.51.01 LIP instances (which one ran
+was not stated), Windows x64, local world. All diagnostics off.
+
+- L-187 world map zoom-out: a small world stops at 1/8 as before; a large
+  world zooms out until all explored area is on screen. Defect: right after
+  viewing a large area, a quick wheel zoom-in briefly drew the map wrongly,
+  apparently showing other places than the one zoomed into. Candidate fix
+  `00be8f0` (a reused texture slot is drawn only a few frames after its new
+  image is uploaded; any coarser image stands in), not yet checked.
+- L-176: in Vibrant Visuals Hitboxes and Chunk Borders show their colors.
+  Ordinary modes, graphics switching and depth were not itemized.
+- L-188: L opens and closes settings; holding L opens it once; L typed in
+  search does not close; binding L as a key works.
+- L-179: rotated and mirrored placements with shulker boxes match a
+  structure block load of the same file. Found: the Check counted a placed
+  shulker box with another opening as correct (fixed in `27fff48`, not yet
+  checked).
+- Separately: with the Schematics feature off, R's radial menu items (area
+  selection, save) did nothing, without a clear message. Guidance built in
+  `6a8b37c`, not yet checked.
+
+## L-176 Chunk Borders and Hitboxes lose colors in Vibrant Visuals (2026-10-14)
+
+Maintainer report: Chunk Borders loses its line colors in Vibrant Visuals,
+and an in-game check confirms Hitboxes also has no distinct line colors
+there. The Hitboxes symptom is confirmed, rather than inferred only from
+the shared rendering path. No fix has been implemented or tested.
+
+The build/DLL SHA-256, loader, UI profile, packs and local/server context
+for this observation were not separately reported. The latest deployed
+build in this session is `dc3ac45`, DLL SHA-256
+`f0f51371a77025a533a73730630cf05f8c1bc66d650c7dce53c9b8716a10a0fb`,
+in the 1.26.51.01 LIP instance on Windows x64; that is context, not confirmed
+identity for this check. Ordinary modes, switching graphics settings and
+depth/occlusion regressions were not itemized in this report.
+
+## L-174 final default reset accepted (2026-10-14)
+
+Maintainer report on `dc3ac45`, DLL SHA-256
+`f0f51371a77025a533a73730630cf05f8c1bc66d650c7dce53c9b8716a10a0fb`,
+deployed to the 1.26.51.01 LIP instance, Windows x64. Loader revision,
+UI profile, packs and local/server context were not reported. All diagnostics off.
+
+- The supplied default-reset check passed. The flush-left placement with
+  the chat bottom 44 GUI units above the screen edge is accepted, including
+  the 4-unit gap above two default Durability HUD rows.
+- The maintainer accepted closing L-174. No remaining defect was reported.
+- A fresh settings file and the broader UI/pack/server checks were not
+  separately reported; they remain coverage gaps, not completion blockers.
+
+## L-174 expiry flicker fixed and default placement chosen (2026-10-14)
+
+Maintainer report on `b28a40d`, DLL SHA-256
+`91b932172b336bf50f9f3415ac82fce882a88d0ffa018d79b3768da39ebcc0ae`,
+Minecraft 1.26.51.01, Windows x64; loader revision, UI profile, packs and
+local/server context were not reported. All diagnostics off.
+
+- The supplied expiry/long-message checklist passed. Remaining messages do
+  not flicker when an older one disappears; wrapped long messages are fine.
+- The maintainer chose their current placement as the default: flush left,
+  vertically above two Durability HUD rows with a little space. Read-only
+  confirmation of the saved HUD placement gives BottomLeft, dx 0, dy -45;
+  Durability is at 100%, BottomLeft, dx 4, dy -4. Each native Lamium
+  durability row is 18 GUI units, leaving a 5-unit gap at that placement.
+- Follow-up decision in the same session: use 4 GUI units above the two
+  durability rows, matching their bottom inset. The new default is therefore
+  BottomLeft, dx 0, dy -44; the existing saved -45 placement is kept.
+- This verifies the chosen position in the tested layout, not the new
+  binary's reset/fresh-settings default. Broader coverage remains as before.
+
+## L-174 native chat placement: initial checklist and expiry flicker (2026-10-14)
+
+Maintainer report on `5b5750c`, DLL SHA-256
+`b204f68fc239f41ff7545ea5eff561686a556b9dd2c274361105e3893dc83235`,
+Minecraft 1.26.51.01, Windows x64; loader revision, UI profile, packs and
+local/server context were not reported. All diagnostics off.
+
+- The supplied three-step checklist passed: enabling puts native text and
+  backgrounds at the bottom left and fades normally; HUD layout dragging,
+  saving and reset work; OFF restores placement and coordinates and the
+  chat input screen are unaffected.
+- Exception: as messages disappear, the remaining messages briefly flicker
+  (the maintainer described it as possibly being redrawn). Cause is not
+  established. The first implementation forced position caches dirty after
+  every render and took the panel height before native render-time layout.
+- GUI scales, Pocket UI, packs, focus/world/dimension changes and server
+  coverage were not separately itemized. The follow-up fix is unverified.
+
+## L-175 title screen entry and language outside a world (2026-10-14)
+
+Maintainer checks with screenshots, all diagnostics off.
+- `6fc969a`: "Lamium 0.2.0" shows bottom right, hover underlines it, a
+  click opens the settings; stays after returning from other screens and
+  across UI profiles. Without a band it looked unlike LeviLamina's line.
+- `f560b37`/`11665ae`: band added; measured from screenshots the band was
+  about 93% opaque (drawn on several title-screen views per frame) and
+  taller than LeviLamina's, with an 8 px gap.
+- `bbbeb7c` (DLL SHA-256
+  `520656d191aa944e799b70f22e0560b4d32c6b8918bf8c96378f8a71e4eedadf`):
+  drawn once per frame at the measured opacity, height and text place;
+  matches LeviLamina's line. Choosing a language from the title screen
+  stayed at "Applying..." (executor not running outside a world).
+- `a4810bc`: the language applies from the title screen; L works at the
+  title screen and in worlds through the shared queue. The thin underline
+  looked too thin in English.
+- `5c35918` (DLL SHA-256
+  `2e1e4831ca639e1621af27f4f4a6c37a32942b30039bf9fb91f695eb26f5fc08`):
+  repeated switching from the title screen applies without a notice or
+  freeze; in a world the 10 s notice still appears; the underline is right
+  in English, Chinese and Korean (thin only in Japanese).
+
+## L-175 Lamium settings outside a world (2026-10-14)
+
+Maintainer checks, Minecraft 1.26.51.01, LeviLamina Client 26.51.7.
+- `67a6cf7` (DLL SHA-256 `6b20815f...`): L opens nothing at the title
+  screen or in OreUI menus; in a world it works as before.
+- Uncommitted diagnostic builds: the title screen's name is `start_screen`;
+  OreUI pages are `ui://./hbui/index.html`. Keys reach Lamium there and the
+  settings action is queued, but LeviLamina's client thread executor never
+  runs the queue before a world is joined.
+- Diagnostic build with the fix (DLL SHA-256 `590e627b...`; the code of
+  `1632237` plus temporary logs): L opens the settings at
+  the title screen and in the OreUI settings and most other menus (not the
+  dressing room or Marketplace; the maintainer is fine with that). General
+  switches change; world-only views are dimmed and show "Available inside
+  a world."; Esc returns to the title screen; in a world L works as before.
+
+## Pack changes kept old block textures: bisect (2026-10-14)
+
+Isolated BDS with the required magenta-dirt pack; the global test pack
+(yellow dirt, cyan stone) active. Maintainer checks; "case" = join the BDS,
+leave, enter a local world in the same session.
+- Unmodded Minecraft (no LeviLauncher): global packs return after the BDS
+  and after re-enabling them in a session.
+- LeviLauncher, Lamium moved out (ChiyanMap, LHolo, LeviSchematic loaded):
+  case shows yellow dirt (correct).
+- `35b2692` + `feature_skip` (DLL SHA-256
+  `4dcb8701004ea00badf1d4e51269e4ed3643d43d87c0877a04729e5010523dcd`):
+  skipping Connected Textures: still wrong. Skipping the map, waypoints,
+  schematic ghosts and target icons: the local world keeps magenta dirt.
+  Skipping 20 more features: local yellow/cyan then the BDS shows yellow
+  dirt and vanilla stone; after a restart the BDS's magenta dirt stays in
+  the local world. Skipping all 50: correct. Skipping only "Settings
+  screen" (which also draws the HUD, minimap included): correct.
+- Only textures both packs replace (dirt) stuck at the first one loaded;
+  stone changed correctly.
+- Cause found in code: the minimap's block colors, radar faces, the
+  saturation outline and Connected Textures read images by path through
+  `TextureGroup::getCachedImageOrLoadSync`; that cache is reused when the
+  terrain atlas is rebuilt for a new pack stack. Fix `241f635` reads them
+  from the packs directly.
+- Fix checked on `241f635` (DLL SHA-256
+  `411ecd564b80f93d6fdaf5cc75bb3eba9b01ad05bacb39ee2185161bef21c8c7`, all
+  diagnostics off): local world yellow/cyan, then the BDS magenta dirt and
+  vanilla stone, then the local world yellow/cyan again. Minimap colors,
+  the saturation display and Connected Textures look as usual.
+- Same build, Skip server resource packs on: the BDS shows normal dirt and
+  the toast "Server resource packs not applied (1)"; leaving for a local
+  world brings back the global pack (yellow dirt, cyan stone). The earlier
+  vanilla look after skipping is not seen with the fix.
+
+## L-167 Skip server resource packs, product build (2026-10-14)
+
+Maintainer check on `b1e03d1`, all trace options off. Deployed DLL SHA-256
+`ccf8700298365689c01a3c3c87582b3a4f5c2f3400c637d42b7c449de91a8542`.
+Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64, isolated BDS
+1.26.51.1 with the required magenta-dirt test pack; the global test pack
+(yellow dirt) active.
+- Switch off: joining the BDS shows magenta dirt, no notice.
+- Switch on, rejoin: joins normally, dirt normal, the toast "Server
+  resource packs not applied (1)" appears.
+- Then a local world in the same session: vanilla look, the global test
+  pack not applied although Global Resources lists it; no notice. Same
+  symptom as the earlier trace session, where the pack had been activated
+  at the title screen in that session. Whether vanilla does the same after
+  leaving a required-pack server, without Lamium, is unchecked.
+
+## L-167 global packs with a required server pack; a lost global pack (2026-10-14)
+
+Agent-made global test pack (yellow dirt, cyan stone) in the instance's
+shared resource_packs; BDS as in the required-pack entry below (magenta
+dirt). Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64.
+- `2084bc9` + `language_trace=y` (DLL SHA-256
+  `e24cf90959c5f8deaeacfa4bca4db588e9f82e767e06ff226f372e6dcec167dc`):
+  calculator Close button closes. The maintainer activates the test pack at
+  the title screen (log: Global stack set with 1 entry), enters a local
+  world: dirt and stone are vanilla. Log: at world start the Global stack is
+  set again with 0 entries; `global_resource_packs.json` still lists it.
+  This session followed earlier forced exits (the language hang).
+- Same game with Lamium moved out of mods (ChiyanMap, LHolo, LeviSchematic
+  still loaded): the local world shows yellow dirt and cyan stone; Global
+  Resources lists the packs. Joining the BDS with the required pack: dirt
+  magenta, stone vanilla (the global pack is not applied), and in-world
+  Global Resources shows the gray page. So the gray page and the dropped
+  global pack on a required-pack server are vanilla, not Lamium's skip.
+- Unmodded Minecraft (started normally, not through LeviLauncher; no
+  LeviLamina or mods) joining the same BDS: the maintainer's own global
+  pack is not applied, the server's pack is, and in-world Global Resources
+  shows the gray page. This confirms the behavior is vanilla.
+- Normal build `fb16849` code (DLL SHA-256
+  `b890835bf52538df349ffa1ab84a260917e7e27a757483010bb1a09dcafd55c0`),
+  Lamium back in mods, after clean exits: the local world shows yellow dirt
+  and cyan stone; Lamium settings open with L. The earlier 0-entry Global
+  stack did not recur; likely vanilla recovery after the forced exits or
+  that trace session, not reproduced with Lamium.
+
+
+Maintainer check on `1109e35`, all trace options off. Deployed DLL SHA-256
+`0f42327a6d0d2141a680e0ab5facc5426a712940d5234139a6d3c7852ca1f9d6`.
+Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64, local world.
+- A second choice within 10 s shows the footer notice with the seconds
+  left and does not switch; after waiting 10 s the switch works.
+- Not a test of whether the interval prevents the earlier hang.
+- Later report (2026-10-14, builds up to `241f635`): no freeze while
+  switching in worlds since the interval was added; the maintainer keeps it
+  as is for now. Not a stress test.
+
+## L-167 required server pack: accepted, not applied locally (2026-10-14)
+
+Agent-prepared isolated BDS 1.26.51.1 (`texturepack-required=true`, world
+`lamium-packs` with one Lamium-made test pack that only turns dirt magenta).
+Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64.
+- Baseline on `2c77a5c` with `language_trace=y` (DLL SHA-256
+  `16abdd0477cb4f60a39985051cca14ec46d8f03d9dd43976059fc844edd9abf0`): the
+  maintainer accepts the download prompt; dirt is magenta. The trace line
+  cap was used up earlier in that session, so this join has no trace.
+- The same game at the title screen: rapid vanilla language switching does
+  not hang and feels faster than in-world switching.
+- Research build `2c77a5c` + `language_trace=y server_pack_skip=y` (DLL
+  SHA-256 `fe9ab8a1c5c1561c4db2fad7470fb34ac2b986d9b998f49948e7cbcdf84a8ea3`):
+  no download prompt (pack cached from the baseline). Log: pack info
+  required=true entries=1; server stack resources=1 required=true; the
+  research build empties it; Level stack set with 0 entries. BDS logs a
+  normal connect/spawn and a disconnect only when the maintainer leaves
+  about two minutes later.
+- The maintainer joins normally, dirt has its normal texture, walking for
+  1-2 minutes shows no missing textures or UI problems. Exception: in-world
+  Settings > Global Resources shows only the top menu; its content area is
+  plain gray.
+- Not checked: a first join without a cached pack, packs with custom
+  blocks/items/entities or UI, servers other than BDS.
+
+## L-167 framed language list and a hang after repeated switching (2026-10-14)
+
+Maintainer check on `2c77a5c` with `language_trace=y` (server pack skip off).
+Deployed DLL SHA-256 `16abdd0477cb4f60a39985051cca14ec46d8f03d9dd43976059fc844edd9abf0`.
+Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64, local world.
+- The Game language list inside the settings frame works; switching
+  repeatedly works at first.
+- Schematic ghosts are rebuilt after each switch (Lamium drops ghost
+  resources on purpose); the world's chunks are not redrawn.
+- After 12 switches in 23 s (00:22:44 to 00:23:07) the game froze about
+  9 s after the last one (ja_JP -> es_MX). The log shows that apply
+  completed (`applied=true`) and ghosts rebuilt; nothing is logged after.
+- The hung process used almost no CPU and did not respond. A minidump shows
+  every thread waiting, the main thread in a kernel wait, and no Lamium
+  frame on any thread's stack. Cause not established: not shown to be
+  Lamium code, not shown to be vanilla. Whether vanilla title-screen
+  switching hangs the same way is unchecked.
+- Server pack checks (BDS required pack) not started.
+
+## L-167 all game languages and in-world Global Resources (2026-10-13)
+
+Maintainer check on `6d536e4` with `language_trace=y`. Source/deployed DLL
+SHA-256 `7d9f888a25de561bb7cf4a51502c20125caae2bf2461a5e7efc45db37ce0f84a`.
+Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64, local world.
+- Game language lists 29 languages; switching to languages other than
+  Japanese/English works without freezing. Log: en_US, ja_JP, fi_FI, nb_NO,
+  el_GR, tr_TR and back, each `applied=true`.
+- Each in-world apply logged the pack-language callback twice: once from
+  `I18n::chooseLanguage`, once from Lamium's explicit call (removed after
+  this check).
+- Pause > Settings is the JSON screen
+  `screen_world_controls_and_settings_fullscreen - global_texture_pack_tab`
+  (global=false, resourceTab=true; the controller also holds all 29
+  languages). The maintainer sees Global Resources listing active packs but
+  no control to activate, deactivate or reorder them. No pack stack change
+  is logged while in the world.
+
+## L-167 in-world Game language list (2026-10-13)
+
+Maintainer check on `9651b4e`, all trace options off. Source/deployed DLL
+SHA-256 `82e276dfd570f157a8028cbf1ad63d220cf4fd23e92f0c754e0567985c1aa88e`.
+Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64, local world.
+- On `7355548` the list opened with no text (buttons still worked): the view
+  did not flush its text batch. Fixed in `9651b4e`.
+- General settings > Game language shows language names, codes on the right,
+  the current language highlighted and "Current: ..." in the footer.
+- Choosing English switches the display to English without leaving the
+  world; the maintainer reports other language-dependent game text follows.
+  The language is kept after restarting Minecraft.
+- Log: ja_JP -> en_US -> ja_JP -> en_US, each `applied=true` with the saved
+  preference equal to the current language.
+- Not separately checked: English Search afterwards, schematic ghosts after
+  a change, BDS.
+
+## L-167 vanilla language selection baseline (2026-10-13)
+
+Maintainer check on `e93d154`, with `language_trace=y` only. Source/deployed
+DLL SHA-256 `8081322c3246a2603d3324a9d5d60e681d3f23f9347ff4381b631a0eb7655d70`.
+Minecraft 1.26.51.01, LeviLamina Client 26.51.7, Windows x64, local world.
+- Maintainer confirms title-screen Settings Japanese -> English -> Japanese
+  switches display and fonts normally; after entering a local world,
+  Lamium settings opens normally. Language is absent from pause settings,
+  as reported before this build.
+- Log at 23:11:59 / 23:12:06 shows `I18nImpl::chooseLanguage`, then the
+  MinecraftGame observer and FontRepository update, followed by
+  ResourcePackManager's language callback. I18n changes from ja_JP to en_US
+  and back. During each choose call, the saved option still holds the old
+  language; by the next selection it holds the previous selection.
+- The actual settings screen is OreUI (`ui://./hbui/index.html`); the JSON
+  GeneralSettings controller's selection hook is not seen. I18n reports 29
+  supported languages. No crash or font regression reported.
+- World join information contains required=false and zero resource packs.
+  This is not a required-server-pack test. Pack removal, Global Resources
+  editing, restart persistence, in-world language changes, cached feature
+  names and BDS language switching remain unverified.
+
+## L-166 controlled BDS delays, interruption and re-entry (2026-10-13)
+
+Agent Computer Use with the maintainer performing modified row clicks and
+the requested Alt+Tab/close gestures. Normal `481dc7d`, all trace options off;
+source/deployed DLL SHA-256
+`88deafb6e351ea72afb637ca5373163835023c53d09f6489c4901849aefd8352`.
+Minecraft 1.26.51.01, LeviLamina Client 26.51.7, isolated BDS 1.26.51.1.
+- Delay only the BDS thread named MC_SERVER; leave NetherNet communication
+  threads running. Helpers verify thread ownership/name, have a fixed
+  deadline, and resume their own suspension in finally. Connection remains
+  alive. This creates delayed server processing, not measured network RTT.
+- A 45-second hold with four ordinary books causes selection/refill but no
+  new enchanted books. After responses return and focus returns, holdings
+  stay at 200 emeralds, four ordinary books, eight enchanted books. The
+  maintainer kept Minecraft foreground for six seconds after the trigger;
+  normal logs do not isolate the timeout from subsequent focus loss.
+- With two-second holds separated by 0.2-second run windows, a fresh
+  modified click trades the remaining four books: 12 enchanted books total,
+  172 emeralds, no ordinary books; the book row is sold out. This finishes
+  before the attempted dimension interruption and counts only as delayed
+  trading/sold-out coverage.
+- A fresh smith starts with 240 coal at price 15. Two-second holds separated
+  by 0.01-second run windows produce three emeralds and 195 coal. A console
+  teleport then moves the player to a prepared Nether platform and back;
+  the trade screen closes, totals remain three/195, and no run restarts.
+  These snapshots do not prove the exact request phase at dimension change.
+- Hold server processing again, trigger the coal row, immediately Alt+Tab.
+  The selection changes from axe ingredients to 64 coal, but output remains
+  three emeralds. Restore server responses and focus: still three/195.
+- Repeat with the maintainer clicking the screen's × about one second after
+  the trigger: closed screen, three emeralds and 195 coal after responses
+  return. Physical Esc in the earlier attempt stopped Computer Use, so the
+  × gesture replaces that attempt.
+- Save/exit, join the same BDS again, wait and reopen the trader: still three
+  emeralds and 195 coal, no automatic restart. The final item-entity query
+  finds only a Lead, no coal or emerald drop. Remove the temporary Nether
+  ticking area; leave the isolated test world saved.
+- Coverage limits: real network latency/loss, exact runtime timeout cause,
+  forced world exit with a pending response, other servers and price changes.
+  Part 1 completion covers the implemented repeated-trade behavior and the
+  observed local/normal-BDS checks; these limits stay in pre-release checks.
+- Finish on Minecraft's main menu; stop only the agent's test BDS cleanly,
+  restore server.properties byte-for-byte from its pre-test backup, and
+  confirm the restored hash matches. All delay helpers have finished.
+  The normal deployed DLL remains unchanged with the hash above.
+
+## L-166 normal BDS settings-off and enchanted books (2026-10-13)
+
+Agent Computer Use with the maintainer performing Shift + right clicks.
+Same normal `481dc7d` build and source/deployed DLL SHA-256
+`88deafb6e351ea72afb637ca5373163835023c53d09f6489c4901849aefd8352`;
+Minecraft 1.26.51.01, LeviLamina Client 26.51.7, BDS 1.26.51.1 test world.
+- Turn Repeated trading off in Lamium's settings. Several modified clicks
+  on the librarian's 7 emeralds + 1 book offer do nothing: 256 emeralds,
+  8 ordinary books, no enchanted-book output. Closing returns the inputs
+  unchanged. Restore the setting to on.
+- One modified click then produces eight enchanted books in separate
+  inventory slots. Emeralds decrease 256 -> 200, ordinary books 8 -> 0;
+  the run stops for missing second input. Closing preserves these totals.
+  BDS finds no dropped-item entity.
+- A latency fixture that pauses all BDS threads for 20 seconds disconnects
+  the client before the maintainer can trade. The helper resumes every
+  acquired thread; this attempt establishes no delayed-trade behavior.
+  Client and test BDS are restarted for a more selective fixture.
+- Interrupted runs and delayed trade responses remain unchecked here.
+
+## L-166 normal BDS sold-out and safe input return (2026-10-13)
+
+Agent Computer Use with the maintainer performing the right-click gestures.
+Minecraft 1.26.51.01, LeviLamina Client 26.51.7, isolated BDS 1.26.51.1
+test world. Normal build `481dc7d`, all trace options off; source/deployed
+DLL SHA-256 `88deafb6e351ea72afb637ca5373163835023c53d09f6489c4901849aefd8352`.
+- Repeat the full-inventory fixture from the preceding overflow report:
+  64 emeralds in the ingredient slot, 64 in inventory, all 36 inventory
+  slots occupied. Shift + right click produces no axe, both emerald stacks
+  remain 64, and BDS finds no dropped-item entity. Remove the test stone
+  before closing, because ordinary vanilla close can return overflow.
+- With space restored and 128 emeralds, plain right click buys one axe and
+  consumes three emeralds, then remains at one output while waiting.
+- One Shift + right click buys 11 more axes: 12 total, 92 emeralds remain.
+  The row displays sold out. Closing returns inputs to inventory as 64+28;
+  reopening still displays sold out. BDS finds no dropped-item entity.
+- Build, LamiumTests, LamiumNativeTests and the game-hook inventory check
+  pass. Two-input books, settings-off, delayed responses and interruption
+  checks remain pending; this entry does not complete L-166.
+
+## L-166 full-inventory input overflow found (2026-10-13, BDS)
+
+Agent Computer Use with the maintainer performing the Shift + right-click
+start gesture. Minecraft 1.26.51.01, LeviLamina Client 26.51.7, isolated
+BDS 1.26.51.1 test world. Normal build `0193c02`, source/deployed DLL SHA-256
+`5a3dd09c714bb716221d1b735db0dc5bbaca6ccf18227bb646a570c63142c97d`.
+- Prepare 128 emeralds and 34 full stone stacks. Left-click the axe row
+  to place 64 emeralds in its ingredient slot; add one stone stack to fill
+  the slot that selection freed. The output destination is now full.
+- No dropped-item entity is found before starting. Shift + right click
+  produces no axe, but an emerald item entity is present afterwards.
+  Closing the screen also leaves emerald items beside the villager.
+- The selection/refill route can return ingredient overflow by dropping it.
+  Exact dropped counts and the response sequence are not established by this
+  no-trace run. Do not treat zero output as a successful capacity check.
+- Follow-up adds a preflight for returning both existing ingredient stacks
+  before selection/refill. Build and pure tests pass; runtime recheck pending.
+
+## L-166 Shift + right-click row trigger (2026-10-13, local)
+
+By the maintainer on Minecraft 1.26.51.01 (LeviLauncher instance
+`1.26.51.01`), existing local test world. Uncommitted L-166 work on
+`a1773c6`, `--repeat_trade_trace=y`; source and deployed DLL hashes matched.
+- Diagnostic build `b1eef22ade01181a3e30b0436536f34e066c12537c99a35e6fa8e83142c397d6`:
+  Shift + right click reaches `ScreenView::handleButtonEvent` as global
+  button 1485818800 (plain right click: 710676172) and reaches the trade
+  rows' `InputComponent`s. Their mappings are 3024615655->2196830738
+  (pressed), 710676172->4096534505 (pressed) and 3745745897->2196830738
+  (focused); nothing maps 1485818800, so no screen event follows.
+- Row remap build `af7be411ff29211ffa4994327d219f9cdad85f6cda63dcb50c2725dab83289b5`:
+  Shift + right click started a run and sent the refill, then stopped
+  ("context changed"): Shift's key auto-repeat counted as new input. Seen in
+  game as selection only. Locked row: nothing. Plain right click: one vanilla
+  trade. Inventory Shift + right click: vanilla stack move.
+- Build `5196a9fa90a7e9d729a1663e08c9044feac24a5ef501d77108d0c39969f2485c`
+  (key auto-repeat no longer cancels): Shift + right click on a usable row
+  trades until sold out or inputs run out; a row without inputs trades
+  nothing; a key or click during a run stops it.
+- Not checked: BDS, full inventory, two-input/book offers, settings-off,
+  screen close/focus loss/dimension change mid-run, the normal build.
+
+## L-166 auto-place spike result (2026-10-13, local)
+
+By the maintainer on `1.26.51.01 LIP`, existing local test world. Trace build
+with the `RepeatAutoPlace` diagnostic; source and deployed DLL SHA-256
+`28893a80cedf6e86db6b3a0f11b84f811380244cf50fcb921a1146e3b5156f7a`.
+- Shift-clicking a trade row does nothing: no request batch follows.
+- Shift-clicking the result slot calls
+  `_handleAutoPlace(2147483647, trade2_result_item, 0)` once. Client-side
+  `notifyTrade` predicts uses 5 -> 9, then one request batch with
+  CraftRecipe crafts=4 succeeds and server-side `notifyTrade` confirms
+  uses 5 -> 9 with 4 emeralds out.
+- The 4 crafts match the 64 coal in the ingredient slot at price 15
+  (64 -> 4 left). The maintainer held much more coal in inventory and only
+  the slot contents were traded: no restock from inventory in this path.
+- Memo verdict: single-request multi-craft is real, but slot-limited. It
+  cannot replace the refill loop for trading up to holdings; it could only
+  serve as bigger per-round steps after a refill.
+- Not checked: full-inventory refusal on this path.
+
+## L-166 first repeated-trade runtime pass (2026-10-13, local)
+
+Agent Computer Use, Minecraft 1.26.51.01, LeviLamina Client 26.51.7,
+existing local test world. Implementation based on `a1773c6` with uncommitted
+L-166 changes, only `repeat_trade_trace` on. Source and deployed DLL SHA-256:
+`5127f9181731ad7c4038ddd873b060b0125b0423a1f9c886c13be46343c9dd5b`.
+- One right-click on coal runs seven separate vanilla automatic-recipe
+  requests, uses 9 -> 16/16, emeralds 9 -> 16, total coal 514 -> 409.
+  Every next request follows the previous owned success response and exact
+  inventory delta; the run stops at the offer limit. Cursor stays empty.
+- Left-clicking the axe row refills/selects its emeralds without buying.
+  Right click buys five unstackable axes, emeralds 16 -> 1, uses 0 -> 5/12,
+  then stops for insufficient inputs. Each output occupies an inventory slot.
+- Right click on the visible locked level-3 row does nothing. Right click
+  on an unlocked iron row without iron stops before any trade request.
+- Earlier candidates preserved vanilla one-trade behavior because they
+  looked only in the pressed callback map. The verified row handlers are
+  single callbacks in the interacted map (IDs 2196830738 and 4096534505).
+- This pass does not establish BDS, full-inventory refusal, two-input/book,
+  settings-off, interrupted-run or trace-disabled behavior. Later source
+  adds explicit cancellation on physical key/mouse input and dimension ID.
+
+## L-166 client offer prediction research (2026-10-13)
+
+Agent Computer Use in the same local test world, Minecraft 1.26.51.01,
+LeviLamina Client 26.51.7. Read-only trace based on `a1773c6` with additional
+offer/notify diagnostics; source and deployed DLL SHA-256
+`8081f24def058d4f22ad20a12cbd89529d836fa929e0c82837a80f4911b4e033`.
+- The client actor's offer list begins at 6/16 for the coal recipe. A manual
+  right-click calls client-side `notifyTrade(0,1)` before sending the request,
+  changing uses to 7/16. The local server independently changes 6 -> 7.
+- Request -7 succeeds with coal 49 in the ingredient slot and emeralds 7.
+  No trade-notification ActorEvent or UpdateTradePacket was observed for it.
+- Client uses alone are prediction. An automatic round must wait for its
+  request IDs and exact ingredient/output deltas; reopening on BDS still
+  needs to verify the offer counter agrees with the server. No automatic
+  behavior or BDS/full-inventory result is established by this trace.
+
+## L-166 vanilla trade request research (2026-10-13)
+
+Observed by the agent through Computer Use, authorized by the maintainer,
+in the existing local test world on Minecraft 1.26.51.01, LeviLamina Client
+26.51.7, Windows x64. Read-only trace from `a1773c6`, only
+`--repeat_trade_trace=y`; source and deployed DLL SHA-256 both
+`f07983c72b979e5abe09d2d3377df16f76259154c496a38ddbd69f2bde6fc876`.
+- The weapon smith's coal offer costs 15, with uses 3/16 on opening.
+  Trade button: one CraftRecipe (type 12); right-click row: one
+  CraftRecipeAuto (type 13). Left-click row refills ingredients without
+  executing another trade. Each ordinary request remains vanilla-owned.
+- Three manual trades: emeralds 3 -> 4 -> 5 -> 6, requests -7/-9/-17
+  accepted with inventory slot amounts after vanilla applied the response.
+- No UpdateTradePacket was received after those trades. The screen's
+  mVisualOffer stays unset (show=false, recipe=0), so it is not usable as
+  current-offer evidence. Follow-up diagnostics inspect client actor offers,
+  notifyTrade and ActorEventPacket for the authoritative-use update.
+- Not checked: automatic repeated trading (not implemented), Shift trading,
+  full inventory, sold-out/locked cases, two-input books, BDS or latency.
+  The world was saved and the client closed normally after this round.
+
+## L-162 normal-build BDS smoke and margin 0.02 sneak release (2026-10-13)
+
+By the maintainer on test BDS 1.26.51.1, Minecraft 1.26.51.01,
+LeviLamina Client 26.51.7, Windows x64. Normal build from `e8b0a52`,
+`--edge_trace=n`, deployed DLL SHA-256 rechecked:
+`c698ec122e28399d5bf82a539cb9b2ea449ecf7e00af98641f11979ae1794699`.
+- Edge stopping and short slab bridging pass on the restored normal build.
+- Separately, at margin 0.02, approaching an edge while holding Shift and
+  then releasing Shift does not fall. The maintainer suggests the improvement
+  may follow L-162; this is an observed result, not an established cause or
+  evidence that 0.02 covers all server corrections.
+- Maintainer decision: retain the safer existing setting policy/default.
+  Default margin remains 0.10 and the selectable range remains 0.02–0.30.
+  No code or user configuration is changed for this result.
+The normal-build next-launch check is complete. Longer play, other servers,
+slippery blocks and corrections already moving the feet off support remain
+the stated limits; no additional diagnostic run is requested.
+
+## L-162 packet consistency and guarded replay verified on BDS (2026-10-13)
+
+By the maintainer on test BDS 1.26.51.1, Minecraft 1.26.51.01,
+LeviLamina Client 26.51.7, Windows x64. Build `e8b0a52`, `--edge_trace=y`,
+deployed DLL SHA-256
+`406861193453a1f8e8256ce540c38dd6ea803785da2609b5157de5f93a938553`.
+- WASD, stopping on key release and edge stopping are normal. Edge Guard
+  on, margin 0.10: repeating the previously failing slab-bridging operation
+  for two to three minutes shows no problem. Jumping, sneak release and
+  disabled movement remain normal.
+- The packet raw-vector change and owned-copy paths execute. Outgoing raw
+  and analog agree on guarded sends while live physical input retains its
+  direction keys. For example tick 4100 replaces raw (0.707,-0.707) with
+  guarded (0.017,-0.027); the send dump has matching move/raw/analog.
+- Twelve correction windows are recorded. Nine replay guarded analog input
+  without direction keys, retaining matching processed/raw values through
+  preApply, both vector calculations and postApply. The other three replay
+  ordinary direction-key input, as expected. No fall dump or hook failure.
+- Correction 11 shifts x about +0.045; guarded (-0.038,0.017) survives replay.
+  Correction 12 shifts z about +0.044; guarded (0.017,-0.027) survives replay.
+  These approach the earlier small-correction case without losing input or
+  falling; they are not an exact reproduction of the original fall chain.
+The log is saved locally (SHA-256
+`5739904c25ce628d9914684beb04a78845b8d1ab6a29e97ecb133cac985e61b4`).
+Close L-162 for the verified replay/input-consistency fix. The earlier
+unsupported-position correction was not repeated at the identical location,
+and the server's internal use of the raw field is not proven by this run.
+Longer play, other servers, slippery blocks and corrections that already put
+the feet outside support remain coverage/behavior limits in Pre-release checks.
+The instance is restored to the saved no-trace normal build from the same
+`e8b0a52` source; source and deployed DLL SHA-256
+`c698ec122e28399d5bf82a539cb9b2ea449ecf7e00af98641f11979ae1794699`.
+Configuration has `--edge_trace=n`; LamiumTests passes. This normal artifact
+has not yet been checked in game; its next-launch smoke remains listed.
+
+## L-162 fall reproduced while slab bridging despite guarded replay (2026-10-13)
+
+By the maintainer during the additional BDS run, explicitly while placing
+slabs to bridge. Minecraft 1.26.51.01, test BDS 1.26.51.1,
+LeviLamina Client 26.51.7, Windows x64. Same build `4fe7b29`,
+`--edge_trace=y`, deployed DLL SHA-256
+`2fd64e3bbbd9706a8ef4e5b5d66a5aadd275d6ace9950c9e1abfad66d4ec05ed`.
+- Three correction windows and one fall dump are recorded. Hook attachment
+  and owned-copy execution succeed; no hook failure is logged.
+- Correction 1, server tick 963: input `0x1fec66be4d0` captured guarded
+  analog (0.042,0.024) with live physical Down/Right. Its replay preApply
+  replaces raw Down/Right with that guarded analog; both replay vector
+  calculations and postApply retain it. This verifies actual ownership of
+  the supplied copy and fixes the observed raw-key rebuilding at this boundary.
+- Correction 2, server tick 979: the local position x=0.161 is corrected
+  to x=0.339 (about +0.178). The corrected foot box starts at x=0.039;
+  the last logged support slab ends at x=0.000. It is already outside that
+  support before replay moves it. Input `0x1feb5bdd6a0` retains guarded
+  analog (-0.084,-0.099) in both processed and raw replay states, with no
+  direction keys. Replay moves about +0.075 in x and -0.078 in y, reaching
+  x=0.414 and leaving the ground. The next live frames fall; one fall dump
+  appears at 13:53:46.121. Correction 3 occurs after landing lower down.
+- Slab placement/refusal calls occur shortly before correction 2. These
+  client-side calls and shapes do not establish which server placement or
+  collision produced the larger correction; no jump flag is logged in the
+  recorded onset. Do not equate this with the exact earlier +0.047 case.
+The log is saved locally (SHA-256
+`ad57a08dfb7cc449545d346ecba997b1e8adc2b129cd1499b4bf1c23c19ff312`).
+The copy path preserves guarded input but is insufficient to prevent this
+fall. The existing replay input calculation skips copied component states,
+and the collision guard leaves an already unsupported box vanilla. Next
+investigate slab-placement/correction ordering and guarding against the
+corrected replay position; replaying a brake planned at the old position
+alone cannot recover support already lost to the correction. Keep L-162
+open. Additional repetition on this unchanged build is not requested.
+
+## L-162 actual-capture copy passes BDS smoke checks (2026-10-13)
+
+By the maintainer on test BDS 1.26.51.1, Minecraft 1.26.51.01,
+LeviLamina Client 26.51.7, Windows x64. Build `4fe7b29`, `--edge_trace=y`,
+DLL SHA-256 `2fd64e3bbbd9706a8ef4e5b5d66a5aadd275d6ace9950c9e1abfad66d4ec05ed`
+(deployed DLL still matches the saved diagnostic build).
+- WASD and stopping on key release are normal. Edge Guard on, margin 0.10:
+  diagonal edge approaches and slab bridging have no pullback or fall.
+  Jumping, sneak release, disabling, and enabling/rejoining remain normal.
+- The capture hook attaches and logs use of an owned guarded input copy.
+  Read-only capture/preApply/postApply diagnostics also attach. The first
+  approach records guarded processed analog alongside untouched physical
+  raw direction keys in the live component, as intended.
+- Only one correction window is recorded, at server tick 802. Its selected
+  input `0x28db4af9f00` was captured with unguarded Down/Right, processed
+  and raw analog (0,0), movement (-0.707,-0.707). Its replay calculates the
+  same full vector. That is expected for this unguarded capture and provides
+  no evidence for or against the guarded-input substitution during replay.
+  No fall dump or capture-hook failure is recorded.
+The log is saved locally (SHA-256
+`879678f209da9fe4dba0583feb74f0c9e88798c10aeb3eedd5e204f6990f1f0f`).
+Normal controls and execution of the copy path are verified; replay of a
+guarded capture and the original rare fall remain unchecked. Keep L-162
+open. Next collect another bounded BDS run on this same diagnostic build,
+alternating diagonal edge approaches and slab bridging at margin 0.10;
+no forced fall or repeated full smoke checklist is needed.
+
+## L-162 actual input capture and replay application observed (2026-10-13)
+
+By the maintainer on test BDS 1.26.51.1, Minecraft 1.26.51.01,
+LeviLamina Client 26.51.7, Windows x64. Build `a32e9bb`, `--edge_trace=y`,
+DLL SHA-256 `f7b23cf81bcb228209497a24ab220d17c8f53147aab7c136fca11ff16f34bef1`
+(deployed copy matches the saved diagnostic build).
+- WASD, stopping on key release and margin 0.10 edge stopping work. Several
+  minutes of diagonal approaches and slab bridging found no problem.
+- All exported diagnostics attached; actual input capture/preApply/postApply
+  diagnostics attached at compiler-resolved slots 22/1/2. Three correction
+  windows were recorded with no fall dump.
+- At correction tick 1251, capture on input object `0x29dc76cbcb0` receives
+  guarded processed analog (0.170,-0.145), but raw Down/Right and analog
+  (0,0). The same object is selected at tick 1252 and applies to the replay
+  entity. Both replay calculations rebuild (-0.707,-0.707) from Down/Right;
+  the replay entity's processed input has become that full vector by
+  postApply. At tick 1587 the same chain turns guarded (-0.519,-0.428)
+  into full Down (0,-1), using another traced input object.
+This directly connects local input capture to actual replay application,
+not only the prepared entity snapshot. It verifies input loss at two guarded
+replay cases; it does not reproduce the original rare fall or establish a fix.
+The log is saved locally. The next candidate will substitute guarded
+horizontal fields in an owned component copy passed to actual input capture,
+leaving the live physical input untouched. That candidate is not built yet.
+
+## L-162 rollback recovery confirmed (2026-10-13)
+
+By the maintainer after restoring diagnostic build `8b8823d`, Minecraft
+1.26.51.01, LeviLamina Client 26.51.7, test BDS 1.26.51.1, Windows x64.
+DLL SHA-256 `7f10147c19e878b0ced7d4da94c70c2e8d6ca0e15c35e2ca6b760b67c4e238d0`
+(deployed copy matches the saved build).
+- WASD forward/back/left/right operation and stopping after key release
+  are restored. Edge Guard on, margin 0.10 stops at the edge again.
+- The recovery run records two correction windows with no fall dump.
+  Full Down movement still appears during the first replay; the second
+  contains Up/Jump/Sprint while airborne. L-162 remains unresolved.
+The recovery log is saved separately. Next diagnostics observe actual
+selected replay input capture/application, without either removed input
+mutation. No additional movement fix is claimed.
+
+## L-162 persistent raw-input candidate breaks WASD; reverted (2026-10-13)
+
+By the maintainer on test BDS 1.26.51.1, Minecraft 1.26.51.01,
+LeviLamina Client 26.51.7, Windows x64. Build `981f630`, `--edge_trace=y`,
+DLL SHA-256 `49dab77189696704dd485d5206eebab2a86b2c243af75ce3c8467a30d78cda89`
+(deployed copy matched).
+- Maintainer: WASD no longer controls movement; only slow sliding relative
+  to the view direction remains. The four smoke checks could not be run.
+- Trace: after synchronization at send counter 55, raw input has no
+  direction flags and analog (0.136,-0.033). Frame captures and normal raw
+  move calculations at counters 56 and 57 retain that same analog input.
+  This supports feedback of the guarded value into later physical-input
+  processing; the precise device-update dependency is not established.
+- Both L-162 movement candidates are removed from source. The instance
+  was restored, while Minecraft was closed, to previously tested diagnostic
+  build `8b8823d`, DLL SHA-256
+  `7f10147c19e878b0ced7d4da94c70c2e8d6ca0e15c35e2ca6b760b67c4e238d0`
+  (saved source and deployed copy matched). This has diagnostic history
+  reads, with neither candidate's extra history-input mutation.
+The failed run's log is saved. Recovery after this deployment still needs
+the maintainer's confirmation; earlier checks on `8b8823d` passed. L-162
+remains open. Do not use the saved persistent-input normal or trace builds
+for restoration or release. Next establish the actual replay input capture
+and application boundary independently of entity snapshot preparation.
+
+## L-162 history-capture candidate, BDS correction replay still bypasses input (2026-10-13)
+
+By the maintainer on test BDS 1.26.51.1, Minecraft 1.26.51.01,
+LeviLamina Client 26.51.7, Windows x64. Build `d59f16b`, `--edge_trace=y`,
+DLL SHA-256 `476dc27c76b6943d19fac13f13df06da4e0dcefe77cf8f5314f6f30acc780077`
+(deployed copy still matches the tested build).
+- Maintainer confirmed all four checks on BDS: ordinary edges stop, slab
+  bridging has no pullback or fall, jumping leaves, sneak release does not
+  fall, disabling restores ordinary movement, and enabling then rejoining
+  restores the stop.
+- Nine correction windows were recorded, without a fall dump. Prepared
+  rewind entities retain guarded raw snapshot input, but eight windows
+  calculate full Down movement (0,-1) from another input state during
+  replay. At correction tick 418, prepared raw analog (-0.635,-0.395)
+  has no direction flags, yet both replay calculations use Down and (0,-1).
+  The live raw input at this point still contains Down and analog (0,0).
+- Thus the scoped frame-capture substitution does not fix actual replay
+  input loss. Smoke checks alone did not establish a fix. The original
+  rare fall remains unreproduced.
+The BDS log is saved separately. The next candidate removes the scoped
+history hook and keeps processed horizontal input in the live history raw
+fields after normal input calculation, preserving other physical fields.
+That candidate is not yet runtime-verified.
+
+## L-162 history-capture fix, solo smoke checks (2026-10-13)
+
+By the maintainer in solo play, Minecraft 1.26.51.01, LeviLamina Client
+26.51.7, Windows x64. Same diagnostic build `d59f16b`, `--edge_trace=y`,
+DLL SHA-256 `476dc27c76b6943d19fac13f13df06da4e0dcefe77cf8f5314f6f30acc780077`
+(deployed copy still matches the tested build).
+- Maintainer confirmed all four checks again in solo play: ordinary edges
+  stop, slab bridging has no pullback or fall, jumping leaves, sneak release
+  does not fall, disabling restores ordinary movement, and enabling then
+  rejoining restores the stop.
+- The new session log identifies a local world and reports both the local
+  server-copy guard and the raw history-capture guard running. The first
+  guarded approach records raw history input without horizontal direction
+  flags and guarded analog values (for example (0.098,-0.086)).
+- No correction window or fall dump was recorded in this solo session.
+  This expands local-world smoke coverage; server correction replay and
+  the original rare fall remain unverified in the fix build.
+The solo log is saved separately from the preceding BDS run. The authorized
+additional BDS run remains pending; solo play does not replace that check.
+
+## L-162 history-capture fix, smoke checks and capture verified (2026-10-13)
+
+By the maintainer on the local test BDS 1.26.51.1, Minecraft 1.26.51.01,
+LeviLamina Client 26.51.7, Windows x64. Build `d59f16b`, `--edge_trace=y`,
+DLL SHA-256 `476dc27c76b6943d19fac13f13df06da4e0dcefe77cf8f5314f6f30acc780077`
+(source and deployed copy matched).
+- Maintainer: at margin 0.10, ordinary edges stop and slab bridging has no
+  pullback or fall. Jumping leaves the edge; releasing sneak at the edge
+  does not fall. Disabling restores ordinary movement; enabling and
+  rejoining restores the edge stop. All four checks passed.
+- All exported history diagnostics attached. The history-capture guard
+  ran. At frame tick 181, the raw history input had no horizontal direction
+  flags and guarded analog (-0.217,0.171), while the prior processed input
+  still held Right and move (-1,0). Subsequent frames likewise captured
+  freshly guarded raw analog values. Live packet raw movement remained
+  (-1,0), supporting restoration outside synchronous history capture.
+- No correction window was recorded in this run. Capturing guarded raw
+  input is verified; replay after a correction and the original rare fall
+  remain unverified. A fall dump contains full unguarded movement near the
+  disable check; its relation to that check is inferred from the reported
+  sequence, not an explicit setting-state trace.
+The log is saved locally. The maintainer agreed to a further few minutes
+of diagonal edge approaches and slab bridging with the same diagnostic
+build to collect a natural correction. Other servers, slippery blocks and
+large/late corrections remain unchecked.
+
+## L-162 second diagnostic round, guarded input lost in replay (2026-10-13)
+
+By the maintainer on the local test BDS 1.26.51.1, Minecraft 1.26.51.01,
+LeviLamina Client 26.51.7, Windows x64. Build `8b8823d`, `--edge_trace=y`,
+DLL SHA-256 `7f10147c19e878b0ced7d4da94c70c2e8d6ca0e15c35e2ca6b760b67c4e238d0`
+(source and deployed copy matched).
+- Maintainer: margin 0.10 stops at ordinary edges, slab bridging has no
+  pullback or fall, jumping may leave. All three checks passed again.
+- All three exported history diagnostics attached. Five correction windows
+  were recorded without a fall. History frame inputs retained the guarded
+  processed input but physical direction keys in `mRawInputState`.
+- Example, correction tick 410: captured processed move (0.030,0.036), no
+  direction flags; captured raw input Down/Right, analog (0,0). Preparation
+  tied live entity 2/11 to rewind entity 2/2621454. During replay the copied
+  state calculated (-0.707,-0.707) twice, ignoring the guarded analog move.
+  Later windows show the same loss with other directions and corrections.
+- Another case (tick 1557) retained processed (-0.141,0.168) in the prepared
+  rewind entity, but raw Down/Left rebuilt (0.707,-0.707); replay then moved
+  live z from 104.805 to 104.706. No fall was observed.
+This establishes loss of the guarded horizontal input during history replay,
+not reproduction of the original rare fall. History is captured before
+that tick's movement calculation. The candidate fix guards an owned local
+raw-input copy from the current frame's position and velocity, substitutes
+its horizontal fields only during capture, then restores live raw input.
+Its runtime check remains pending.
+Other servers, slippery blocks and large/late corrections remain unchecked.
+The round's log is saved locally before the next run.
+
+## L-162 first diagnostic round, no fall (2026-10-13)
+
+By the maintainer on the local test BDS 1.26.51.1, Minecraft 1.26.51.01,
+Windows x64. Actual loader reported by the runtime: LeviLamina 26.51.7
+(compiled SDK 26.51.5). Build `d476ae5`, `--edge_trace=y`, DLL SHA-256
+`b612379a7034312c2999cc3d08c0382dd06216dba81cdd0f4c8907d0fee92f5f`
+(source and deployed copy matched).
+- Maintainer: Edge Guard on, margin 0.10; approaching an ordinary edge stops,
+  slab bridging has no pullback or fall, and jumping may leave the edge.
+- Log: the first guarded approach was saved. One correction at tick 2400
+  moved z from 236.809 to 236.765 (ground true); after send tick 2401,
+  `tickMovementCorrectionReplay` ran on registry 2. Two move calculations
+  used `other` input states with Down/Right and move -0.71,-0.71 unchanged;
+  replay collision used box min (-27.791,66.500,236.465) and speed
+  (0.008,-0.078,-0.113), also unchanged. Replay then changed live z from
+  236.695 to 236.652. There was new slab support in this window and no fall.
+- The input-history diagnostic reported "unsupported SDK virtual-call
+  thunk" and did not attach. Capture/preApply/postApply, exact replay
+  ownership and replay-versus-live motion are therefore still unobserved.
+  The trace supports copied replay input bypassing the live input guard,
+  but does not establish the original rare fall's cause or a fix.
+No other-server, slippery-block or rare-fall coverage. Round 2 replaces
+the unavailable history diagnostic with exported SDK history boundaries;
+it changes no movement. The original round's log is saved locally.
+
+## L-171 Calculator (2026-10-13)
+
+By the maintainer, local, screenshots.
+- `e664562` (DLL `1ffc66f7...c9c7f35bb`): the panel opened but showed no
+  text (no text flush). `bef8059` (`f4e523f4...efbc98736`): text, the
+  sidebar item, `20 lc - 1234` = 67,886 with "39 chests + 7 stacks + 46",
+  Enter and `ans / 2`, Up/Down, `x`, copying, Esc, no gameplay input
+  while typing. OK; review led to calculator-v2/v3.
+- `a2fd612` (`5b11a983...ca6ae870`): the two-column panel, keys, results,
+  history cards, copy button and menu, copy notes. OK. Help showed the
+  history through it; "v" did not read as a menu; the history did not
+  scroll; "×" sat left.
+- `4eb9978` (`3a2fbff0...ba16de9f6`): help covers the history, wheel and
+  scrollbar scroll, the menu triangle, shaped × − backspace, "nether"
+  fits. OK; Japanese checked too, no squashed text. The scrollbar moved
+  in card steps and backspace left the operator spaces.
+- `de9792d` (`3b0b6718...e3013a3`): smooth scrolling with cards clipped at
+  the column's edges; backspace removes "2 × sqrt(" piece by piece. OK.
+Not seen: narrow windows, Simplified Chinese, a resource reload while open.
+
+## L-172 Text fields: caret, paste and click (2026-10-13)
+
+By the maintainer, local.
+- `94e48b5` (DLL `e8c43c16...5d3976d`): settings search with Left/Right,
+  Home/End and typing in the middle, Delete; a Shapes or Waypoints name
+  typed and converted with the Japanese IME in the middle of the text;
+  Ctrl+V into a name field; a click inside a name field moves the caret;
+  a number field (zoom magnification) edited at a moved caret. OK. The
+  caret bar sat on the next letter (a "t" hid it).
+- `ed4a4e7` (DLL `6c40d457...b4d955b6`): the caret bar no longer covers
+  letters; world map waypoint X typed into its new number field moves the
+  waypoint with Enter, Esc keeps the old value. OK.
+Not seen: Ctrl+C, word jumps, very long text scrolling, the save prompt.
+
+## L-164 Connected Textures with generated sprites (2026-10-13)
+
+By the maintainer, local, screenshots.
+- `028b1ed` (DLL `2e3947c2...5a95210`): glass (clear, stained, tinted) joins
+  without inner lines and keeps its outer frame in L shapes and single
+  rows; panes joined across and up show no dark half (L-133) and no
+  stretch; bookshelves with a neighbor on one side only show no dark bands
+  under Vibrant Visuals (L-156); stacked sandstone loses its band; the
+  switch changes the look at once. OK. Under Vibrant Visuals large joined
+  areas caught light flatly (bookshelves, sandstone, glass). Log: 275
+  sprites for 21 textures, all in place, base places match vanilla.
+- `6274b53` (DLL `ca4b0d23...4fa6c15`): sprites get the base's texture set
+  with their maps baked the same way; joined faces now catch light like
+  single blocks under Vibrant Visuals, and nothing changed with it off.
+  Log: bookshelf's texture set has a `metalness_emissive_roughness_subsurface`
+  map; 275 texture sets with 275 baked maps. OK.
+Not seen: resource packs (other textures or sizes), a resource reload while
+in a world, servers, the unverified-version fallback.
+
+## L-164 spike round 4: bookshelf sides, Vibrant Visuals (2026-10-12)
+
+By the maintainer, local, `d126608` (`ctsprite_trace`, DLL
+`bb470c6d...9b81f4d0c`), screenshots: three bookshelves in a row, the
+middle one's sides (joined left and right) drawn as one quad with a
+generated sprite; one-sided joins still split.
+- The middle shelf joins without the divider, no missing texture. OK.
+- Vibrant Visuals: no dark bands on the sprite face. With only a left
+  neighbor (split cells) the dark showed; with neighbors on both sides
+  (sprite) it did not. The L-156 darkening follows the split, not the
+  bookshelf or the glass below.
+- Vibrant Visuals surface (relief, gloss): no visible difference from the
+  neighbors, although the log shows the base textures have texture sets in
+  pack 13 and the sprites have none (`.texture_set.json` lookups -1).
+Not seen: other blocks with stronger PBR maps, resource packs.
+
+## L-164 spike: a generated glass sprite in the terrain atlas (2026-10-12)
+
+By the maintainer, local, trace builds (`ctsprite_trace`), three rounds. A
+3x3 plain glass wall with Connected Textures on; the middle face (joined on
+all four sides) drawn as vanilla's single quad with a sprite Lamium
+composed from the loaded glass texture.
+- Round 1 (`e94426b`, DLL `c246c2ec...02e1d367`): the middle face showed the
+  missing texture, also under Vibrant Visuals. Log: the terrain atlas took
+  the added `texture_data` entry and gave the sprite its own place, but
+  never asked the texture group cache for the image.
+- Round 2 (`4cb9ffe`, DLL `4e1fbdf0...dfaef44639`): still the missing
+  texture. Log: the atlas first asks `getPackStackIndexOfResource` and gave
+  up on -1; no load followed.
+- Round 3 (`67e9f26`, DLL `786d5601...5b77a4e9`): the middle face looks like
+  the rest of the joined wall, also under Vibrant Visuals. Log: the lookup
+  answered with plain glass's pack for image extensions, the atlas then
+  loaded the PNG through `load(ResourceLocationPair, ..., extensions)`;
+  `.texture_set.json` lookups stay -1 (no PBR data for the sprite). OK.
+Seen in the log: the string half of the borrowed lookup answer printed as
+garbage; a real build must return a view of the matching entry of the
+caller's extension list. Not seen: blocks with PBR texture sets, the L-156
+bookshelf case, resource packs, a resource reload while in a world,
+mipmapped distance views beyond a short step back.
+
+## L-147 Status effects HUD and L-150 ammo in the Durability HUD (2026-10-12)
+
+By the maintainer, local, over `95a34d5`, `c670147`, `bc3e830`, `cd738e5`
+and `ee84063` (last DLL `6c72ab47...2e2c27`):
+- Status effects HUD: names in Japanese, levels, shortest-first order,
+  times counting down, the warning color under 10 s and the vanilla icons
+  hidden while on (`95a34d5`). Icons by effect id and the infinite word
+  "無期限" (`c670147`; the effect's own icon name drew nothing and the
+  infinity sign was missing from the Japanese font). Level column in
+  Arabic numerals, right-aligned with the times, with names on and off
+  (`cd738e5`); level 1 shown as "1" (`ee84063`). OK.
+- Durability HUD: arrows beside a bow, arrows and fireworks beside a
+  crossbow, fireworks beside an elytra, the loaded crossbow mark (`95a34d5`);
+  zero in the warning color (`c670147`); ammo icons the same size as the
+  tools after clearing the pickup pop, the 4-unit gap before the count, and
+  separate Armor and Elytra switches (`bc3e830`); 6 units between a
+  crossbow's two kinds (`ee84063`). OK.
+Not seen: beacon effects, servers, Pocket UI.
+
+## L-148 Nether portal screen hidden (2026-10-12)
+
+By the maintainer, local, `cd47a29` (DLL `78c1f9c4...c3ff37ad`): with Hide
+effects on the purple portal screen does not show and the transfer works as
+usual; with the child off it shows; the child's key toast reads "Hide the
+Nether portal screen". OK. Earlier trace runs the same day: the effect time
+zeroed after each tick removed the screen without changing the transfer
+time.
+
+## Durability HUD per-line background (2026-10-12)
+
+By the maintainer, local, trace build of `2466a02` (DLL `bc8847c6...df404a`):
+"Per line" can be chosen for the Durability HUD; each row gets its own band;
+moved to the right side the bands line up on the right edge. OK.
+
+## Overlays over the vanilla selection outline (2026-10-12)
+
+By the maintainer, local, `da218bd` (DLL `bcdc66b2...31e650e0a`): Chunk Border
+lines on the targeted block stay over the black selection outline; the
+schematic save area's outline and corners are not hidden by it; chunk lines
+behind walls do not show through noticeably; on Shapes the black outline
+still shows. All OK.
+
+## L-157 Chunk Borders pulled toward the eye (2026-10-12)
+
+By the maintainer, local, `6cd2a68` (DLL `7f9ddee8...85011914`): lines on a
+wall lying on the chunk wall's plane stay whole at different distances and
+angles; lines behind walls do not show through noticeably; Hitboxes still
+draw. All OK. Noticed: where a chunk line runs along the vanilla block
+selection outline (black), the black outline covers it; a schematic corner
+mark's outline stays over the black outline (screenshots, not in the repo).
+
+## L-161 edge margin setting (2026-10-12)
+
+By the maintainer, normal build `bd65aae` (DLL `1ce35b49...debb12e0`): "Stop
+inside the edge by" appears under Edge Guard showing 0.10 blocks; at 0.02 the
+player gets closer to the edge than at 0.10, at 0.30 stops further inside;
+the value survives rejoining; English and Simplified Chinese labels display.
+All reported OK.
+
+## L-161 margin 0.1 and build-start refusal (2026-10-12)
+
+By the maintainer, trace build of `2dc7e45` (DLL `5f17de3b...2802c818`), BDS
+and a local world: slab bridging no longer fell except once on BDS. Trace of
+that fall: a server correction (+0.047 block) arrived with 0.139 block of
+overlap left, then the client's next position was 0.17 block further out
+(as if its re-run of recent ticks used unguarded input), with no overlap,
+and it fell. The maintainer finds stopping 0.1 block inside slightly less
+convenient for placing blocks and asked for the margin as a setting.
+
+## L-161 slab merge refusal on BDS (2026-10-12)
+
+By the maintainer, normal build `b36cf7b` (DLL `f7c89965...51084cc6`): on
+BDS a slab still went into the player's own cell and they fell; in a local
+world it did not. Trace build `3d021db` (DLL `3fb28139...b1533210b`): the
+`useItemOn` check ran for the local player with a slab and refused the
+pushing merges it saw (both `buildBlock` calls then returned false), and
+allowed merges under the player's center. Two BDS falls: (1) the player
+stood 0.026 block over a slab and a server correction placed them 0.04
+further out, off the block; (2) the slab under the player became a full
+block while their center was outside it; the placement lines had hit the
+trace's 300-line cap, so whether that merge passed the check is unknown.
+Not seen locally.
+
+## L-160 slab merge push-out; vanilla sneak check (2026-10-12)
+
+By the maintainer, trace build of `3c5d202` (DLL `fa261000...b0ea917d`), BDS,
+four slab-bridging falls: each time the player stood on a bottom slab with a
+tiny overlap (e.g. 0.03 block in x, feet 67.5), the cell's shape changed from
+y 67.0..67.5 to 67.0..68.0 (a slab merged into a full block in the player's
+own cell), and the next tick the player moved outward and fell, with no
+server correction. With Edge Guard off and sneaking at the edge, the
+maintainer could not place a slab into their own cell at all (vanilla
+sneaking refuses it), so vanilla sneaking does not hit this. Movement fixes
+of L-160 held in this session; the merge case went to L-161.
+
+## L-160 slab bridging falls (2026-10-12)
+
+By the maintainer, trace build of `29bf8ad` (DLL `d86012bb...50d47c972`), BDS:
+the 45-degree wall case and sneak release no longer fall. Slab bridging fell
+again; the maintainer noticed a slab sometimes goes into the cell the player
+stands in, lifting the body by half a block, around the fall. Trace (four
+falls): no server correction; the guard and the movement clamp both let a
+full input through for a tick right before the client walked off, so both
+judged ground ahead that was not there. Cause not yet found; the next trace
+build logs the collision shapes around the feet.
+
+## L-160 corner falls beside a wall (2026-10-12)
+
+By the maintainer, trace build of `c73fc16` (DLL `0ef93b72...cbc7f796`), BDS and a local world: letting go of
+sneak at an edge and slab bridging no longer fall. Building a bridge toward a
+wall and pressing a key about 45 degrees into the wall a few times still fell.
+Trace (five falls, same pattern): the box sat exactly on a block corner
+(-140.700, -4.700), horizontal collision set, the step-back input pointed
+diagonally into the wall and did not move the player; when the keys were let
+go the client itself lost ground and fell, with no server correction.
+
+## L-160 falls on BDS after sneaking (2026-10-12)
+
+By the maintainer, trace build of `410353a` (DLL `ddfed996...0fa8f1ef`):
+bridging no longer pulled back (`1870ca1`), but the player sometimes fell on
+BDS only (not locally). Reproduced as: sneak to an edge, then let go of
+sneak. Trace: vanilla sneaking stops with the box exactly touching the block
+edge (feet at -107.700, -0.700); one to two ticks after sneak was released
+the server's correction had the player falling (ground false), although the
+client's guard braked. Slab bridging was not reproduced (no materials;
+`/give` had been refused earlier; the reason was not confirmed, and the
+player is now listed as operator in permissions.json).
+
+## L-160 input state rewrite (2026-10-12)
+
+By the maintainer, trace build of `68d2211` (DLL `f7580692...15edea76`), test
+BDS and a local world: walking and sprinting into an edge stop, walking
+diagonally along an edge works, jumping off works. Bridging (placing blocks
+while walking backward in one direction) sometimes reached the true edge and
+sometimes was pulled slightly back, on BDS and locally. Trace: a full reverse
+brake (move 0,1 -> -0.04,-1.00 at 0.046 blocks/tick) pushed the player back
+about 0.1 block; and all-or-nothing input left slow approaches short of the
+edge.
+
+## L-160 Edge Guard on BDS, trace (2026-10-12)
+
+By the maintainer on the local test BDS 1.26.51.1 (official, at
+`C:/Users/kenke/Documents/Lamina/bds-1.26.51.1`); in a local world the
+build stopped at edges. `1153107` (DLL `20c644ab...41406eca5`): on BDS the
+player still stopped for a moment and fell. Trace build of `2391912` (DLL
+`331e1c5c...ece720e`, `--edge_trace=y`): at the edge the guard changed the
+move vector from 0,1 to 0.03,0 for both the raw and the input state, and the
+sent `PlayerAuthInputPacket` carried move 0.03,0 but raw move 0,1 and the Up
+key; the server's correction then put the player 0.7 blocks further along
+(-79.078 against the client's -79.790), and the player fell. So the server
+rebuilds the vector from the sent input state, not from the packet's move.
+
+## L-159 follow-up and Edge Guard on BDS (2026-10-12)
+
+By the maintainer, local, `e93606e` (DLL SHA-256 `7f5d6086...a8cbc18b`):
+binding editor buttons on the edited row replace its switch and give it back
+after Clear, Reset and Cancel; no overlap on a row with a stepper; Find by key
+sits next to the key column, leaves "Key: C_" focused, Backspace shows all,
+typing switches to a name search. All OK.
+Edge Guard (L-160): works in a local world; on BDS the player stops at the
+edge for a moment and falls within a second. Build and server version not
+recorded for this observation.
+
+## L-159 Find by key in Hotkeys (2026-10-12)
+
+By the maintainer, local, `c4ac083` (DLL SHA-256 `99f5dce8...b71734c`).
+Find by key with C lists Zoom, F3+G lists Chunk Borders, an unused key shows
+the no-match line and Esc shows all again; the button does not overlap the
+Action heading in a narrow window. All reported OK.
+
+## L-158 shared label resolution (2026-10-12)
+
+By the maintainer, local, `be0b1f1` (DLL SHA-256 `5b285364...0eec2eee`).
+Settings search for the child label "速度を上げる" finds FreeCamera's speed
+row; Hotkeys search still finds the speed actions; toggle toasts show the
+feature name as before. All reported OK.
+
+## L-155 action labels (2026-10-12)
+
+By the maintainer, local, `3767542` (DLL SHA-256 `12ef4e1a...a01194`).
+Settings search for Connected Textures, Inventory HUD and Used slots shows
+translated action labels instead of `key.Lamium.*` in English, Japanese and
+Simplified Chinese. Hotkeys screen not reported separately.
+
+## 0.2.0 actual-play bug reports: L-155, L-156, L-157 (2026-10-12)
+
+Reported by the maintainer with three screenshot attachments, all on the
+latest Lamium 0.2.0. The repository's `v0.2.0` tag is
+`b8fa42994e9c95b9684d8675c0e1b4f951731577`; the release checkpoint names
+build source `6f77159` and release-ZIP DLL digest `71db2f0f...ae49c`.
+The installed DLL's SHA-256, exact Minecraft/loader versions, trace options,
+resource packs and local/server context were not supplied for these reports.
+Do not substitute the release checkpoint digest for the reported DLL's hash.
+
+- L-155: searching settings for `connected` displayed
+  `key.Lamium.connectedtextures` literally. Attachment:
+  `スクリーンショット 2026-10-12 013700.png`. Static source inspection
+  confirms the action ID exists and its action translation key is absent
+  from the English/Japanese and Simplified Chinese tables.
+- L-156: with Vibrant Visuals enabled and glass below, lower bookshelves
+  became dark. Attachment: `スクリーンショット 2026-10-12 014000.png`.
+  The maintainer compared the look with the existing darkening issue
+  (L-133); a common cause is not established. No same-scene Connected
+  Textures on/off or other-graphics comparison was reported.
+- L-157: Chunk Borders were sometimes hard to see. Attachment:
+  `スクリーンショット 2026-10-12 015458.png`. Lines are visible, with some
+  much less distinct over terrain than sky. Trigger and graphics mode were
+  not specified; no agent runtime reproduction or cause is established.
+
+Follow-up from the maintainer the same day:
+- L-156: compared Connected Textures on and off; the dark vertical bands on
+  bookshelf walls appear only with Vibrant Visuals and Connected Textures
+  both on. Not seen with Connected Textures off under Vibrant Visuals, nor
+  with Connected Textures on in the other graphics mode checked.
+- L-157: the screenshot was taken under Fancy graphics, at night; other
+  video settings were not checked.
+
+These are observed failures, not successful regression checks. No fixes,
+new DLL, post-fix validation or additional server coverage in this entry.
+
+## Paused features shown to players (2026-10-11)
+
+By the maintainer, local, `--unverified_game=y` builds. `1da4316` (DLL
+`2cbcb1ad...a405bc`): FreeCamera's toggle toast says "partly paused", Night
+Vision's "paused"; the settings header warning and its tooltip show; the
+join toast was one line too long for the screen. `ddac26c` (DLL
+`8efcdf7e27283218b857567f83f0ee91a2d4341d00475aa0a2f49f0b029c0bd5`): the join
+toast wraps and reads whole; only "Some features paused" is in the warning
+color. Reported as passing. Normal build restored afterwards (DLL
+`5c70e133...602c9`).
+
+## 0.2.0 regression checks, fail-open build (2026-10-11)
+
+By the maintainer, local, `891b798` built with `--unverified_game=y` (DLL
+`52ce90228783ae58c7c868de59f5b1ed0b87b636ac465cf1152f8ac5c747a17e`). No
+crash. Night Vision had no effect and a real potion looked vanilla; Edge
+Guard let the player walk off an edge; water fog, rain and the nausea swirl
+stayed while particles and boss bars still hid; Connected Textures left
+glass borders; FreeCamera kept vanilla underground culling and otherwise
+worked; schematic ghost blocks were absent and entities were dashed frames,
+while frames, the Check list, Materials, area saving and map marks worked.
+The log has one "stays vanilla" line for each of the nine capabilities in
+GAME-UPDATES.md (forced by the build option, version 1.26.51+0559ac5), no
+errors. Normal build restored afterwards (DLL `625e186e...ac5403a`).
+
+## Info HUD over the position line (2026-10-11)
+
+By the maintainer, local, `f822b70` (DLL
+`4ad9cc074e1fd375667f6b9895d3fd6e0dd6bf97e114930f230bb6c0e25af720`): with
+Show Coordinates on and the Info HUD at its default place the game's
+position line is not drawn; moved away, the paper doll and the position
+line return (L-145). Reported as no problems.
+
+## Glint in previews and the Info HUD over the paper doll (2026-10-11)
+
+By the maintainer, local. `77ceea4` (DLL `4e6a6887...dbca654`): still no
+glint in the shulker preview for a pickaxe, an enchanted golden apple and
+a shield. `df79b8d` (DLL
+`a5fa642172c1a3bed37b0e9406348c9fd4d3b50c2aef555b436222ae89ccfc9e`): the
+enchanted pickaxe, golden apple and book show their glint in the shulker
+preview (L-142); fence gates, other blocks and tool durability bars in the
+same box correct. Enchanted leather armor shows see-through undyeable parts
+there (unenchanted leather does not): known cost of the direct path. The
+paper doll is not drawn under the Info HUD at its default place (L-145);
+the game's position line (Show Coordinates) still overlapped it, so L-145
+also hides that where covered (next build).
+
+## L-141 to L-144 on `9c173b7` (2026-10-11)
+
+By the maintainer, local, `9c173b7` (DLL
+`2d59d5d2131510f8d8d7b26e32307430dce9d6e488d304811f46771c047b19fb`). Passed:
+Debug View hides the game's position line and paper doll and they return
+when it closes (L-143); the HUD layout editor shows the hotbar (L-144);
+overlapping placements no longer flicker and hiding the earlier one shows
+the later one's ghosts there (L-141). Failed: enchanted items still show no
+glint in the shulker preview (L-142, round 2 follows).
+
+## Zoom Wide-angle view, world map names, Files names (2026-10-11)
+
+By the maintainer, local. On `376cfae` (DLL `1ff38c03...4cbbef4`): long
+schematic file names end before the Size column; the dark plate makes world
+map names readable on sand. On `9e675cc` (DLL
+`6f5d801c72ffa069d3b6d52e6d66e052c17f835a6fc9b18498a0a713624dc841`): world
+map names show for the hovered and selected mark only, "Always show names"
+shows them all; Zoom without Wide-angle view stops at 1x, with it goes to
+0.5x, turning it off after a wide level reopens at 1x (L-140). Reported as
+no problems, not itemized further. Found meanwhile: ghosts of two
+placements on the same cells flicker (L-141).
+
+## 0.2.0 regression checks, normal build (2026-10-11)
+
+By the maintainer, local, on the 0.2.0 release ZIP's DLL (`2aea267`, DLL
+`1854bc418b38c9172b11564a44328360bc769e9de7d66f26fd6dd180fe02f125`, trace
+off). Check 1 of the 0.2.0 regression checks (schematic ghosts and saving,
+Shapes and the breaking region, map layers and waypoint actions, the
+settings screen, the gated paths on the verified game) reported as passing
+("almost": no problem with the listed items). Not itemized per step. Two
+display problems found while looking again: long names in the Schematics
+Files tab ran over the Size column; waypoint and placement names on the
+world map were hard to read on bright terrain. Fixed in `ca83014` (names end
+before the Size column) and `376cfae` (dark plate behind the small names),
+not yet checked in game. The fail-open build (check 2) was not run yet.
+
+## L-96 shading on split faces before 0.1.9 (2026-10-11)
+
+By the maintainer, during the 0.1.9 smoke test. Split faces showed dark
+smudges at night (gone with Night Vision): first on stacked sandstone and
+bookshelves near glass, later only on glass panes. Bilinear corner shading
+was replaced by the drawn triangles' blend (`21cff69`) and copies took the
+first draw's normals, material data and facing (`7cc3d50`); sandstone and
+bookshelves stopped showing it. Panes kept a darker half of each block,
+depending on the view direction (facing south at east-west panes: west half;
+facing east at north-south panes: south half; facing north or west: none),
+also in daylight; appending copies instead of redrawing (`f530e1a`) and one
+quad info per face (`20b9059`) did not help. `4ef3d51` (DLL
+`8ddf70b6e122ad2b448a3f527509da1dc15c1221d5e67b2629be5fd88d8741da`) draws
+panes with the inward texture again: no dark halves; stained glass blocks
+show none from any side; joins correct. Stained pane crosses show seams to
+their arms with the feature off too (vanilla). Follow-up: L-133.
+
+## Vibrant Visuals regression: distance fog (2026-10-11)
+
+By the maintainer. With Vibrant Visuals the world flickered and turned magenta
+on 0.1.8 (not on 0.1.7, not in vanilla; other instance 1.26.51.01 LIP), with
+Connected Textures off. Feature-skip diagnostics (`b1777e9`,
+`--feature_skip=y`) narrowed it to Effect visibility, and turning off only its
+distance fog child fixed it live. `c9f579b` (DLL
+`9951ca5d9eaddafe4736960fd318cb883a223c715ac2a7e3ebaaebbaedc58fe0`) keeps
+vanilla distance fog at graphics mode Advanced and up: no magenta or flicker
+under Vibrant Visuals with the child on; in normal graphics distance fog still
+hides.
+
+## L-96 glass panes drawn split (2026-10-11)
+
+By the maintainer, local. `17cedc6` (DLL
+`f18bfc6feaa192754da56be3f24aa7139a2d5d455a15212a01cc7c3731918125`): rows,
+stacked walls, mixed shapes stacked, crosses and T shapes and panes against
+blocks look right in detail; no stretch while placing; joints unnoticeable
+from afar; about ten crossing 61x61 pane walls in several directions caused
+no felt slowdown and almost no FPS change.
+
+## L-96 bookshelves, sandstone and the split method (2026-10-11)
+
+By the maintainer, local. Crop trial `ac3198c`: bookshelf dividers and the
+sandstone band went away, but sandstone looked stretched and placing glass or
+bookshelves showed the stretch. Split method: `ec5aa69` joined sandstone
+without stretching but darkened the first block's band area (corner shading
+not interpolated), fixed in `b430199`, which also split glass and
+bookshelves (no stretch while placing, no gaps or steps, no slowdown near a
+50x50 wall). Far glass still showed its joints (back when moving away);
+`4789cb1` rebuilt every dimension's chunks and changed nothing there;
+`a339a6d` (DLL `390ab3f08faa059059693bd9aac2ae26cb2ff2cf131eeb55bb3c9e56eb49f4ba`)
+filled joined glass edges from the middle and the far joints faded. Sandstone
+copying middle rock (`4789cb1`) was judged unnoticeable; bookshelves stay
+with the adjacent column (aligned books up close; fine at a distance).
+
+## L-96 Connected Textures for glass panes (2026-10-11)
+
+By the maintainer, local. Trial rounds `52fb6eb`..`dbc16e0` (`--ctm_trace=y`)
+found the method: whole-texture trimming joined east-west rows only, cut
+borders on arms with nothing above, and folding the thin faces by collision
+boxes left gaps and squares; per-part adjustment on the built mesh
+(`dbc16e0`) passed. Feature build `3e76e7a` (DLL
+`21b8e049b28eb94bd2a0751d1b14af8ab8087bda7701035e913caa01d756618f`): rows in
+both directions, stacked walls, an L under a single pane and the reverse,
+crosses and T shapes, and panes against blocks look as in the trial; off
+restores vanilla panes and glass; stained panes join only the same color.
+Not seen: Vibrant Visuals, resource packs, servers.
+
+## L-96 Connected Textures for glass (2026-10-11)
+
+By the maintainer, local. `8c3d21a` (DLL
+`c9ee183914f0293401c3d45e38fa509eeb08335b8d2d86d3e82bc4f6df7a1058`): off at
+first with vanilla glass; turning it on from the settings or the hotkey joined
+glass at once without a rejoin, and off brought the borders back; rejoining
+with it on, the Nether and placing and breaking glass kept the joins right;
+switching caused no hitch and no terrain flicker. Not seen: panes (not
+covered), Vibrant Visuals, resource packs, servers, an unverified game
+version (the gate itself).
+
+## L-96 connected glass spike (2026-10-11)
+
+By the maintainer, local. Trace build `b3d93c7` (`--ctm_trace=y`, DLL
+`24414651ebab05ad2318505e159a9dd7e7865746197f6f5d2c1fbcecc69397b7`), after
+rejoining the world: the inner lines between glass blocks disappeared and the
+outer frame stayed, in walls, floors and other arrangements; same-color stained
+glass joined and different colors kept their line; about 50x50 glass caused no
+noticeable slowdown. The log showed the face position equal to the world
+position and 16x16 source images. Not seen: panes, toggling without a rejoin,
+Vibrant Visuals, resource packs, servers.
+
+## L-120 Debug View entity counts by kind (2026-10-11)
+
+By the maintainer, local and a server. `75620ed` (DLL
+`9b5c42ab33a131dbbfeea8a3b91b4c8b4f3f81948e78a67ee595d543ebb51c67`): the
+breakdown line under the entity count adds up to the total; zombies count as
+hostile, cows and villagers as passive, dropped items as items, arrows and
+experience orbs as other, and the server's entities looked right too. The
+type list closes the left column with the top 5; Top 10 and Off switch it;
+the Java F3 label style shows identifiers.
+
+## L-127 inventory HUD and used slots (2026-10-11)
+
+By the maintainer, local. First build `1789bee` (DLL
+`48afd205db4d55a05515df14f330e723236638389eafab26de243388efbff563`): grid
+contents, counts, durability bars, the hotbar row and the counter matched the
+inventory; the warning color at 0 free; layout editor moves, scale and
+backgrounds; the offhand slot unchanged after sharing its glint, bar and
+count drawing. Review changes followed (bottom-right defaults, frames on
+every slot, card / none, even card padding: `603ca1b`, DLL
+`7affe07e892cfb9b56d5be9354bd7bd3e91ca3237d9da5527d5b9f350ac53ce5`, checked;
+one hotbar switch per element: `6a58268`, DLL
+`fbd0a68fde281a8ceea8fcca2a0a601f027a7ae00049252dba0ba21d807c0e8e`). Final
+build `7906581` (DLL
+`2c8c3f949dbebe51453aad1415fdf7fd9aa23a12a600374536e4b82b906a3b38`): "Used
+slots" shows used/total such as 13/36 at the bottom right and turns the
+warning color when full; slot frames around the whole cell leave room around
+the icons; the new names read naturally in Japanese and English. Not seen:
+servers, Simplified Chinese text, 75 % and 150 % after the frame change.
+
+## L-131 player list dimensions and permission marks (2026-10-10)
+
+By the maintainer, `4ad4e18` (DLL
+`bc4c9cf0eb309d0bca6843b7b5b32f703aac84d2e79a042c58eadff70a65a30c`). BDS,
+the maintainer moving between dimensions: players in the same dimension show
+the dimension icon and distance; a never-seen player stays blank; after
+moving, players last seen elsewhere show that dimension faded without a
+distance (Overworld, Nether, End). Everyone is a member there, so no marks;
+with "Member marks" on, every row has the star. Singleplayer: your crown.
+PC-hosted LAN world with a phone: changing the phone player to visitor,
+operator, member and custom drew the matching marks.
+
+## L-128 player list (2026-10-10)
+
+By the maintainer, local and BDS. `d8c16d2` (DLL
+`624ba34f416bf4c9ab5d6aa7f2dc185f81cae539419a5d3a886d6904c092cb03`): Tab shows
+the list and hides it on release; singleplayer lists you with face, green
+name, platform and a host crown; the dimension icon was missing and the crown
+sat slightly low; on BDS other players listed by name with distances for
+nearby ones and no crown (the server is the host); hidden while chat is open;
+movable in the layout editor; overlaps the target card and Debug View.
+`f7e6f87` (DLL `4d8b92f592ee57c37b14c31344317e49d22cc2637fbd4f79c7fe9361ec9e253a`):
+dimension icon shown, icons on the text line, the list drawn over Debug View
+and the target card hidden while Tab is held; the per-line background was not
+offered. `ea0ade4` (DLL
+`cddf9ab04b647bcdd879829c359bbfe0f89a15f036e3cd10246d5579734655ef`): per-line
+background offered, one band per player and on the header; no problems found.
+
+## L-130 English name search (2026-10-10)
+
+By the maintainer, local. `8488e3b` (DLL
+`b099a9e319e9fc7e4ec402114c590459b0ba79df8e8b889b09d6d09ec2d06a32`): with
+the game in Japanese, `plank` in the recipe book, `diamond sword` and
+`oak_log` in creative search found their items; Japanese search unchanged;
+Off removed the English matches. The help text was cut off in the settings
+screen, and the log showed every English name empty (the description id
+already ends in ".name"), so only identifiers had matched. `3646a11` (DLL
+`23a30e587fd59e8c8fffcc5c6b9e83fa2698284518a8311a08bec84c1b650b0a`): short
+help fits; English display names found (`granite wall`, `bamboo mosaic`,
+`smooth stone`); log "tile.planks.oak.name -> 'Oak Planks'". Worked with the
+game in Japanese and in Simplified Chinese.
+
+## L-123 body culling rounds (2026-10-10)
+
+By the maintainer, local. Round 1 `8946d65` (DLL
+`a730d876582eadf6bce4f728729e25fcd8369cf1e3b8da7c9e2b6324fcc4aea5`): elytra
+still stretched with the body off screen near the camera; no change seen
+elsewhere; the override log line never appeared. Round 2 `bae4bc9` (DLL
+`1903410bcc703d62a6a53882d899ec10d5d6ea39b2a729e652c5660ecacb1462`): log
+"isAABBVisible 1751 calls (10 near the body), cullerIsVisible 249 calls (22
+near the body)" and "kept visible ... (point)"; elytra still stretched.
+Both reverted.
+
+## L-129 tooltip alignment (2026-10-10)
+
+By the maintainer, local, normal build `3cffc44` (DLL
+`515f9d356d23ca6ff4bf6c8d472c929749414c37d605780c501e49e2ff326b6b`): the
+locked trade tooltip's frame and text no longer shift apart while the
+pointer jitters.
+
+## L-129 locked trade tooltips (2026-10-10)
+
+By the maintainer, local, normal build `c7beed9` (DLL
+`ffa939332776622f9c5cf44ef604b90b23e9929018fb4b8f36e75b1182f998d4`). Hovering
+a locked level's sword, axe or enchanted book shows its description
+(enchantments), payment items too; it disappears when the pointer leaves;
+unlocked trades keep vanilla's hover text with no Lamium frame on top.
+Found: while the pointer jitters over a locked item the frame and the text
+shift apart; positions rounded to whole units after this check (`3cffc44`).
+
+## L-129 all trader levels (2026-10-10)
+
+By the maintainer, local, normal build `0a41937` (DLL
+`75ada29991e5914e7de833b5df034b1586639de070fe282a3e8d652cc4166fc4`). A level 1
+villager's trade screen lists levels 1 to 5; levels above the trader's show
+vanilla's locked look and cannot be selected; Off restores vanilla's list.
+Also checked on the same day: the offhand icon on the hotbar's half unit
+(`4f4bb20`) lines up with the hotbar. Requested: hovering a locked trade's
+items should show their description (enchantments) as unlocked ones do;
+vanilla shows none there.
+
+## Shield glint variants and offhand offset (2026-10-10)
+
+By the maintainer, local, trace build `75433f6` (DLL
+`953bf3e4f07429554e3a5ff0100d42ed5fd28d27771767b905702bfc054b9396`). Three
+glint variants for an enchanted shield in the shulker preview (chunk 4/5
+directly; chunk 4 in a material-5 batch with the glint texture in the second
+or the first texture slot) all drew the shield without glint. Screenshot:
+a totem in the offhand slot sits about 1 px lower than in the hotbar.
+
+## Shared-mesh item icons everywhere (2026-10-10)
+
+By the maintainer, local, normal build `cbaacfc` (DLL
+`e71d9e3cf3ad34ebbdcec9cbbd54106431cb98c84a1dcebdf6199deb31cefb2d`). Fence
+gates and leather armor's undyeable layer show in the shulker preview;
+leather in the durability HUD looks like the vanilla slot; offhand slot,
+target card and other icons unchanged in place and size; no flicker, no
+crash. Noted: the offhand slot's item may sit about 1 px lower than the
+hotbar's (not known whether this build caused it). Shield glint not
+addressed.
+
+## L-119 shared-mesh batch in the shulker preview (2026-10-10)
+
+By the maintainer, local, normal build `6a32266` (DLL
+`9c532aa3baf4ebc3b3ab740194088354922c9d2a65dbf910d84c856603dde39d`). With
+block items drawn through a shared-mesh batch built like a slot's, the oak
+and bamboo fence gates show in the shulker preview, next to the fences,
+snow block and sandstone. No flicker in the inventory and no crash while
+opening the preview repeatedly. Shield glint and leather layers not changed
+by this build.
+
+## L-91/L-119 icon route trace (2026-10-10)
+
+By the maintainer, local, trace build `e329b55` crashed when hovering a
+shulker box: `InventoryItemRenderer::getItemRenderInfo` called from the
+`renderGuiItemNew` trace hook on a preview stack (access violation, crash
+trace `trace_2026-10-10_16-54-18.log`). Trace build `7dac7d5` (DLL
+`c2c2d434a46c66279802bc0d1750d1c6a2fdcbf1087f22b9f1979ece00bd3ad8`) without
+that call ran: the inventory slots showed gates, the shield glint and
+leather layers; the shulker preview still lacked all three. The log showed
+no geometry atlas calls, block items in shared-mesh batches (type 1) and
+shields in default batches with up to three passes.
+
+## L-119 depth and winding experiment (2026-10-10)
+
+By the maintainer, local, trace build `1e46a3e` (DLL
+`64178dd7ca464aad8126e8470a039df465311b9eeb6dfd9468cf0d20530f27b0`). In the
+shulker preview, the oak and bamboo fence gates were missing in all three
+rows: normal; without a slot background at z 40; at scale -1. Fences, snow
+block, sandstone and door showed in every row; at scale -1 the blocks showed
+their inside faces. Reverted.
+
+## L-119 block chunk with alpha 1 (2026-10-10)
+
+By the maintainer, local, trace build `696a11c` (DLL
+`128d2591b1502a07959440c1dce8d43b0c44b9ab1cc1f5e4bc31415059811df4`). The
+shulker preview drawing block items as chunk type 0 with alpha 1 showed the
+fences, snow block, sandstone and door, but not the oak and bamboo fence
+gates: the same as `renderGuiItemNew`. Both preview experiments reverted.
+
+## 2026-10-10 follow-up: camera angles, block chunk icons, trade dump
+
+By the maintainer, local, trace build `6e29917` (DLL
+`6f706dd728b423b072887745a705909f7ba58a666a057ef322266dbf735f55ea`).
+- L-124: camera angles follow the camera in the Info HUD and Debug View;
+  the label reads "Camera".
+- L-119: the shulker preview drawing block items as chunk type 0 with the
+  slot's alpha 0 showed no block icons at all (gates, fences, stairs,
+  blocks); the door (item route) still showed. Next try: alpha 1.
+- L-129: the SNBT dump of a level 1 weaponsmith held 9 recipes, tiers 0-4,
+  and `TierExpRequirements`.
+
+## 2026-10-10 batch: FreeCamera readouts, hit exit, Night Vision, icon and trade traces
+
+By the maintainer, local, the 1.26.51.01 instance without LIP, on the trace
+build `d2f288c` (`icon_trace`, `trade_trace`; DLL
+`4647a9688a41c8113a8d6ba527f7ea06cde94cb2f2da80020f91426ff188f632`).
+- L-125: during FreeCamera the Add waypoint key filled the camera's position.
+- L-124: Camera and Player lines showed with correct positions; the camera's
+  angles still showed the body's (the session angles stay at the start
+  pose). The English "Cam" label read oddly. Both changed after this check.
+- L-126: hits ended FreeCamera ("FreeCamera left: the body was hit (event 2)"
+  in the log, four times).
+- L-121: at Brightness 0 % with Night Vision, the option removed the dark
+  area around light sources and Off gave the vanilla look. The log showed
+  the game's light gamma as 1 at that time, so whether `mGamma` is the
+  Brightness value is not confirmed by the log.
+- L-119: in the shulker preview the oak and bamboo fence gates showed no
+  icon while the bamboo and cherry fences did. Vanilla slots draw fences,
+  gates, stairs, walls and trapdoors as chunk type 0 (alpha argument 0) into
+  `_renderGuiBlockTypeItem`; Lamium's `renderGuiItemNew` uses chunk type 12
+  (alpha 1) into the same function for gates and fences alike.
+- L-129: one villager trade screen; `UpdateTradePacket` tier 0, size 0, new
+  screen, economy trade. The dump used `toString`, which only printed
+  "2 entries"; changed to SNBT after this check.
+- L-123: elytra on the inventory model drawn wrong with the camera near the
+  body but the body out of view; drawn right with the camera far and the
+  body in view. The body being culled, not the distance, matters.
+
+## Inventory and hand features on a server (reported 2026-10-10)
+
+By the maintainer, reported in chat; build, hash and server not recorded.
+Weapon Switch (L-67), offhand swap (L-94), Fake Offhand item use (L-95),
+Hand Restock threshold/order and inventory-screen transfer (L-102, L-103)
+and fixed-slot fetch (L-97) worked correctly in everyday use on a server.
+Every feature was used, but not along the detailed check steps; the
+maintainer accepts that some cases may be missed and will report them.
+
+## L-89 distant players and L-104 map follow-ups on a server (reported 2026-10-10)
+
+By the maintainer, reported in chat; build, hash and server not recorded.
+Distant players from the Locator Bar state (L-89) and the L-104 follow-ups
+(black areas within render distance filled by the client's missing-section
+requests; teleport from the map) were already checked and fine. No details
+beyond that were given.
+
+## L-57 counters and L-60 waypoints on a server (reported 2026-10-10)
+
+By the maintainer, reported in chat while tidying the backlog; build, hash
+and server not recorded. Debug View's entity, chunk and particle counts
+looked fine on a server (L-57). The map's remaining checks, including
+waypoint storage per server address and port, were fine (L-60). No details
+beyond "no problem" were given.
+
+## 0.1.8 release smoke test (2026-10-10)
+
+By the maintainer, local, the 1.26.51.01 instance without LIP, on the DLL
+from `Lamium-0.1.8-client-windows-x64.zip` (`e175eed`, DLL SHA-256
+`1e2f4e6fe6f4657a8a1f7f18a3d067a32f9a100e3875deaa45886b537ae55a2c`, ZIP
+`b99f9f2798da94745ab8e6c863ebf397856617f1f722febb13b4c810e300da4b`): the
+mod loads, settings open with 0.1.8, and distance fog, Fake Offhand
+fireworks and the schematic ghost fixes work. Not a full regression.
+
+## L-93 Waterlogged ghost stairs, crops and farmland beside water (2026-10-10)
+
+By the maintainer, local, the 1.26.51.01 instance without LIP. `62bff77`:
+water in waterlogged ghost stairs no longer shows through the stairs'
+covered sides; ghost beetroots no longer flicker; distance fog starts
+selected without saved settings. Left there: the pool inside the stairs
+still showed the flowing texture, and farmland beside schematic water
+flickered on its side. `b40c543` (DLL SHA-256
+`77a9f13dfb74295bf4ee6f32abd603b6ad77ef79dc44200db051cd6daca1d4d8`): the
+pool shows the still texture (its edge slope kept), a source at a drop
+still shows the flowing one, and the farmland side no longer flickers.
+
+## L-122 Fake Offhand fireworks and L-118 distance fog (2026-10-09)
+
+By the maintainer, local, `34c3593` (DLL SHA-256
+`39d27e14a3ae4273d9a846cba9fe193d609ff3702e03f9abf7d034cd418aac2b`, the
+1.26.51.01 instance without LIP). L-122: with a firework in the Fake Offhand
+slot and the right-click binding, opening and closing doors and placing
+blocks (the last one of a stack too) launched no firework; fireworks while
+gliding and aimed at a block still launched. L-118: with Hide effects on and
+Distance fog selected, the fog went away on land (day, night, rain), in the
+Nether and in the End, and came back when switched off, in the normal
+graphics modes. Under Vibrant Visuals it had no effect (as Night Vision
+there); left for later. No problems found. Seen in the same session, in the
+LIP instance on `c48e59c`: water in waterlogged schematic stairs showed
+through the ghost stairs' sides and looked flowing; ghost beetroots
+flickered (both addressed in `62bff77`, not yet checked).
+
+## L-93 Schematic lines and mistake faces under Vibrant Visuals (2026-10-09)
+
+By the maintainer, local, switching between Fancy, Simple and Vibrant
+Visuals. `fce6057`: placement frames on `selection_box` with the current
+shader color stay light blue under Vibrant Visuals (same width). `3995e2a`:
+every schematic line keeps its color there (shapes, red, yellow, orange,
+selection, entity frames); mistake faces colored; normal modes unchanged;
+mode switches safe; but faces flickered, and after closing the inventory
+faces and lines glow until the player moves (shapes too). `c363475`
+fixed the mistake faces' flicker, but read the overlay material's
+`twoSided` the wrong way round: selection corners kept flickering under
+Vibrant Visuals and showed only lines on opaque blocks in Fancy and
+Simple. `b7e24c2` (DLL SHA-256
+`da26fa54ad58d658944b89bd2dca9074067a4d42143330af097bbeaa88648bcd`): corner
+faces visible in Fancy and Simple on any block, flickering under Vibrant
+Visuals no more than the mistake faces (about like shapes); waiting-column
+floors and the shown point's faces visible in both. Still: ghost faces
+untinted and the honey ghost black under Vibrant Visuals.
+
+## L-93 Schematic ghosts looking straight down and under Vibrant Visuals, B5 (2026-10-09)
+
+By the maintainer, local, `b55aa03` (DLL SHA-256
+`eb26e5995c06a6c7d2ec26492a2537cfe87cf22a1d9cda569f146a181394bce6`).
+Looking straight down onto and from inside ghosts: no change in brightness
+or color, nothing missing or flickering. Vibrant Visuals: no crash; ghost
+blocks, entities and block entities draw with their shapes, but without
+the light-blue tint (they read almost like real blocks), Lamium's outlines
+are thin black lines, and the honey ghost is black. The structure block's
+own outline keeps its color and width there. Also seen: Lamium's Night
+Vision changes nothing under Vibrant Visuals.
+
+## L-93 Schematic ghost performance, C (2026-10-09)
+
+By the maintainer, local, several large placements (`desert village`,
+`terrain big`...), standing, placing blocks and flying inside them, with
+the `schematic_perf_trace` builds (F3 for fps; 60 fps cap). Schematics off:
+a steady 60. Start (`3b247fb`): 30-50 fps; the ghost pass took 5-6 ms a
+frame with nothing changing and 7-12 ms while building or flying, single
+16-block sections up to 21 ms. `8835802` (faces in one pass with one light
+setup, outlines within 48 blocks, rebuilds limited to 3 ms): 40-55 fps.
+`2345212`/`8efd52f`: the outline distance is a setting; changing it
+crashed once (a static block pointer, fixed), then 0 and 192 drew far
+outlines without crashing. `2521ec2` (8-block sections, kept wanted
+list): 35-55 fps, fewer dips, rebuilds at most 2-5 ms. `0cffb83` (DLL
+SHA-256 `54073603ec98fdd8db8b125a222ec97271552965633e36174363ef421adff348`,
+frames kept as one mesh): 45-60 fps, dips to about 40; the ghost pass about
+8 ms a frame while working inside placements (faces 1.0-1.8, prepare 1,
+verification scan 1, blended 0.6, outlines 0.5, hash checks 0.35); frames
+follow moves, selection and hiding correctly. No visual change seen from
+the 8-block sections. Not measured: servers, a single huge placement only.
+
+## L-93 Schematic previews with block entities and entities (2026-10-09)
+
+By the maintainer, local, Files tab. `d07d158`: in `mixture` and
+`entities` the block entities (chests, ender chest, spawner contents
+aside) and the entities drew in place, facing right, moving with turn,
+zoom and layer peeling (peeled ones gone); entities carried the world
+ghosts' light-blue outlines; `block-like` (block entities only) drew
+nothing. `4b98908`: `block-like` draws its chests, beds, banners, signs,
+heads and its two entities; previews draw no entity outlines; world
+ghost entities keep theirs. A campfire's flames hid the block entities
+and entities behind them (empty texels write depth); `3889c2a` (DLL
+SHA-256 `a086c5ade2779faf6d38e759d7d9d69c93513c45e56f7a3468d5637aea0d5899`)
+draws them before the mesh: visible behind the flames, stable (no draw
+order flicker), still hidden by blocks in front, block brightness
+unchanged.
+
+## L-93 Schematic foliage tints (2026-10-09)
+
+By the maintainer, local. A real mangrove leaf placed beside the preview
+was green while the preview's mangrove leaves were gray; world ghosts of
+mangrove leaves and vines were gray too. `b02aea7` (tint only the seasons
+layers): no change. `dac35cb` (DLL SHA-256
+`5131c4c4fee63e8e682cdea398b2bc9036f52dc752b5801a2372dffb39b341cf`,
+foliage tint methods on still-gray vertices): mangrove leaves and vines
+green in the world ghosts and the previews; grass sides not turned green,
+grass tops unchanged. Log: vines tint method 1 in layer 11 sampled
+0.44/0.65/0.30; mangrove leaves tint method 1 in layer 10 (a seasons
+layer) sampled 0.69/0/0. Not understood: why the mangrove leaves now look
+green (likely their seasons vertex colors are not gray, so this pass
+leaves them, and the earlier seasons-only pass did not color them
+usefully).
+
+## L-93 Schematic preview biome tints (2026-10-09)
+
+By the maintainer, local. `9b4699d` (cells tessellated above the build
+limit around the player): no change, grass tops still gray. `d536c30`
+(DLL SHA-256
+`a5ff1d107922e61025a6b911efbebe27a6bd595507c4ace316fc139396cc64b9`,
+cells at the top of the world inside its height, around the player):
+grass tops and grass plants take the player's biome color in
+`broken_village_house`, `terrain_water_lamium` (66x53x65) and `desert
+village`; other previews unchanged. Unclear: mangrove leaves in `desert
+village` look gray, not yet compared with a real mangrove leaf in the
+same biome. Tints follow where the player stands, not where the file was
+saved.
+
+## L-93 Schematic block-entity ghost outlines (2026-10-09)
+
+By the maintainer, local, `417ccd1` (DLL SHA-256
+`b25c527133c839e7c2714f48b34a8928b4a6ca2be1b434dd4e552e9b84814514`),
+`block-like`: the light-blue outlines of chest, bed, banner, sign and head
+ghosts follow each block's own selection outline instead of the whole
+cell, also turned and mirrored.
+
+## L-93 Schematic block-entity ghosts at full brightness, B5 (2026-10-09)
+
+By the maintainer, local, `block-like` at night and underground. `b245aae`
+and `e6b6872` crashed the game at start inside the hook on
+`BlockSource::getLightColor` (reading its `Brightness` argument: passed by
+value in the game, by reference in this SDK's type). `c0cc930`, hooking
+only `getBrightnessPair`, started but changed nothing. `ae1716d` (hook on
+the position overload of `ActorShaderManager::setupShaderParameters`):
+banners, signs and heads lit as by day, chests and beds still dark.
+`9e9178b` (DLL SHA-256
+`044f3bf2b23d88955590b87b50b20fa0d4cb1a0631fce96d28be68c5f29f9359`, also
+the `BrightnessPair` overload): chests and beds lit as by day too; real
+chests and beds still follow the world's light; start and world entry
+fine. Not checked: looking straight down, Vibrant Visuals.
+
+## L-93 Schematic waterlogging check, D (2026-10-09)
+
+By the maintainer, local, `56c9921` then `edbd7f5` (DLL SHA-256
+`31d0042ccb13ca51a5e75bd0994b6eb795ce0a6cdcfa9e45456989288b07b4ed`),
+`submerged_lamium` on land. On `56c9921`: a fence or stair placed without
+its water is listed as a state mistake and its target card reads
+`waterlogged: false -> true` (now -> should be); a waterlogged block where
+the file has none gets a yellow mark; placing it right clears both. But a
+placed block missing its water got no mark and kept a ghost water shell,
+which looked like real water. On `edbd7f5` it gets a yellow mark and no
+shell; ghosts not yet placed still show their water; the other cases are
+unchanged.
+
+## L-93 Schematic block entity data, B4 (2026-10-09)
+
+By the maintainer, local, `79198e1` then `438e24a` (DLL SHA-256
+`4879826ce38a8baf1ea7bbf57c862df66f4b21dbfbddeb01f321ab3119a30e22`), the
+vanilla export `block-like` (banners standing and on a wall, six head
+kinds at angles, colored beds, standing, wall and hanging signs with text,
+chests). On `79198e1` beds and signs showed color, text and angle; banners
+the pattern but the wrong mount and facing; heads nothing. On `438e24a`:
+banners mounted and facing right, every head kind drawn and turned right,
+also rotated, mirrored and both; beds and signs unchanged. A copy of the
+same things saved by Lamium and placed as ghosts looks the same as that
+save loaded by a structure block (colors, text, patterns). The structure
+block itself breaks signs and banners with nothing to stand on, and
+handles beds with one half missing on its own way (top half only: drawn
+whole without the lower half's collision; lower half only: not drawn).
+Not seen: a container's items. The "cushion" mentioned on `79198e1` is
+an entity (entity saving was off), not a block entity. Also seen that
+day: block-entity ghosts (chest, bed, banner, sign, head) follow the
+world's light at night and underground (B5; their brightness is read
+through non-virtual light queries).
+
+## L-93 Schematic preview translucency, closed (2026-10-09)
+
+By the maintainer, local, `fe82509` (DLL SHA-256
+`fa7f0af30193cf9ad6e39dd75605bcf8ca9dd655af1516345968de49c194b1c0`),
+`submerged_lamium` compared with the world placement. With the
+depth-writing block blend material back (and a liquid cell's quads still
+ordered around its surface), stair tops, fences and the spawner's top
+stand above the water as in the world. Accepted limits, all from empty
+texels writing depth when the far-to-near order is off: seagrass shows
+two of its four quad sides depending on the angle, the water behind it
+can be missing, and the stone behind a spawner is not drawn while the
+spawner looks dry. The maintainer chose to stop here and move on.
+
+## L-93 Schematic preview translucency (2026-10-09)
+
+By the maintainer, local, Files tab with `water_and_lava`,
+`submerged_lamium`, `stone_patch`. `d583e71` (fixed 0.5 UI units of depth)
+drew nothing; the log then showed the UI pass maps UI z 0 to normalized
+depth -1 and z -1000 to +1, so `fd22671` reads the matrices and places the
+build between 0.25 (nearest) and 0.75: the preview drew again with
+translucent water over the floor and waterlogged blocks. Two meshes
+(solids, then liquids) made a rail under water flicker (draw order);
+one blended mesh far to near (`b5a6db5`) fixed it, lava made opaque.
+The block blend material wrote depth for seagrass's empty texels (its
+other quad and the water behind went missing); the beacon beam material
+without depth writes (`7ae2b4e`) fixed that. Still wrong: in
+`submerged_lamium` parts above the water (stair top, fence, spawner top)
+look submerged in the preview, unlike the world. Not the cause: ordering
+a waterlogged cell's quads around the surface (`485d829`, no change) and
+vertex alpha (logged 255 everywhere; `91036fc` reverted). Stopped after
+these two rounds to report.
+
+## L-93 Schematic blended ghosts after the world's translucent blocks (2026-10-09)
+
+By the maintainer, local, `a926f09` then `eb0a99b` (DLL SHA-256
+`5fb26a8c726d4eaf974c96a0f5110c7f2692f12a1e5e7613cbd29f91d59519aa`). The
+blended mesh (stained glass, honey, slime, liquid shells, every mistake
+mark) is drawn in the block entities' alpha pass with the beacon beam's
+material, without depth writes. Log: the pass runs once a frame (599 of
+600 frames), `beacon_beam_transparent` found. Seen: yellow marks over real
+water no longer flicker and the real water inside shows; real honey,
+slime or glass placed by mistake beside a honey ghost no longer flickers;
+blended ghosts keep their strength; ghost liquids inside and beyond real
+water still show. `a926f09` made ghost water above a ghost floor flicker
+near the camera (the shell's faces against opaque ghosts were kept there);
+fixed and checked on `eb0a99b`. Reported then, older: from inside a
+non-full ghost (door, spawner), its faces and a neighboring non-full
+ghost's in the same plane fought; `361a0f6` keeps one face of any such
+pair near the camera: no flicker, but a door or spawner lost some of its
+own faces seen from inside, and a stair still flickered from inside (its
+two half-height faces). `d20d0aa` draws only front faces in the camera's
+cell: both checked fine. With `361a0f6`'s pairs, a spawner's face beside
+a half block was missing from just outside but shown from afar; with only
+opaque pairs (`064eef2`) it showed but flickered there, as real blocks
+also do (a little, less often). The maintainer chose the pairs back on,
+behind a switch.
+
+## L-93 Schematic liquids, B3 (2026-10-09)
+
+By the maintainer, local, rounds on `0f164ee`, `e1a74a2` and `6fbaa3a`
+with `water_and_lava`, `submerged` and `submerged_lamium`, on land and in
+real water. Seen: water and lava shells whole and textured from the
+atlas, no gaps; waterlogged ghosts show their water; no shell where the
+real water already is; flowing water and lava slope like the real ones
+(`e1a74a2`); sloped tops, including sources beside a flow, switch to the
+flowing texture over exactly the right cells, still pools keep the still
+texture (`6fbaa3a`). That build sampled only half the flowing texture (it
+looked 8x8 and fast); the fix, `96fe71f`, was checked the same day:
+16x16, the real speed, the real direction. Also seen then: real water or
+lava placed beside a ghost flow bent its slope and flow direction (fixed
+in `be48f75`, checked the same day: real liquids beside a ghost flow no
+longer change it, and no shell appears in real water), and a
+yellow mark over real water (a different flow level than the file's)
+flickered against a ghost liquid shell, swapping draw order each frame
+like the marks over real honey or glass. Previews: liquids
+and waterlogged blocks draw, but the preview's single pass keeps the
+first fragment at a spot, so near water hides parts of waterlogged blocks
+and the floor behind it (deferred, with the blended-material depth
+question).
+
+## L-93 Schematic ghosts by render layer, B2 (2026-10-09)
+
+By the maintainer, local, rounds on `ba046d0` to `59fc02c` (last DLL
+SHA-256 `cfdfcaeee522f26127ef6f9f6133fa420b30ee2c2ab20faab8fdf60163817c69`),
+`mixture` and its mirrored copy. Honey blocks now draw their real look
+(opaque inner cube, blended outer) instead of an outline, brightness the
+same at night; nothing else changed look (ordinary blocks, glass, panes,
+doors, fences, inside view, mistake colors, previews). Found and fixed
+along the way: a smooth stone slab ghost drew full height after a honey
+block was tessellated (the tessellator's current shape carried over,
+`99b04f6`); the honey ghost's outer face fought with a neighbor's mistake
+mark (mark faces against a ghost that fills that side are left out,
+`e9a0285`, `59fc02c`) and swapped draw order with it from frame to frame
+(marks moved into the sorted blended mesh, `a90251d`); that move hid a
+real honey block placed by mistake inside its mark, and ghost faces
+against a real honey block were dropped (`59fc02c`: marks over real
+blended blocks keep the old material, honey and slime no longer count as
+hiding faces). Seen on `59fc02c`: marks show in full beside trapdoor
+ghosts; a real honey block placed by mistake shows with its mark and its
+neighbors' faces stay. Still flickering: a real honey, slime or glass
+block placed by mistake next to a honey ghost, whose mark (old material,
+separate draw) swaps order with the blended ghost. Ordinary and partial
+blocks next to honey ghosts are stable.
+
+## L-93 Schematic door halves and mirrored entity facing (2026-10-09)
+
+By the maintainer, local, deployed `a32a49f`, DLL SHA-256
+`3092a9d7ee32eca948e385d5f75f8ab62d57e4fe4df07ea1dab93f82fff454bb`.
+Every item of the checklist passed: in `submerged_lamium` the waterlogged
+jungle door whose upper half is outside the file now draws its half, also
+turned and mirrored, matching a structure block; doors with both halves
+draw as before, and placing the real lower half leaves no displaced ghost;
+the `mixture` armor stand matches the structure block under the X mirror,
+the Z mirror and mirror plus 90 degrees; unmirrored entity facing is
+unchanged; the Files/Check preview draws the door at the area's edge.
+Not checked: a bed with one half outside the file, redstone.
+
+## L-93 Schematic mirror axes swapped for block states (2026-10-09)
+
+By the maintainer, local, deployed `54c6a8a`, DLL SHA-256
+`45192484611150f3771328bcd5ea62267291f588e79ba71d17e53057a799fe4d`.
+`mixture` placed by Lamium and by a vanilla structure block side by side
+with the same mirror. Before the fix (`9993c78`, Z mirror): stairs high on
+the wrong side, the glass pane joined toward the outside instead of the
+glass, chest and ender chest faced the other way, the fence joined the
+air instead of the spawner. After: Z mirror matches the structure block;
+X mirror and mirror plus 90 degrees match for every block. Placing blocks
+on mirrored and turned placements removes the right ghosts, and wrong
+blocks or states are marked as such. Unmirrored ghosts look as before.
+Not matching: under the X mirror the armor stand (stored yaw 0, facing
+south) faces the opposite way from the structure block's. Lamium keeps it
+facing south (a true east-west reflection); the structure block turns it
+north. Which one Lamium should follow is open.
+
+## L-93 Schematic neighbors spike, B1 (2026-10-09)
+
+By the maintainer, local, deployed `9993c78`, DLL SHA-256
+`90652047eb491bf7e45ab11b9f424930b73ca11d01fc270d2c105340b2a8d659`
+(`SchematicRegion`, a `BlockSource` subclass the tessellator reads
+through). Samples `submerged`, `submerged_lamium`, `mixture`, `no_mesh`.
+Seen: the world loads and placing ghosts does not crash. Doors draw both
+halves with the right hinge side and open state; beds draw head and foot
+(color still not the file's, B4); fences connect to ghost fences and
+blocks and grow no arm toward empty cells; glass panes and iron bars
+connect to each other and a lone one is not a cross. No regressions:
+plain block faces, the filled look from inside, one-layer view (top faces
+kept), red/yellow mistake marks, Files/Check previews draw the same shapes.
+Not right: in `submerged_lamium` the waterlogged jungle door's cell is
+empty. The file holds only the lower half (2,1,5 in the top layer); the
+upper half is outside the area, so the tessellator finds no partner (not a
+water problem). With a mirror (Z in the screenshot), several blocks seemed
+to face the wrong way, stair corners included; whether this is new or the
+game's state transform (only stairs and chests were checked before,
+2026-10-03) is not known yet. Not checked: redstone (no sample), stair
+corners without a mirror in detail. Water and waterlogged blocks are drawn
+as before (B3).
+
+## L-93 Version 1 and 2 large saves side by side (2026-10-09)
+
+By the maintainer, local, same files as the entry below. LHolo failed on
+both version 1 Lamium saves, `terrain big` (122x39x203) and `terrain big 2`
+(276x14x232), with its message that the vanilla StructureTemplate could not
+load the structure (screenshot in the conversation). The version 2 copy
+`terrain big v2` loaded there (entry below) and also loaded through the
+game's structure block. So the version 1 header was the cause, and the
+game's loader takes a 122x39x203 file. Not checked: 276x14x232 as version
+2, servers.
+
+## L-93 Large schematic as version 2 in another tool (2026-10-09)
+
+By the maintainer, local. The agent copied the Lamium save `terrain big`
+(122x39x203, version 1, two layers with an all-void second layer) as
+`terrain big v2`: format_version 2 and the empty second layer removed,
+every other tag unchanged (3,863,500 bytes shorter, exactly that layer;
+both files pass the `LAMIUM_SAMPLE_STRUCTURES` round trip). LHolo read
+the version 2 copy; earlier the original failed there at the vanilla
+structure loader. So the version, not the size, was the likely cause.
+Not checked in this round: the original again, and the game's own loader
+on an area this large (it only runs right after a save).
+
+## L-93 Schematic saves as version 2 with a vanilla-loader check (2026-10-09)
+
+By the maintainer, deployed `d37bd6d`, DLL
+`b697e13e49e45305c3f87794a6786d824d0a3bdd24dd1d6523a6be2b5d21d798`, Minecraft
+1.26.51.01, local world. Three area saves; the log line and the file
+headers agree:
+- `stone_patch` 3x2x3, no liquid: version 2, one layer; "accepted".
+- `submerged_lamium` 7x2x10 with waterlogged blocks: version 2, two
+  layers (17 cells in the second); "accepted". Loaded in Lamium, the ghosts
+  draw as before.
+- `terrain_water_lamium` 66x53x65 (just over 64 in X and Z, 227,370
+  cells, 720 waterlogged): version 2, two layers; "accepted". No pause
+  noticed at the end of the save.
+The game's structure block (load mode) placed the first two correctly,
+waterlogged blocks with water and sign facing included; a door whose upper
+half was outside the area broke, as expected. LHolo read all three; it
+drew doors and water in a simplified way. Not checked: a save of the size
+that failed in LHolo before (122x39x203 and larger), so whether that
+failure was the version or the size is still open, and whether the game's
+loader has a size limit; servers.
+
+## L-121 Night Vision shading with Smooth Lighting (2026-10-09)
+
+By the maintainer, Minecraft 1.26.51.01, local world, Smooth Lighting on,
+looking down at a floor with a one-block hole (screenshots in the
+conversation). The Lamium build was the deployed one of that day (hash not
+recorded). Seen: with Lamium's Night Vision on, the blocks around the hole
+turn dark blue in a wide ring; strong at Brightness 0%, weaker at 50%,
+almost gone at 100%. The vanilla Night Vision effect (Lamium's off) looks
+the same at 0%, and so does vanilla Minecraft without LeviLamina. So this
+is the game's own behavior, not a Lamium bug. Not checked: other Night
+Vision settings, light sources nearby, the Nether.
+
+## L-114 shortened Check note and preview hint (2026-10-09)
+
+By the maintainer, deployed `511cb35`, DLL
+`911cbf65ce73288ebe9de38aa834b510cd210abd106157faa18f887e7e569db9`, Minecraft
+1.26.51.01. Passed: the note under the Check counts and the preview hint
+are readable at UI Profile 75% in Japanese, English and Chinese. At UI
+Profile 100% they are cut off; the maintainer accepts that.
+
+## L-114 preview inspect and the Check list on large builds (2026-10-09)
+
+By the maintainer, deployed `ccaf63b` to `7b490be` (DLL
+`cb84422196519deb670803fd2cdb30158fa5fb114bb225ecb35427b0638342c4`), Minecraft
+1.26.51.01, local world, mixture and terrain big. Passed on `7b490be`: a
+click in the Files preview lights the block and names it with its place; a
+drag only turns; a click never turns the view, also after earlier drags;
+the Check list keeps the nearest 2000 of each kind (wrong rows show on
+terrain big), a picked mistake in the list is selected and scrolled to, one
+outside the list is checked on the spot and "show in world" marks it; a
+correct block says so; peeled cuts can be picked. Found on the way: the
+list kept the first 2000 found, so missing blocks filled it and wrong ones
+never listed (fixed); the note under the counts was cut off in Japanese at
+UI Profile 75% (shortened after this check in `511cb35`).
+
+## L-114 preview zoom limit and layer peeling (2026-10-08)
+
+By the maintainer, deployed `771a84b` then `07937ed` (DLL
+`ee773a037554f20bccfc41d3aa203b59ad8a9eaad1f8ea458c77fed32f47ae4f`), Minecraft
+1.26.51.01, local world. Passed: zoom stops at the box from every side (the
+UI scissor never clipped the mesh: GUI units, pixels and a committing fill
+all failed); Shift+wheel peels from the side the view looks down on, the
+side stays fixed after turning (a height cut seen from the side), the top
+strip resets it without starting a drag; the Check tab keeps its colors;
+waiting after a peel on large builds is acceptable. On `771a84b` the side
+followed the view and the label click did nothing (both fixed).
+
+## L-114 Check tab layout A and wheel zoom (2026-10-08)
+
+By the maintainer, deployed `cdebe56`, DLL
+`5f8b9b2c0af130a1aae045dbcba4a0a5831f98f11a5e56a542933f598ca6b625`, Minecraft
+1.26.51.01, local world. Passed: the Check preview keeps its size while
+rows and chips change; counts beside the selected mistake, readable, no
+overlap with the buttons; chips change which kinds are colored; the wheel
+zooms both previews with the order intact and still scrolls the list
+outside them. Found: a zoomed preview spills over the screen (scissor not
+applied to it). The maintainer finds every layer-control variant of
+schematic-preview-layers.html awkward and wants the preview's scope
+settled first (camera moves, layers, possibly a simple 3D editor).
+
+## L-114 Check tab colored preview (2026-10-08)
+
+By the maintainer, deployed `1c0b8bc`, DLL
+`ace332d7fc5aceaae13254c0b4e0ca8ed1ef0eb9aa2a1769f05be9efc86c5ff2`, Minecraft
+1.26.51.01, local world, mixture and desert village placements. Passed:
+missing light blue, wrong red, wrong state yellow; the selected row's block
+stays lit and the rest dims, following the selection; drag turns it without
+other clicks; no flicker or hitch when colors change, also on the large
+placement. Found: a trapdoor drew behind the structure block beyond it
+(also in the Files preview; fixed after this check by sorting blocks
+first); the preview resizes whenever the text above it changes height;
+mistakes are hard to find in large or complex builds. The maintainer wants
+another mockup round for the Check tab and how mistakes are shown.
+
+## L-114 Files tab 3D preview (2026-10-08)
+
+By the maintainer over seven rounds (`bd7f7f6` to `f2fbf49`, last DLL
+`f7ee2e5512972ac1d858d849a5bb14fbc20ec110725bb2909f8755a7dfacdb9e`), Minecraft
+1.26.51.01, local world, schematics from 3x3x3 to 122x69x112 (screenshots in
+the conversation). On `f2fbf49`: real block textures, near and far right
+from every side and from above and below, slabs, trapdoors and grindstones
+where the world ghosts put them, fences as in the schematic, campfire flame
+bright, brightness the same whether the world behind is dark or light,
+shading by face direction, a slab next to a honey block not missing a face
+(also fixed in the world ghosts), large builds shown within a second and
+turning without the back showing through, drag turns the way the pointer
+moves, "Drag to turn" hint at the top until the first drag. Not drawn:
+entities, water, chest/ender chest/shulker box, honey block.
+
+## Schematic entity follow-ups (2026-10-08)
+
+By the maintainer, deployed `553f339`..`47534d7` (last DLL
+`792fae30c673a3123c7eeb83ace993344f8a056a257c5897caea358be4ca6c00`, all
+trace options off), Minecraft 1.26.51.01, local world. Passed: a real entity
+of the same type on the next block no longer hides the ghost, one on the
+same block does; dropped items get a frame about their own size; name tags
+only over frames; Japanese name tags without colored fringes and with the
+plate matching the text; English tags unchanged. Left: Japanese tag text is
+dark gray (accepted for now, L-117). Not seen: Chinese after the last
+change.
 
 ## L-115 entity ghost models (2026-10-08)
 

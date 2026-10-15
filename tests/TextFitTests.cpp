@@ -1,5 +1,6 @@
 #include "ui/TextFit.h"
 #include <limits>
+#include <utility>
 void check(bool, char const*);
 void textFitTests() {
     using lamium::ui::fitLabel;
@@ -30,4 +31,8 @@ void textFitTests() {
           "explicit line breaks cannot escape the final line budget");
     check(wrapLabel("日本",1,3,measure).empty() && wrapLabel("abc",4,0,measure).empty(),
           "unrenderable paragraphs terminate without partial characters");
-}
+    using lamium::ui::wrapFullText;
+    check(wrapFullText("日本語設定",4,measure) == std::vector<std::string>{"日本", "語設", "定"}
+        && wrapFullText("a\n\nb",4,measure) == std::vector<std::string>{"a", "", "b"}
+        && wrapFullText("🌿日本",1,measure) == std::vector<std::string>{"🌿", "日", "本"},
+        "full help preserves blank lines and every complete UTF-8 codepoint without ellipsis");}

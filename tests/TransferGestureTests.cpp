@@ -21,8 +21,69 @@ void transferGestureTests() {
         && dragGesture(2, false, true) == Gesture::None,
         "Ctrl left drag transfers one while Ctrl right drag stays vanilla");
     check(dragGesture(1, true, true) == Gesture::OneDrag
-        && dragGesture(2, true, false) == Gesture::None,
-        "Ctrl takes priority and Shift right drag stays vanilla");
+        && dragGesture(2, true, false) == Gesture::KeepOneDrag
+        && dragGesture(2, true, true) == Gesture::None,
+        "Ctrl takes priority on left drag; only Shift without Ctrl uses keep-one right drag");
+    check(wheelGesture(false, true) == Gesture::MatchingWheel && wheelGesture(true, true) == Gesture::AllWheel
+        && mouseGesture(1, false, false, true) == Gesture::MatchingClick
+        && mouseGesture(1, true, false, true) == Gesture::AllClick
+        && mouseGesture(2, true, false, true) == Gesture::None,
+        "bulk wheel and Alt clicks use their own gestures without starting an Alt right drag");
+    GestureOptions disabled{true, true, true, true, false, false, false, false, false};
+    ConsumedButtons buttons;
+    buttons.consume(1); buttons.consume(2);
+    check(buttons.release(1) && buttons.consumed(2) && buttons.release(2) && !buttons.release(1),
+        "overlapping left and right transfer presses each consume exactly their own release");
+    buttons.consume(1); buttons.press(1);
+    check(!buttons.release(1) && !buttons.release(4),
+        "a fresh vanilla press clears a lost release without swallowing another button");
+    check(!enabled(Gesture::MatchingWheel, disabled) && !enabled(Gesture::AllWheel, disabled)
+        && !enabled(Gesture::MatchingClick, disabled) && !enabled(Gesture::AllClick, disabled)
+        && !enabled(Gesture::KeepOneDrag, disabled) && enabled(Gesture::OneWheel, disabled),
+        "new switches leave modified inputs vanilla without falling back to an old gesture");
+    for (int count = 0; count <= 64; ++count)
+        check(amount(Gesture::KeepOneDrag, count) == std::max(0, count - 1), "keep-one never requests the last item");
+    std::array<SweepSource, 6> sweep{{{true, true, true}, {true, true, false}, {false, true, false},
+                                    {true, false, false}, {true, true, false}, {true, true, false}}};
+    check(sweepOrder(sweep, false, 5) == std::vector<int>{4, 1, 0, 5},
+        "matching sweep includes hotbar, skips other kinds and empties, and leaves hovered source last");
+    check(sweepOrder(sweep, true, 5) == std::vector<int>{4, 3, 1, 5} && sweepOrder(sweep, true) == std::vector<int>{5, 4, 3, 1},
+        "everything from the main inventory leaves the hotbar and includes other kinds");
+    check(sweepOrder(sweep, true, 0) == std::vector<int>{0},
+        "everything with a hotbar slot hovered moves the hotbar only");
+    check(hotbarSlot("inventory_items", 8, 36) && !hotbarSlot("inventory_items", 9, 36)
+        && !hotbarSlot("inventory_items", 8, 27) && hotbarSlot("combined_hotbar_and_inventory_items", 8, 0)
+        && hotbarSlot("hotbar_items", 0, 27), "hotbar detection works for combined and split inventories");
+    check(collectionSide("furnace_fuel_items", 0, 27, false, true) == Side::Storage
+        && !collectionSide("furnace_fuel_items", 0, 27, false)
+        && !collectionSide("recipe_blocks", 0, 27, false, true)
+        && !collectionSide("cursor_items", 0, 27, false, true)
+        && !collectionSide("creative_output_items", 0, 27, false, true)
+        && !collectionSide("inventory_items", -1, 27, false)
+        && readOnlyCollection("furnace_output_items") && !readOnlyCollection("brewing_result_items"),
+        "native routes enable real role slots but not catalogs, cursor or receiving output slots");
+    check(routeTarget("furnace_fuel_items", Side::Storage, true)
+        && routeTarget("furnace_ingredient_items", Side::Storage, true)
+        && routeTarget("brewing_result_items", Side::Storage, true)
+        && !routeTarget("furnace_output_items", Side::Storage, true)
+        && !routeTarget("inventory_items", Side::Storage, true)
+        && !routeTarget("hotbar_items", Side::Storage, true)
+        && !routeTarget("recipe_blocks", Side::Storage, true)
+        && !routeTarget("beacon_payment_items", Side::Storage, false)
+        && routeTarget("combined_hotbar_and_inventory_items", Side::Player, false)
+        && !routeTarget("beacon_payment_items", Side::Player, true),
+        "native order filtering retains role order and rejects same-side fallbacks and output destinations");
+    using C = CountChange;
+    check(conservedMove(std::array{C{true, 64, 1}, C{false, 62, 64}, C{false, 0, 61}}, 63),
+        "one source can leave one while distributing the requested amount across targets");
+    check(!conservedMove(std::array{C{true, 64, 0}, C{false, 0, 64}}, 63)
+        && !conservedMove(std::array{C{true, 64, 1}, C{false, 0, 62}}, 63)
+        && !conservedMove(std::array{C{true, 64, 1}, C{false, 0, 64}}, 63)
+        && !conservedMove(std::array{C{true, 64, 64}, C{false, 0, 0}}, 64)
+        && !conservedMove(std::array{C{true, 10, 9}, C{false, 4, 5, false}}, 1)
+        && !conservedMove(std::array{C{true, 10, 9}, C{false, 4, 4, false}, C{false, 0, 1}}, 1)
+        && !conservedMove(std::array{C{true, 10, 9}, C{false, 5, 4}, C{false, 0, 2}}, 1),
+        "candidate transfers must conserve counts without deleting, adding, swapping or changing unrelated stacks");
     check(wheelDestination(1) == Side::Storage && wheelDestination(-1) == Side::Player
         && otherSide(Side::Storage) == Side::Player,
         "wheel direction chooses the destination regardless of hover side");
@@ -64,4 +125,33 @@ void transferGestureTests() {
         "worn items are armor, elytra, heads and carved pumpkins");
     check(room(D{true, false, 0, 16}) == 16 && room(D{false, true, 10, 16}) == 6,
         "room follows the item's own stack limit");
+    // L-169 2026-10-15: drop gestures with the drop key held, the held stack's Shift + click.
+    check(mouseGesture(1, false, true, false, true) == Gesture::DropOneDrag
+        && mouseGesture(1, true, false, false, true) == Gesture::DropAllDrag
+        && mouseGesture(2, true, false, false, true) == Gesture::DropKeepOneDrag
+        && mouseGesture(1, false, false, false, true) == Gesture::None
+        && mouseGesture(1, false, false, true, true) == Gesture::None,
+        "the drop key turns the drags into drops and leaves other presses vanilla");
+    check(mouseGesture(1, true, false, false, false, true) == Gesture::CursorMatchingClick
+        && mouseGesture(1, false, false, false, false, true) == Gesture::None
+        && mouseGesture(2, true, false, false, false, true) == Gesture::None
+        && mouseGesture(1, true, false, true, false, true) == Gesture::None,
+        "with items on the cursor only Shift + left click is taken");
+    check(dragging(Gesture::DropAllDrag) && !dragging(Gesture::DropMatching) && dropping(Gesture::DropMatching)
+        && !dropping(Gesture::StackDrag) && extended(Gesture::CursorMatchingClick) && extended(Gesture::DropOneDrag),
+        "drops drag like moves and need the native extensions");
+    check(amount(Gesture::DropOneDrag, 12) == 1 && amount(Gesture::DropKeepOneDrag, 12) == 11
+        && amount(Gesture::DropKeepOneDrag, 1) == 0 && amount(Gesture::DropAllDrag, 12) == 12,
+        "drops ask for one, all but one or the stack");
+    GestureOptions off{true, true, true, true};
+    off.dropMatching = false;
+    check(!enabled(Gesture::DropMatching, off) && enabled(Gesture::DropOneDrag, off)
+        && enabled(Gesture::CursorMatchingClick, off), "each drop gesture has its own switch");
+    std::vector<CountChange> drop{{true, 12, 11}, {false, 5, 5}, {false, 0, 0}};
+    check(droppedMove(drop, 1) && !droppedMove(drop, 0), "a drop only shrinks its source");
+    drop[1].after = 6;
+    check(!droppedMove(drop, 1), "a drop that moves items elsewhere is not a drop");
+    auto bytes = dropAmountBytes(true);
+    check(bytes[0] == 1 && bytes[4] == 2 && dropAmountBytes(false)[4] == 0 && bytes[8] == 0,
+        "drop amounts follow the traced take type and kind");
 }

@@ -33,11 +33,21 @@
 #include "mc/world/level/block/Block.h"
 #include "mc/world/level/block/BlockType.h"
 #include "mc/world/level/block/actor/BlockActorType.h"
+#include "mc/world/level/block/CopperBehavior.h"
+#include "mc/world/item/components/PlanterItemComponent.h"
+#include "mc/world/item/enchanting/Enchant.h"
+#include "mc/world/item/enchanting/EnchantUtils.h"
+#include "mc/deps/nbt/CompoundTag.h"
+#include "app/Versions.h"
 #include "mc/world/phys/HitResult.h"
+#include "mc/world/phys/AABB.h"
+#include "mc/world/level/material/Material.h"
+#include <cmath>
 #include <atomic>
 #include <chrono>
 #include <functional>
 #include <optional>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -51,6 +61,9 @@ std::atomic_int targetSlot = 8;
 // Set from the window procedure as the dispatcher decides it, so a right-click
 // chord is already active when vanilla receives the same click.
 std::atomic_bool rightChordHeld = false;
+// The native right-click handler already decided this hold; vanilla may have
+// acted on it, so a later queued press must not decide again (L-122).
+std::atomic_bool nativeDecided = false;
 // A non-mouse trigger replays vanilla use edges; only the thread that sent
 // the down edge may send the matching up edge.
 std::atomic_bool synthetic = false;
@@ -91,7 +104,8 @@ ItemTraits traitsOf(ItemStack const& item, std::string const& name) {
     traits.bucket = native.isBucket();
     traits.liquidClip = native.isLiquidClipItem();
     traits.wearable = native.isHumanoidArmor() || native.hasTag(VanillaItemTags::Armor());
-    traits.planter = native.isBlockPlanterItem();
+    // Foods that plant (carrots) may report only the component (L-189).
+    traits.planter = native.isBlockPlanterItem() || native.getComponent(HashedString{"minecraft:block_placer"}) != nullptr;
     traits.fertilizer = native.isFertilizer();
     traits.dye = native.isDye();
     traits.damageable = native.isDamageable();
@@ -100,11 +114,128 @@ ItemTraits traitsOf(ItemStack const& item, std::string const& name) {
     return traits;
 }
 std::string nameOf(ItemStack const& item) { return item.isNull() ? std::string{} : item.getTypeName(); }
-// A solid block without a block entity.
+// A block without a block entity that is solid or fills its cell (leaves
+// are not solid, L-189).
 bool plainBlock(LocalPlayer& player, HitResult const& hit) {
     if (hit.mType != HitResultType::Tile) return false;
-    auto const& type = player.getDimensionBlockSource().getBlock(hit.mBlock).getBlockType();
-    return type.mSolid && type.getBlockEntityType() == BlockActorType::Undefined;
+    auto& region = player.getDimensionBlockSource();
+    Block const& block = region.getBlock(hit.mBlock);
+    auto const& type = block.getBlockType();
+    if (type.getBlockEntityType() != BlockActorType::Undefined) return false;
+    if (type.mSolid) return true;
+    AABB box = type.getCollisionShape(block, region, hit.mBlock, {});
+    auto near = [](float a, float b) { return std::abs(a - b) < 1e-3f; };
+    return near(box.min.x, static_cast<float>(hit.mBlock.x)) && near(box.min.y, static_cast<float>(hit.mBlock.y))
+        && near(box.min.z, static_cast<float>(hit.mBlock.z)) && near(box.max.x, static_cast<float>(hit.mBlock.x + 1))
+        && near(box.max.y, static_cast<float>(hit.mBlock.y + 1)) && near(box.max.z, static_cast<float>(hit.mBlock.z + 1));
+}
+// Water or lava within reach along the aim: the hit's liquid flag stayed
+// unset with an empty bucket aimed at water (L-189).
+bool liquidAlong(LocalPlayer& player, HitResult const& hit) {
+    auto& region = player.getDimensionBlockSource();
+    Vec3 dir = hit.mRayDir;
+    float length = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+    if (!(length > 0)) return false;
+    float reach = hit.mType == HitResultType::Tile
+        ? std::sqrt((hit.mPos.x - hit.mStartPos.x) * (hit.mPos.x - hit.mStartPos.x) + (hit.mPos.y - hit.mStartPos.y) * (hit.mPos.y - hit.mStartPos.y)
+                    + (hit.mPos.z - hit.mStartPos.z) * (hit.mPos.z - hit.mStartPos.z)) + .1f
+        : 6.f;
+    for (float t = 0; t <= std::min(reach, 8.f); t += .2f) {
+        BlockPos at{static_cast<int>(std::floor(hit.mStartPos.x + dir.x / length * t)),
+                    static_cast<int>(std::floor(hit.mStartPos.y + dir.y / length * t)),
+                    static_cast<int>(std::floor(hit.mStartPos.z + dir.z / length * t))};
+        for (Block const* b : {&region.getBlock(at), &region.getLiquidBlock(at)})
+            if (b->getMaterial().mLiquid) return true;
+    }
+    return false;
+}
+// L-189: what the primary item's target-specific use can do on the aimed
+// block, asked of the game where it has a check (a planter's canUseOn, a
+// fertilizable block, rails, copper state) and from the short tool lists
+// elsewhere. None when the item has no such use or it cannot be read.
+std::optional<bool> targetUse(ItemStack const& item, ItemTraits const& traits, LocalPlayer& player, HitResult const& hit,
+                              bool liquidAimed) {
+    if (hit.mType != HitResultType::Tile || !item.mItem) return std::nullopt;
+    auto const& native = *item.mItem;
+    auto use = targetUseOf(traits, native.hasTag(VanillaItemTags::Shovel()), native.hasTag(VanillaItemTags::Hoe()),
+                           native.hasTag(VanillaItemTags::Shears()));
+    if (use == TargetUse::None || !versionSensitiveAllowed(capabilities::Id::FakeOffhandTargets)) return std::nullopt;
+    auto& region = player.getDimensionBlockSource();
+    Block const& block = region.getBlock(hit.mBlock);
+    auto const& type = block.getBlockType();
+    std::string name = block.getTypeName();
+    auto id = detail::vanillaId(name);
+    switch (use) {
+    case TargetUse::Planter: {
+        // What it plants, asked whether it may stand on that face: seeds
+        // only on farmland (wheat seeds had no planter component, L-189).
+        static constexpr int step[6][3] = {{0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}, {-1, 0, 0}, {1, 0, 0}};
+        if (hit.mFacing >= 6) return std::nullopt;
+        auto const& d = step[hit.mFacing];
+        BlockPos place{hit.mBlock.x + d[0], hit.mBlock.y + d[1], hit.mBlock.z + d[2]};
+        auto const* crop = PlanterItemComponent::getBlockPlacementContext(item).mBlock;
+        auto* component = native.getComponent(HashedString{"minecraft:block_placer"});
+        auto ground = plantsOn(detail::vanillaId(traits.name));
+        std::optional<bool> result;
+        if (crop)
+            result = region.getBlock(place).isAir() && crop->mayPlace(region, place, hit.mFacing) && crop->canSurvive(region, place);
+        else if (!ground.empty())
+            result = hit.mFacing == 1 && id == ground && region.getBlock(place).isAir();
+        // Said once per item, so a planter that still misbehaves shows how
+        // it was judged (L-189: wheat seeds on stone kept priority twice).
+        static std::set<std::string> told;
+        if (told.size() < 32 && told.insert(std::string(traits.name)).second)
+            Runtime::instance().self().getLogger().info("Fake Offhand: planter {} on {}: planted block {}, component {}, fallback {}, can plant {}",
+                traits.name, name, crop ? crop->getTypeName() : "none", component ? "yes" : "no", ground.empty() ? "-" : ground,
+                result ? (*result ? "yes" : "no") : "unread");
+        if (result) return result;
+        // The game keys its components by name; "minecraft:block_placer" is
+        // the planter's (gated above, like the copper fields).
+        if (!component) return std::nullopt;
+        return static_cast<PlanterItemComponent const*>(component)->canUseOn(item, player, hit.mBlock, hit.mFacing);
+    }
+    case TargetUse::Fertilizer:
+        return type.canBeFertilized(region, hit.mBlock, region.getBlock(BlockPos{hit.mBlock.x, hit.mBlock.y + 1, hit.mBlock.z}));
+    case TargetUse::Rail: return type.isRailBlock();
+    case TargetUse::Honeycomb: {
+        auto const* copper = type.tryGetCopperBehavior();
+        return copper && !static_cast<bool>(copper->mIsWaxed);
+    }
+    case TargetUse::Axe: {
+        if (strippable(id)) return true;
+        auto const* copper = type.tryGetCopperBehavior();
+        return copper && (static_cast<bool>(copper->mIsWaxed) || static_cast<CopperType>(copper->mType) != CopperType::Default);
+    }
+    case TargetUse::Shovel: return shovelChanges(id);
+    case TargetUse::Hoe: return hoeChanges(id);
+    case TargetUse::Shears: return shearsChange(id);
+    case TargetUse::Fill: return liquidAimed;
+    default: return std::nullopt;
+    }
+}
+bool holdsAmmo(LocalPlayer& player, bool fireworksToo) {
+    auto ammo = [&](ItemStack const& stack) {
+        if (stack.isNull()) return false;
+        auto name = stack.getTypeName();
+        return name == "minecraft:arrow" || (fireworksToo && name == "minecraft:firework_rocket");
+    };
+    for (int slot = 0; slot < 36; ++slot)
+        if (ammo(player.getInventory().getItem(slot))) return true;
+    return ammo(player.getOffhandSlot());
+}
+// L-189: the primary item's use cannot act now. Bows, crossbows and Riptide
+// tridents anywhere; fireworks, empty buckets and bottles aimed at nothing.
+bool idleUse(ItemStack const& item, ItemTraits const& traits, LocalPlayer& player, bool liquidAimed, bool air) {
+    auto id = detail::vanillaId(traits.name);
+    if (air && id == "firework_rocket") return !player.isGliding();
+    if (air && (id == "bucket" || id == "glass_bottle")) return !liquidAimed;
+    if (id == "trident") return EnchantUtils::getEnchantLevel(Enchant::Type::Riptide, item) > 0 && !player.isInWaterOrRain();
+    if (id == "bow" || id == "crossbow") {
+        if (player.isCreative()) return false;
+        if (id == "crossbow" && item.mUserData && item.mUserData->contains("chargedItem")) return false;
+        return !holdsAmmo(player, id == "crossbow");
+    }
+    return false;
 }
 bool primaryPasses(ItemStack const& item, LocalPlayer& player, HitResult const& hit) {
     auto name = nameOf(item);
@@ -117,7 +248,11 @@ bool primaryPasses(ItemStack const& item, LocalPlayer& player, HitResult const& 
         cannotEat = foodBlocked(food->canAlwaysEat(), player.isCreative(),
             static_cast<float>(hunger->mCurrentValue), hunger->mCurrentMaxValue);
     }
-    return primaryPass(traits, hit.mType == HitResultType::Tile, cannotEat, plainBlock(player, hit));
+    bool blockTarget = hit.mType == HitResultType::Tile;
+    bool liquidAimed = hit.mIsHitLiquid || liquidAlong(player, hit);
+    return primaryPass(traits, blockTarget, cannotEat, plainBlock(player, hit),
+                       blockTarget ? targetUse(item, traits, player, hit, liquidAimed) : std::nullopt,
+                       hit.mType != HitResultType::Entity && idleUse(item, traits, player, liquidAimed, !blockTarget));
 }
 bool secondaryUsable(ItemStack const& item, LocalPlayer& player, HitResult const& hit) {
     auto name = nameOf(item);
@@ -143,12 +278,15 @@ std::optional<int> chooseSlot(IClientInstance& client, HitResult const& solid, i
     bool hitBlock = solid.mType == HitResultType::Tile;
     bool interactive = hitBlock && player->getDimensionBlockSource().getBlock(solid.mBlock)
         .getBlockType().isInteractiveBlock();
-    if (blockItem) return placementSlot(true, true, selected, target, true, hitBlock, interactive, player->isSneaking());
+    bool primaryUsing = !player->mItemInUse->mItem->isNull();
+    bool primaryIdle = primaryPasses(player->getInventory().getItem(selected), *player, solid);
+    if (blockItem) return placementSlot(true, true, selected, target, true, hitBlock, interactive,
+        player->isSneaking(), primaryIdle, primaryUsing);
     // Timed use stops on a selection change (L-95 baseline). Never start it
     // from a per-call borrow or preempt an existing primary use.
-    if (!player->mItemInUse->mItem->isNull()) return {};
+    if (primaryUsing) return {};
     auto slot = instantUseSlot(true, true, selected, target,
-        primaryPasses(player->getInventory().getItem(selected), *player, solid), targetInstant,
+        primaryIdle, targetInstant,
         solid.mType == HitResultType::Entity, interactive, player->isSneaking());
     instant = slot.has_value();
     return slot;
@@ -395,7 +533,10 @@ void configure(Settings const& value) {
     enabled.store(value.inventory.fakeOffhand);
     targetSlot.store(value.inventory.fakeOffhandSlot - 1);
 }
-void rightChord(bool held) { rightChordHeld.store(held); }
+void rightChord(bool held) {
+    rightChordHeld.store(held);
+    if (!held) nativeDecided.store(false);
+}
 bool rightChordActive() { return rightChordHeld.load(); }
 bool instantPress(IClientInstance& client) noexcept {
     if (!enabled.load() || !rightChordHeld.load()) return false;
@@ -419,6 +560,7 @@ bool instantPress(IClientInstance& client) noexcept {
     }
 }
 void nativeDown(IClientInstance& client, std::function<void()> const& vanilla) {
+    if (enabled.load() && rightChordHeld.load()) nativeDecided.store(true);
     if (instantPress(client)) return;
     // Vanilla acts on the first press inside this handler, before any build
     // tick; e.g. an empty hand opens a chest even while sneaking. Borrow the
@@ -450,6 +592,10 @@ void press(IClientInstance& client) {
         traceChoice("press-already-held", client, -1, {}, false);
         return;
     }
+    if (!queuedPressDecides(endsOnRightClick(value), nativeDecided.load())) {
+        traceChoice("press-native-decided", client, -1, {}, false);
+        return;
+    }
     try {
         if (!Runtime::instance().enabled() || !client.getLocalPlayer() || !client.isInGameInputEnabled()
             || ui::ownsInput() || !gameplayScreen(client.getScreenName())) return;
@@ -468,6 +614,7 @@ void press(IClientInstance& client) {
     synthetic.store(interaction::periodic::sendUseEdge(client, true));
 }
 void release() {
+    nativeDecided.store(false);
     instantPrimary.store(-1);
     instantTarget.store(-1);
     if (!synthetic.exchange(false)) return;
@@ -478,15 +625,18 @@ void release() {
 }
 void start() {
     if (installed) return;
+    capabilities::begin(capabilities::Id::FakeOffhandTargets);
     try {
         for (auto& hook : hooks) if (!hook.installed) {
             if (hook.install(true) != 0) throw std::runtime_error("Could not install Fake Offhand hook");
             hook.installed = true;
         }
         installed = true;
-    } catch (...) { stop(); throw; }
+        capabilities::ready(capabilities::Id::FakeOffhandTargets);
+    } catch (...) { capabilities::hooks(capabilities::Id::FakeOffhandTargets,false); stop(); throw; }
 }
 void stop() {
+    capabilities::stop(capabilities::Id::FakeOffhandTargets);
     release();
     rightChordHeld.store(false);
     for (auto it = std::rbegin(hooks); it != std::rend(hooks); ++it)

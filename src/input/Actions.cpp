@@ -1,4 +1,5 @@
 #include "input/Actions.h"
+#include "app/Versions.h"
 #include "features/interaction/PermanentSneak.h"
 #include "features/interaction/PeriodicInput.h"
 #include "features/inventory/FakeOffhand.h"
@@ -10,6 +11,7 @@
 #include "app/Runtime.h"
 #include "ll/api/service/TargetedBedrock.h"
 #include "features/camera/CameraSessions.h"
+#include "features/information/PlayerList.h"
 #include "features/inventory/Inventory.h"
 #include "features/inventory/game/ScreenTracker.h"
 #include "features/map/MapView.h"
@@ -38,17 +40,8 @@ std::optional<std::string> autoModeText(Settings const& value, input::Action act
         attack ? value.interaction.attackHeldOnly : value.interaction.useHeldOnly);
 }
 std::string toggleFeatureName(input::Action action) {
-    if (action == input::Action::HideWeather) return ui::translated("toast.hideWeather");
-    if (action == input::Action::HideParticles) return ui::translated("toast.hideParticles");
-    if (action == input::Action::HideBossBars) return ui::translated("toast.hideBossBars");
-    if (action == input::Action::HideNausea) return ui::translated("toast.hideNausea");
-    if (action == input::Action::HideWater) return ui::translated("toast.hideWater");
-    if (action == input::Action::HideLava) return ui::translated("toast.hideLava");
-    if (action == input::Action::HidePowderSnow) return ui::translated("toast.hidePowderSnow");
-    auto id = input::actions[static_cast<size_t>(action)].feature;
-    for (auto const& feature : ui::features)
-        if (feature.id == id) return ui::translated(feature.name);
-    return std::string(id);
+    auto key = ui::toggleToastKey(action);
+    return key.empty() ? std::string(input::actions[static_cast<size_t>(action)].feature) : ui::translated(key);
 }
 bool toggleState(IClientInstance& client, Settings const& value, input::Action action) {
     (void)client;
@@ -60,6 +53,8 @@ bool toggleState(IClientInstance& client, Settings const& value, input::Action a
     if (action == input::Action::HideWater) return value.visuals.hideWater;
     if (action == input::Action::HideLava) return value.visuals.hideLava;
     if (action == input::Action::HidePowderSnow) return value.visuals.hidePowderSnow;
+    if (action == input::Action::HideDistanceFog) return value.visuals.hideDistanceFog;
+    if (action == input::Action::HidePortal) return value.visuals.hidePortal;
     if (action == input::Action::PermanentSneak) return interaction::sneak::armed();
     if (action == input::Action::PermanentSprint) return interaction::sprint::armed();
     if (action == input::Action::Zoom) return CameraSessions::instance().wanted(CameraSessions::Session::Zoom);
@@ -80,7 +75,33 @@ void emitToggleToast(IClientInstance& client, input::Action action, Settings con
     if (auto mode = autoModeText(value, action)) name += ": " + *mode;
     if (ui::effectsPaused(input::actions[static_cast<size_t>(action)].feature,value))
         name += " (" + ui::translated("effectsPaused") + ")";
-    ui::showToggleToast(name, toggleState(client, value, action));
+    bool on = toggleState(client, value, action);
+    auto level = pausedLevel(input::actions[static_cast<size_t>(action)].feature);
+    // Each effect has its own paths: a failure in fog must not label particles
+    // as stopped, nor a particle failure the fog toggle. The master switch
+    // speaks for the effects selected under it.
+    if (input::actions[static_cast<size_t>(action)].feature == "hideEffects") {
+        using capabilities::Id;
+        auto stopped = [](Id id) { return capabilities::registry().status(id).paused(); };
+        bool any = false;
+        switch (action) {
+        case input::Action::HideWeather: any = stopped(Id::HideWeather); break;
+        case input::Action::HideParticles: any = stopped(Id::HideParticles); break;
+        case input::Action::HideBossBars: any = stopped(Id::HideBossBars); break;
+        case input::Action::HideNausea: any = stopped(Id::HideNausea); break;
+        case input::Action::HidePortal: any = stopped(Id::HidePortal); break;
+        case input::Action::HideWater: case input::Action::HideLava: case input::Action::HideDistanceFog:
+            any = stopped(Id::HideFog); break;
+        case input::Action::HidePowderSnow: any = stopped(Id::HideFog) || stopped(Id::HideNausea); break;
+        default:
+            for (auto const& d : capabilities::definitions)
+                if (d.feature == "hideEffects" && paused::requested(d.id, value) && stopped(d.id)) any = true;
+        }
+        level = any ? paused::Level::Partly : paused::Level::No;
+    }
+    if (on && level != paused::Level::No)
+        name += " (" + ui::translated(level == paused::Level::Fully ? "paused.full" : "paused.partly") + ")";
+    ui::showToggleToast(name, on);
 }
 }
 bool isSessionFeature(std::string_view feature) {
@@ -130,6 +151,10 @@ void executeAction(IClientInstance& client, input::Action action) {
     if (!runtime.enabled() || ui::ownsInput()) return;
     // Sorting validates its container/text-input context in requestSort.
     if (action == input::Action::Sort) { inventory::requestSort(client); return; }
+    if (action == input::Action::Settings && outsideWorldMenu(client.getScreenName(), client.getLocalPlayer() != nullptr)) {
+        ui::open(client);
+        return;
+    }
     if (!gameplayScreen(client.getScreenName())
         && !(action == input::Action::Transfer && inventory::game::ScreenTracker::getInstance().current())) return;
     if (action == input::Action::PermanentSneak) {
@@ -152,6 +177,12 @@ void executeAction(IClientInstance& client, input::Action action) {
     if (action == input::Action::OpenSchematicPlaced) { ui::openSchematics(client, 1); return; }
     if (action == input::Action::OpenSchematicCheck) { ui::openSchematics(client, 2); return; }
     if (action == input::Action::OpenSchematicMaterials) { ui::openSchematics(client, 3); return; }
+    bool const schematicKey = schematic::actions::handles(action) || action == input::Action::AdjustSchematic
+        || action == input::Action::SaveSchematicArea;
+    if (schematicKey && !runtime.preferences().schematic.enabled) {
+        ui::showMessageToast(ui::translated("schematic.off"));
+        return;
+    }
     if (schematic::actions::handles(action)) {
         schematic::actions::press(client, action);
         return;
@@ -163,6 +194,7 @@ void executeAction(IClientInstance& client, input::Action action) {
         else ui::showMessageToast(ui::translated("schematic.toast.noArea"));
         return;
     }
+    if (action == input::Action::OpenCalculator) { ui::openCalculator(client); return; }
     if (action == input::Action::OpenWorldMap) {
         if (runtime.preferences().map.worldMap) ui::openWorldMap(client);
         else ui::showMessageToast(ui::translated("worldMap.off"));
@@ -221,13 +253,16 @@ void executeAction(IClientInstance& client, input::Action action) {
         return;
     }
     if (action == input::Action::MinimapEnlarge) { map::setEnlarged(true); return; }
+    if (action == input::Action::PlayerList) { information::playerList::setHeld(true); return; }
     if (action == input::Action::RadarFaces) { map::setFacesHeld(true); return; }
     if (action == input::Action::HideWaypoints) { map::markers::setHidden(true); return; }
     if (action == input::Action::AddWaypoint) {
         if (!value.map.waypoints) return;
         auto* player = client.getLocalPlayer();
         if (!player) return;
-        auto feet = player->getFeetPos();
+        auto body = player->getFeetPos();
+        // During FreeCamera "here" is where the camera went to look.
+        auto feet = CameraSessions::instance().freeCameraPose(client).value_or(CameraSessions::Pose{body.x, body.y, body.z, 0, 0});
         if (!std::isfinite(feet.x) || !std::isfinite(feet.y) || !std::isfinite(feet.z)) return;
         // The place is fixed when the key is pressed, before any typing.
         map::Waypoint draft;
@@ -272,6 +307,7 @@ void releaseAction(input::Action action) {
     if (action == input::Action::FreeCamera) CameraSessions::instance().releaseFreeCameraKey();
     if (action == input::Action::FakeOffhandUse) inventory::fakeOffhand::release();
     if (action == input::Action::MinimapEnlarge) map::setEnlarged(false);
+    if (action == input::Action::PlayerList) information::playerList::setHeld(false);
     if (action == input::Action::RadarFaces) map::setFacesHeld(false);
     if (action == input::Action::HideWaypoints) map::markers::setHidden(false);
     if (action == input::Action::AdjustSchematic) schematic::actions::setAdjustHeld(false);

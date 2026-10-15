@@ -3,20 +3,22 @@
 #include <cmath>
 
 namespace lamium::ui {
-// Geometry of the settings table in GUI units, shared by drawing and hit
-// testing. A 16:9 window gets a sidebar and full columns; narrower windows
-// narrow the key column, then move categories into tabs; short windows keep a
-// one-line description. Scrolling is explicit: callers own the first row.
+// Geometry of the settings table in layout units, shared by drawing and hit
+// testing. There is one layout: sidebar, columns and a two-line footer. A GUI
+// too small for it draws the whole screen shrunk (scaleFor, ui::DrawScale)
+// instead of a second, cramped layout. Narrower layouts narrow the key column.
+// Scrolling is explicit: callers own the first row.
 struct SettingsTable {
-    static constexpr float headerHeight = 20, tabsHeight = 14, theadHeight = 12, rowHeight = 14;
+    static constexpr float headerHeight = 20, theadHeight = 12, rowHeight = 14, footerHeight = 44;
     static constexpr float navItemHeight = 14, sidebarWidth = 112, pad = 6, gap = 6;
     static constexpr float stateWidth = 24, closeWidth = 58;
+    static constexpr float descriptionLineHeight = 12;
+    static constexpr int descriptionLines = 2; // the footer's; longer text scrolls
     enum class Zone { None, Search, Close, Nav, Row, Footer, Version };
     enum class Column { Name, State, Key };
     struct Hit { Zone zone = Zone::None; int index = -1; Column column = Column::Name; float x = 0, y = 0; };
 
     float left{}, top{}, width{}, height{};
-    bool compact{}, shortFooter{};
     float searchX{}, searchWidth{}, closeX{};
     float navTop{}, navBottom{};
     float navStep = navItemHeight; // a sidebar item's height: less when a short window must fit them all
@@ -27,42 +29,43 @@ struct SettingsTable {
     int first{}, visible{};
     int count{};
 
-    // `navItems` counts the sidebar's items. A sidebar that cannot fit them
-    // at a readable height gives way to the tabs, as on a narrow window.
-    static constexpr float minNavStep = 11;
+    // `navItems` counts the sidebar's items; each keeps at least this height.
+    static constexpr float minNavStep = 11, minWidth = 440, margin = 16, marginY = 12;
+    static float minHeight(int navItems) {
+        // Top items, the pinned ones and the rule between them.
+        return std::max(230.0f, footerHeight + headerHeight + 12 + std::max(navItems, 0) * minNavStep);
+    }
+    // The draw scale that keeps this layout whole on a screen of this size:
+    // 1 when it fits, below 1 to shrink it. Never enlarges.
+    static float scaleFor(float screenWidth, float screenHeight, int navItems) {
+        if (!(screenWidth > 0) || !(screenHeight > 0) || !std::isfinite(screenWidth) || !std::isfinite(screenHeight)) return 1;
+        float scale = std::min({1.0f, screenWidth / (minWidth + margin), screenHeight / (minHeight(navItems) + marginY)});
+        // Leave rounding room so the scaled-up size never falls just short.
+        return scale < 1 ? scale * .999f : 1;
+    }
     static SettingsTable fit(float screenWidth, float screenHeight, int count, int first, int navItems = 0) {
         SettingsTable t;
-        if (!std::isfinite(screenWidth) || !std::isfinite(screenHeight) || screenWidth < 240 || screenHeight < 150)
+        if (!std::isfinite(screenWidth) || !std::isfinite(screenHeight) || screenWidth < minWidth + margin
+            || screenHeight < minHeight(navItems) + marginY)
             return t;
         t.count = std::max(count, 0);
-        t.width = std::min(640.0f, screenWidth - 16);
-        t.height = std::min(380.0f, screenHeight - 12);
+        t.width = std::min(640.0f, screenWidth - margin);
+        t.height = std::min(380.0f, screenHeight - marginY);
         t.left = std::round((screenWidth - t.width) * .5f);
         t.top = std::round((screenHeight - t.height) * .5f);
-        t.compact = t.width < 440;
-        t.shortFooter = t.height < 230;
-        if (!t.compact && navItems > 0) {
-            // Top items, the pinned ones and the rule between them.
-            float room = t.height - (t.shortFooter ? 14 : 44) - headerHeight - 8 - 4;
+        if (navItems > 0) {
+            float room = t.height - footerHeight - headerHeight - 8 - 4;
             t.navStep = std::min(navItemHeight, std::floor(room / static_cast<float>(navItems)));
-            if (t.navStep < minNavStep) { t.compact = true; t.navStep = navItemHeight; }
         }
         t.closeX = t.left + t.width - pad - closeWidth;
         t.searchWidth = std::min(170.0f, t.width * .4f);
         t.searchX = t.closeX - gap - t.searchWidth;
-        t.footerTop = t.top + t.height - (t.shortFooter ? 14 : 44);
+        t.footerTop = t.top + t.height - footerHeight;
         float body = t.top + headerHeight;
         t.navTop = body;
-        if (t.compact) {
-            t.navBottom = body + tabsHeight;
-            t.tableLeft = t.left;
-            t.tableWidth = t.width;
-            body = t.navBottom;
-        } else {
-            t.navBottom = t.footerTop;
-            t.tableLeft = t.left + sidebarWidth;
-            t.tableWidth = t.width - sidebarWidth;
-        }
+        t.navBottom = t.footerTop;
+        t.tableLeft = t.left + sidebarWidth;
+        t.tableWidth = t.width - sidebarWidth;
         t.theadTop = body;
         t.rowsTop = body + theadHeight;
         t.keyWidth = t.tableWidth < 380 ? 70 : 88;
@@ -84,18 +87,43 @@ struct SettingsTable {
         return first;
     }
     bool usable() const { return visible > 0; }
+    // Scrollbars in the right padding of the list and of the footer:
+    // a press there or a drag puts the first line where the pointer is.
+    static int firstAt(float y, float top, float track, int count, int shown) {
+        if (count <= shown || !(track > 0)) return 0;
+        float t = std::clamp((y - top) / track, 0.0f, 1.0f);
+        return static_cast<int>(std::lround(t * static_cast<float>(count - shown)));
+    }
+    bool onListScrollbar(float x, float y) const {
+        return count > visible && x >= rowsRight() - pad && x < rowsRight() && y >= rowsTop && y < rowsTop + visible * rowHeight;
+    }
+    int listFirstAt(float y) const { return firstAt(y, rowsTop, visible * rowHeight, count, visible); }
+    bool onDescriptionScrollbar(float x, float y, int lines) const {
+        float right = left + width;
+        return lines > descriptionLines && x >= right - pad - 2 && x < right
+            && y >= footerTop + 3 && y < footerTop + 3 + descriptionLines * descriptionLineHeight;
+    }
+    int descriptionFirstAt(float y, int lines) const {
+        return firstAt(y, footerTop + 3, descriptionLines * descriptionLineHeight, lines, descriptionLines);
+    }
     // Puts the version after the title; hidden when it would reach the search field.
     void placeVersion(float titleWidth, float textWidth) {
         versionX = left + pad + titleWidth + 4;
         versionWidth = usable() && textWidth > 0 && versionX + textWidth <= searchX - gap ? textWidth : 0;
     }
     // Reset button on the column-heading line (General: all settings,
-    // Hotkeys: key bindings), right-aligned before the state/key heading.
-    static constexpr float headActionWidth = 84;
-    float headActionX(bool hotkeys) const { return (hotkeys ? keyX : stateX - 6) - gap - headActionWidth; }
+    // Hotkeys: key bindings), right-aligned before the state heading; in
+    // Hotkeys, Find by key sits between it and the key heading (L-159).
+    static constexpr float headActionWidth = 84, keyFindWidth = 64;
+    float keyFindX() const { return keyX - gap - keyFindWidth; }
+    float headActionX(bool hotkeys) const { return (hotkeys ? keyFindX() : stateX - 6) - gap - headActionWidth; }
     bool headAction(float x, float y, bool hotkeys) const {
         float ax = headActionX(hotkeys);
         return usable() && y >= theadTop && y < rowsTop && x >= ax && x < ax + headActionWidth;
+    }
+    bool keyFindShown() const { return usable() && headActionX(true) > nameX + 40; }
+    bool keyFind(float x, float y) const {
+        return keyFindShown() && y >= theadTop && y < rowsTop && x >= keyFindX() && x < keyFindX() + keyFindWidth;
     }
     float rowY(int index) const { return rowsTop + (index - first) * rowHeight; }
     float rowsRight() const { return tableLeft + tableWidth; }
@@ -103,10 +131,23 @@ struct SettingsTable {
     float controlX() const { return stateX; }
     float controlWidth() const { return keyX + keyWidth - stateX; }
     float navItemY(int index) const { return navTop + 4 + index * navStep; }
-    static constexpr int pinnedItems = 6; // Hotkeys, Shapes, Waypoints, Schematics, World map, HUD layout.
+    static constexpr int pinnedItems = 7; // Hotkeys, Shapes, Waypoints, Schematics, World map, HUD layout, Calculator.
     float pinnedItemY(int k) const { return navBottom - 4 - (pinnedItems - k) * navStep; }
-    // Binding-editor buttons (Clear / Reset / Cancel) on the footer's first line.
+    // Binding-editor buttons (Clear / Reset / Cancel) on the edited row, ending
+    // just before its key cell (L-159).
+    static constexpr float captureButtonWidth = 40, captureButtonGap = 3;
+    float captureButtonX(int index, int count) const {
+        return keyX - gap - (count - index) * (captureButtonWidth + captureButtonGap) + captureButtonGap;
+    }
+    int captureButton(float x, float y, float rowTop, int count) const {
+        if (y < rowTop + 1.5f || y >= rowTop + 1.5f + footerButtonHeight) return -1;
+        for (int i = 0; i < count; ++i)
+            if (x >= captureButtonX(i, count) && x < captureButtonX(i, count) + captureButtonWidth) return i;
+        return -1;
+    }
+    // Find by key's Cancel on the footer's first line.
     static constexpr float footerButtonWidth = 50, footerButtonHeight = 11;
+    float descriptionHintY() const { return footerTop + 30; }
     float footerButtonX(int index) const { return left + pad + index * (footerButtonWidth + 4); }
     float footerButtonY() const { return footerTop + 3; }
     int footerButton(float x, float y) const {
@@ -152,12 +193,12 @@ struct SettingsTable {
         return 0;
     }
 
-    Hit hit(float x, float y, int navItems, float tabWidth = 0) const {
-        auto result = hitZone(x, y, navItems, tabWidth);
+    Hit hit(float x, float y, int navItems) const {
+        auto result = hitZone(x, y, navItems);
         result.x = x; result.y = y;
         return result;
     }
-    Hit hitZone(float x, float y, int navItems, float tabWidth) const {
+    Hit hitZone(float x, float y, int navItems) const {
         if (!usable() || !std::isfinite(x) || !std::isfinite(y)) return {};
         if (x < left || x >= left + width || y < top || y >= top + height) return {};
         if (y < top + headerHeight) {
@@ -167,13 +208,7 @@ struct SettingsTable {
             return {};
         }
         if (y >= footerTop) return {Zone::Footer};
-        if (compact) {
-            if (y < navBottom) {
-                if (tabWidth <= 0) return {};
-                int index = static_cast<int>((x - left - 2) / tabWidth);
-                return index >= 0 && index < navItems ? Hit{Zone::Nav, index} : Hit{};
-            }
-        } else if (x < tableLeft) {
+        if (x < tableLeft) {
             // The last items are tools pinned to the sidebar bottom (Hotkeys, Shapes, HUD layout).
             for (int k = 0; k < pinnedItems && k < navItems; ++k) {
                 int index = navItems - pinnedItems + k;

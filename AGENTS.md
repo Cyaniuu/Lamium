@@ -64,7 +64,7 @@ xmake build LamiumNativeTests && xmake run LamiumNativeTests   # SDK-type tests
 - Search with `git grep` or limit searches to `src tests docs`. `build/` holds
   full SDK source copies; a plain recursive grep over it takes minutes.
 - SDK headers (read-only reference for game types): the xmake package cache,
-  `%LOCALAPPDATA%/.xmake/packages/l/levilamina-client-sdk/26.51.5/*/include/mc/...`.
+  `%LOCALAPPDATA%/.xmake/packages/l/levilamina-client-sdk/26.20.7/*/include/mc/...`.
   Search there before guessing a member or function name.
 
 ### Windows shell pitfalls
@@ -116,7 +116,14 @@ Rules the code already follows; keep them:
    Chinese is not supported. Contributor notes: docs/TRANSLATING.md.
 7. **UI** draws only rectangles and text through `src/ui/Widgets.h`. Use the
    palette and widgets there; do not invent colors or sizes. See DESIGN.md.
-8. **Engineering behavior** (DESIGN.md, the authoritative wording): bound
+8. **Game dependencies**: a new hook gets an entry in
+   [docs/GAME-UPDATES.md](docs/GAME-UPDATES.md) (CI runs
+   `scripts/Check-GameInventory.ps1`). A path that writes game memory or
+   relies on a meaning a rebuild cannot check asks
+   `versionSensitiveAllowed()` (`app/Versions.h`) at that path. Moving to a
+   new Minecraft or LeviLamina version follows the playbook in the same
+   file; the verified game version changes last, after the in-game checks.
+9. **Engineering behavior** (DESIGN.md, the authoritative wording): bound
    expensive scans and uploads per frame/tick, discard stale async results by
    world/dimension generation, confirm gameplay mutations from authoritative
    state rather than a return value or sent transaction, and fail open to

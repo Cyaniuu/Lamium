@@ -1,6 +1,8 @@
 #include "features/information/TargetInfo.h"
 #include "features/information/SchematicTarget.h"
 #include "features/schematic/GhostRenderer.h"
+#include "features/schematic/SchematicSession.h"
+#include "app/Runtime.h"
 #include "ui/Localization.h"
 #include "features/information/TargetCard.h"
 #include "mc/world/item/Item.h"
@@ -33,7 +35,6 @@
 #include <algorithm>
 #include <set>
 #ifdef LAMIUM_RESEARCH_TRACE
-#include "app/Runtime.h"
 #include <format>
 #endif
 
@@ -225,7 +226,61 @@ TargetIcon fallingIcon(Actor& entity, LocalPlayer& player) {
     } catch (...) { return {}; }
 }
 }
-std::optional<TargetInfo> collectTargetInfo(IClientInstance& client, bool includeStates, std::optional<ViewRay> ray) {
+// The block's states as card rows (named where L-112 knows them) and the
+// rest as raw "key: value" lines, leaving out `fixed` (shown by the
+// schematic rows instead).
+void appendStates(TargetInfo& result, Block const& block, std::set<std::string> const& fixedStates) {
+    auto const& tags = block.mSerializationId->mTags;
+    auto found = tags.find("states");
+    if (found != tags.end()) {
+        if (auto* states = std::get_if<CompoundTag>(&found->second.mTagStorage)) {
+            for (auto const& [key,value] : states->mTags) {
+                if (fixedStates.contains(key)) continue;
+                std::optional<TargetInfo::DetailRow> detail;
+                if (auto* v = std::get_if<ByteTag>(&value.mTagStorage))
+                    detail = interpretBlockState(key, StateKind::Integer, v->data, {}, result.identifier);
+                else if (auto* v = std::get_if<IntTag>(&value.mTagStorage))
+                    detail = interpretBlockState(key, StateKind::Integer, v->data, {}, result.identifier);
+                else if (auto* v = std::get_if<StringTag>(&value.mTagStorage))
+                    detail = interpretBlockState(key, StateKind::Text, 0, *v, result.identifier);
+                if (detail) {
+                    result.details.push_back(std::move(*detail));
+                    continue;
+                }
+                std::optional<std::string> text;
+                if (auto* v = std::get_if<ByteTag>(&value.mTagStorage)) text = std::to_string(v->data);
+                else if (auto* v = std::get_if<IntTag>(&value.mTagStorage)) text = std::to_string(v->data);
+                else if (auto* v = std::get_if<StringTag>(&value.mTagStorage)) text = *v;
+                if (text) result.states.push_back(key + ": " + *text);
+            }
+        }
+    }
+}
+// The nearest schematic ghost in front of the aimed block (L-184): its block
+// as the card's target, marked as a block still to place.
+std::optional<TargetInfo> ghostTarget(LocalPlayer& player, BlockSource& source, bool includeStates, std::optional<ViewRay> const& ray) {
+    double x, y, z, dx, dy, dz, reach;
+    if (ray) { x = ray->x; y = ray->y; z = ray->z; dx = ray->dx; dy = ray->dy; dz = ray->dz; reach = ray->reach; }
+    else {
+        Vec3 eye = player.getEyePos(), view = player.getViewVector(1.f);
+        x = eye.x; y = eye.y; z = eye.z; dx = view.x; dy = view.y; dz = view.z;
+        reach = 6;
+    }
+    auto ghost = schematic::ghosts::ghostAlong(source, static_cast<int>(player.getDimensionId()), x, y, z, dx, dy, dz, reach);
+    if (!ghost || !ghost->block) return std::nullopt;
+    Block const& block = *ghost->block;
+    BlockPos pos{ghost->cell.x, ghost->cell.y, ghost->cell.z};
+    TargetInfo result{block.buildDescriptionName(), block.getTypeName()};
+    if (result.name.empty()) result.name = result.identifier;
+    result.blockPosition = TargetInfo::BlockPosition{pos.x, pos.y, pos.z};
+    result.icon = blockIcon(source, pos, block);
+    if (includeStates) appendStates(result, block, {});
+    result.details.push_back(ghostRow());
+    result.ghost = true;
+    return result;
+}
+std::optional<TargetInfo> collectTargetInfo(IClientInstance& client, bool includeStates, std::optional<ViewRay> ray,
+                                            bool includeSchematic) {
     auto* player = client.getLocalPlayer();
     if (!player) return {};
     Pick pick;
@@ -237,6 +292,9 @@ std::optional<TargetInfo> collectTargetInfo(IClientInstance& client, bool includ
         if (latest.mType == HitResultType::Entity) pick.entity = latest.getEntity();
     }
     struct { HitResultType mType; BlockPos mBlock; } hit{pick.type, pick.block};
+    // A ghost in front of the aimed block (or in the air) is the target.
+    if (includeSchematic && hit.mType != HitResultType::Entity)
+        if (auto ghost = ghostTarget(*player, player->getDimensionBlockSource(), includeStates, ray)) return ghost;
     if (hit.mType == HitResultType::Entity) {
         auto* entity = pick.entity;
         if (!entity || entity == player || entity->mRemoved
@@ -294,41 +352,30 @@ std::optional<TargetInfo> collectTargetInfo(IClientInstance& client, bool includ
     // its rows replace the card's own rows for the same states.
     std::vector<TargetInfo::DetailRow> schematicDetails;
     std::set<std::string> fixedStates;
-    auto verification = schematic::ghosts::verification();
-    for (auto const& m : verification->mismatches) {
-        if (m.position.x != hit.mBlock.x || m.position.y != hit.mBlock.y || m.position.z != hit.mBlock.z) continue;
-        schematicDetails = schematicRows(m.state, m.expectedName, m.expected, m.states, result.identifier,
-                                         [](std::string_view key) { return ui::translated(key); });
-        for (auto const& d : m.states) fixedStates.insert(d.key);
-        break;
-    }
-    if (includeStates) {
-        auto const& tags = block.mSerializationId->mTags;
-        auto found = tags.find("states");
-        if (found != tags.end()) {
-            if (auto* states = std::get_if<CompoundTag>(&found->second.mTagStorage)) {
-                for (auto const& [key,value] : states->mTags) {
-                    if (fixedStates.contains(key)) continue;
-                    std::optional<TargetInfo::DetailRow> detail;
-                    if (auto* v = std::get_if<ByteTag>(&value.mTagStorage))
-                        detail = interpretBlockState(key, StateKind::Integer, v->data, {}, result.identifier);
-                    else if (auto* v = std::get_if<IntTag>(&value.mTagStorage))
-                        detail = interpretBlockState(key, StateKind::Integer, v->data, {}, result.identifier);
-                    else if (auto* v = std::get_if<StringTag>(&value.mTagStorage))
-                        detail = interpretBlockState(key, StateKind::Text, 0, *v, result.identifier);
-                    if (detail) {
-                        result.details.push_back(std::move(*detail));
-                        continue;
-                    }
-                    std::optional<std::string> text;
-                    if (auto* v = std::get_if<ByteTag>(&value.mTagStorage)) text = std::to_string(v->data);
-                    else if (auto* v = std::get_if<IntTag>(&value.mTagStorage)) text = std::to_string(v->data);
-                    else if (auto* v = std::get_if<StringTag>(&value.mTagStorage)) text = *v;
-                    if (text) result.states.push_back(key + ": " + *text);
+    if (auto& runtime = Runtime::instance(); includeSchematic && runtime.enabled() && runtime.snapshot()->schematic.enabled) {
+        auto verification = schematic::ghosts::verification();
+        auto snapshot = schematic::session::snapshot();
+        int index = verification->placement;
+        if (!verification->stale && verification->revision == snapshot.revision && index == snapshot.selected
+            && index >= 0 && static_cast<size_t>(index) < snapshot.placements.size()) {
+            auto const& shown = snapshot.placements[static_cast<size_t>(index)];
+            auto const& placement = shown.placement;
+            schematic::Point offset{hit.mBlock.x - placement.placement.origin.x,
+                hit.mBlock.y - placement.placement.origin.y, hit.mBlock.z - placement.placement.origin.z};
+            if (shown.structure && placement.visible && placement.dimension == static_cast<int>(player->getDimensionId())
+                && schematic::layerShown(placement.layers,
+                    schematic::placedSize(shown.structure->size, placement.placement.rotation), offset)) {
+                // Read just this cell now; the capped background list may be old or omit it.
+                if (auto m = schematic::ghosts::mismatchAt(source, {hit.mBlock.x, hit.mBlock.y, hit.mBlock.z});
+                    m && !m->entity) {
+                    schematicDetails = schematicRows(m->state, m->expectedName, m->expected, m->states,
+                        result.identifier, [](std::string_view key) { return ui::translated(key); });
+                    for (auto const& d : m->states) fixedStates.insert(d.key);
                 }
             }
         }
     }
+    if (includeStates) appendStates(result, block, fixedStates);
     for (auto& row : schematicDetails) result.details.push_back(std::move(row));
     return result;
 }

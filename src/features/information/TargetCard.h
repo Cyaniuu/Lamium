@@ -35,11 +35,20 @@ struct CardRow {
 inline constexpr int heartsPerLine = 10, maxHeartLines = 5;
 inline int heartSlots(int maximum) { return maximum > 0 ? (maximum + 1) / 2 : 0; }
 inline int heartLines(int maximum) { return (heartSlots(maximum) + heartsPerLine - 1) / heartsPerLine; }
-// Health and growth come first because they are what people look for; other
-// details and raw states only when asked for. At most `limit` rows.
+// Schematic corrections, health and growth come first because they are what
+// people look for; other details and raw states only when asked for. At most `limit` rows.
 inline std::vector<CardRow> cardRows(TargetInfo const& target, CardOptions const& options, size_t limit = 8) {
     std::vector<CardRow> rows;
     auto add = [&](CardRow row) { if (rows.size() < limit) rows.push_back(std::move(row)); };
+    // Schematic rows first, under the name they correct, so a short card keeps them.
+    for (auto const& detail : target.details)
+        if (detail.kind == DetailKind::Schematic) {
+            CardRow row{detail.label, detail.value, detail.labelIsKey, detail.valueIsKey};
+            row.icon = detail.icon;
+            row.tone = detail.tone;
+            row.before = detail.before;
+            add(std::move(row));
+        }
     for (auto const& detail : target.details) {
         if (detail.kind == DetailKind::Health) {
             auto meter = detail.progress ? options.health : Meter::Number;
@@ -59,14 +68,6 @@ inline std::vector<CardRow> cardRows(TargetInfo const& target, CardOptions const
             add({detail.label, detail.value, true, detail.valueIsKey, detail.progress,
                  detail.progress ? options.growth : Meter::Number});
     }
-    for (auto const& detail : target.details)
-        if (detail.kind == DetailKind::Schematic) {
-            CardRow row{detail.label, detail.value, detail.labelIsKey, detail.valueIsKey};
-            row.icon = detail.icon;
-            row.tone = detail.tone;
-            row.before = detail.before;
-            add(std::move(row));
-        }
     if (options.coordinates && target.blockPosition) {
         auto const& p = *target.blockPosition;
         add({"target.position", std::to_string(p.x) + ", " + std::to_string(p.y) + ", " + std::to_string(p.z)});

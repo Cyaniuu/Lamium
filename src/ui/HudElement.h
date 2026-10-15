@@ -11,7 +11,7 @@ namespace lamium::ui {
 // Elements are info lines, target, status, toast and the zoom magnification.
 // The debug view is not an element: it is fixed to the screen edges. Pure
 // math; InfoHud draws. Append new ids: they index saved boxes.
-enum class HudElementId { Info, Target, Status, Toast, Magnification, Durability, Minimap, Schematic };
+enum class HudElementId { Info, Target, Status, Toast, Magnification, Durability, Minimap, Schematic, PlayerList, Inventory, UsedSlots, StatusEffects, Chat };
 enum class Anchor {
     TopLeft, TopCenter, TopRight,
     MiddleLeft, Center, MiddleRight,
@@ -31,7 +31,7 @@ inline constexpr AnchorFactors anchorFactors(Anchor anchor) {
     default: return {1, 1};
     }
 }
-// Line: a background behind each line (Info and Status only, L-98). Append: saved as ints.
+// Line: a background behind each line (Info, Status and the player list; L-98, L-128). Append: saved as ints.
 enum class ElementBackground { None, Card, Line };
 // Placement is an anchor plus an offset, but the anchor is never chosen
 // directly: where an element is dropped decides it (DESIGN "HUD").
@@ -57,6 +57,17 @@ inline constexpr HudElement defaultHudElement(HudElementId id) {
     case HudElementId::Minimap: return {Anchor::TopRight, -hudInset, hudInset, 100, ElementBackground::None, true};
     // Left, below where the info lines usually end (docs/demos/schematic.html).
     case HudElementId::Schematic: return {Anchor::MiddleLeft, hudInset, 0, 100, ElementBackground::Card, false};
+    // Top center while its key is held (docs/demos/player-list.html).
+    case HudElementId::PlayerList: return {Anchor::TopCenter, 0, hudInset, 100, ElementBackground::Card, true};
+    // Bottom right: the used-slot counter in the corner and the grid above it,
+    // clear of the hotbar (chosen in game 2026-10-11).
+    case HudElementId::Inventory: return {Anchor::BottomRight, -hudInset, -hudInset - 17, 100, ElementBackground::Card, true};
+    case HudElementId::UsedSlots: return {Anchor::BottomRight, -hudInset, -hudInset, 100, ElementBackground::Card, true};
+    // Right middle, where the game shows its effect icons, below the
+    // automation status (L-147, maintainer 2026-10-12).
+    case HudElementId::StatusEffects: return {Anchor::MiddleRight, -hudInset, 48, 100, ElementBackground::Card, true};
+    // Flush left, above two default durability rows with a 4-unit gap (L-174).
+    case HudElementId::Chat: return {Anchor::BottomLeft, 0, -44, 100, ElementBackground::None, true};
     // Above the armor and absorption rows over the hotbar.
     default: return {Anchor::BottomCenter, 0, -72, 100, ElementBackground::Card, false};
     }
@@ -70,6 +81,11 @@ inline constexpr std::string_view hudElementKey(HudElementId id) {
     case HudElementId::Durability: return "durability";
     case HudElementId::Minimap: return "minimap";
     case HudElementId::Schematic: return "schematic";
+    case HudElementId::PlayerList: return "playerList";
+    case HudElementId::Inventory: return "inventory";
+    case HudElementId::UsedSlots: return "usedSlots";
+    case HudElementId::StatusEffects: return "statusEffects";
+    case HudElementId::Chat: return "chat";
     default: return "toast";
     }
 }

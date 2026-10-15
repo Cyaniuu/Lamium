@@ -22,6 +22,12 @@ overlay shutdown release session state/resources. Local-world joins bind the
 workspace to `lamium/shapes.json` under the resolved world directory; unsupported
 or remote identities remain session-only.
 
+Cell overlays (L-138, built 2026-10-11): Shapes, the breaking region and
+the schematic save area draw through one builder: `CellSurface.h` (faces on
+the cells' own planes and the outline, pure and tested) and `CellMesh`
+(upload, face material, outline coloring, pull toward the eye by the
+Depth.h rules). Each keeps its own colors and decides when it shows.
+
 ## Shapes view and rendering
 
 Shapes open from the pinned settings sidebar entry or the initially unbound
@@ -126,10 +132,23 @@ interpolated, actor-specific eye offset sampled from `getEyePos()`; the view
 vector uses the same frame alpha. White bounds and the revised eye marker were
 confirmed in game by 2026-09-28 (L-51). Chunk Borders and
 Hitboxes submit grouped per-color line batches through the shared tessellator
-path and
+path, pulled toward the eye by 0.994 (Depth.h; without a pull lines lying on
+block faces broke up into dashes, L-157; at 0.996 the vanilla selection
+outline still covered them), and
 retain no actor/player pointer across frames. Basic visible output is past the
 compile-only stage; crowded-world performance, graphics/resource-pack variants
 and broader lifecycle cases still need coverage.
+
+Known bug (L-176, reported 2026-10-14): both Chunk Borders and Hitboxes lose
+their line colors with Vibrant Visuals enabled; Hitboxes is now confirmed
+in game, not only suspected from the shared path. `drawLines()` submitted
+one `debug` mesh with vertex colors. Built 2026-10-14, not checked in game:
+it now submits each nonempty color group separately (up to five for Chunk
+Borders, three for Hitboxes) with the `LineColor.h` selection-outline
+material and that group's shader color, restored after every draw; vertex
+colors stay for the `debug` fallback. Geometry, the eye pull and caching are
+unchanged. The cause is not yet runtime-verified. BACKLOG owns the scope and acceptance checks;
+VALIDATION-LOG records the observation without assuming a test build.
 
 Chunk border line coordinates are cached per render thread by chunk origin and
 dimension height range. Movement within a chunk reuses the same CPU geometry;

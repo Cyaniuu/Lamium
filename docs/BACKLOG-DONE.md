@@ -10,6 +10,939 @@ Runtime status is in [VALIDATION.md](VALIDATION.md), the evidence in
 
 ## Bugs
 
+### L-197 Make long settings descriptions fully readable
+Done 2026-10-15: in-place, button-only footer expansion passed the maintainer's focused local check on `c4b8f01` (stable hint/button position, collapse on row change, overflow wheel scrolling). Other sizes, languages, numeric help and editing states while expanded stay in VALIDATION.
+Kind: Bug / Ready (strong model).
+Imported at the maintainer's request on 2026-10-15 from the
+[Notion idea inbox](https://app.notion.com/p/3f7c12ab5b2d8121b2a0db32608f6b7a).
+Status: the compact translucent panel and chat-return follow-up passed on
+`f8c714b` (2026-10-15). The maintainer then chose to replace the help surface
+with in-place footer expansion and remove F1 (`b2885fb`); hint anchoring and
+collapse on row change followed in `c4b8f01`. No release chosen.
+The maintainer reported the truncation again with L-198 through L-201.
+
+Problem confirmed in the current code: `SettingsTableView.cpp` draws the
+footer description with a two-line `paragraph`, or a one-line `label` when
+`SettingsTable.h` selects `shortFooter` below 230 GUI units of panel height.
+`TextFit.h` truncates overflow with `...`; there is no route to the rest of
+the text. The missing content depends on font measurement, language and
+available space, rather than a limit on the stored description. This is a
+settings-comprehension bug; the affected runtime layouts have not been
+reproduced in this task.
+
+Latest decision 2026-10-15 (supersedes separate-panel/F1 interaction): keep
+the existing settings screen visible and use only the "Read full description"
+button to expand its own footer. Change that button to "Collapse" while
+expanded. Height follows measured wrapped text, limited to keep several
+settings rows and readable categories (up to about 60% of the settings area).
+Overflow scrolls under the pointer in the footer; the list keeps independent
+wheel scrolling. Header, categories, settings, editing and Esc retain their
+ordinary behavior. Preserve selection; reveal it minimally when reflow needs
+room. No dedicated help input mode, separate surface or F1 shortcut.
+
+Requirements for the chosen design:
+
+- Detect overflow using the current font, available width, line limit and
+  explicit newlines; account for language, GUI scale and resizing. Do not
+  use a fixed character/byte limit or break UTF-8 boundaries. Short text
+  must not gain an unnecessary expansion control.
+- Make all description content reachable. Numeric options currently return
+  range/operation text before looking up `help.<option>` in `description()`;
+  include the option's own help as well as its range and controls.
+- Preserve key capture, numeric/text editing, conflict tooltips, footer
+  errors and operation hints. Expanding/collapsing the footer cannot commit
+  an edit or change a setting; all ordinary settings interactions stay active.
+
+Files to inspect: `src/ui/SettingsTableView.cpp`, `SettingsTable.h`,
+`TextFit.h`, shared widgets and screen input, translations in all three
+languages, and their pure layout/text tests. Foundation: [UX-FOLLOWUP.md](UX-FOLLOWUP.md).
+Acceptance: pure tests for measured overflow, wrapping and UTF-8; in-game
+checks at wide, narrow and short sizes in English, Japanese and Simplified
+Chinese, including long Schematics and Item Transfer descriptions and
+numeric help. Exercise button expansion/collapse, independent footer/list
+scrolling, selection retention and editing/capture/error states. F1 must not
+open help; the full text must remain readable without leaving the settings.
+
+### L-203 Keep chat position stable when returning from chat input
+Done 2026-10-15: the maintainer passed both follow-up checks on `f8c714b`; the local chat-return and OFF-restoration checklist reported no vanilla-position jump. Server and broader layout/pack coverage remains in VALIDATION.
+Kind: Bug / Ready (strong model). Maintainer report 2026-10-15 on `d5978e2`.
+Status: render-scope follow-up built and pure tests pass; runtime verification pending.
+HUD chat can briefly draw at vanilla's upper left after sending/closing chat
+before returning to the configured position. Keep text/background placement
+consistent on the first returning HUD draw, without moving input/history or
+other menus. The actual rendered HUD identity must not be vetoed by a delayed
+global screen-stack name. Retain measured geometry, bounded hierarchy checks,
+foreground/player/capability guards and immediate cache restoration.
+Files: `features/information/ChatPosition.cpp`, its pure tests if applicable;
+contract and timing hypothesis: [CHAT-POSITION.md](CHAT-POSITION.md).
+Check send/close and Esc-close repeatedly, several and wrapped messages,
+expiry, OFF restoration, alt-tab and world re-entry. No native timing result
+is established by compilation or pure geometry tests.
+
+### L-202 Share compatibility, availability and failure reasons
+Done 2026-10-15: implementation/build/code checks and the maintainer's local normal-build smoke on `d5978e2` are complete. L-197 help presentation and L-203 chat-return timing remain separate fixes. Server, forced-unverified and injected-failure coverage stays in Pre-release checks.
+Kind: Ready (strong model). Chosen by the maintainer 2026-10-15 after the
+L-200 audit. Status: implementation and code review complete; normal and
+forced-unverified DLL builds, pure/SDK tests and catalog/inventory checks
+pass. Minecraft verification remains in Pre-release checks; no release or
+deployment chosen. The typed API and its callers migrate together so no
+commit can silently retain an unregistered string gate.
+Use a typed catalog of risky capabilities (subpaths, not entire features),
+one loader-series/minimum policy and explicit Minecraft verification, with
+separate runtime waiting/ready/stopped/failed states and typed reasons.
+Settings stay separate. Native ownership, field/target checks and restoration
+remain with each feature. A patch update within the supported loader series
+must not need a feature-local allowlist edit. Unknown game builds stay vanilla.
+UI suffixes, detailed help, header and notices consume the same capability
+state as execution. Pending game context is not a permanent failure; failures
+stay latched until an explicit lifecycle restart. Never retain game pointers
+in the registry or add per-frame logging/locking in hot guarded paths.
+Migrate every existing production/diagnostic gate to typed ids, and publish
+the existing hook/contract failures instead of private availability flags.
+Include shared policy/state/aggregation/notice tests, translated names and
+reasons in English/Japanese/Simplified Chinese, catalog coverage checks and
+normal/forced-unverified build validation. Retain settings/action formats.
+Shared consumers are included: schematic 3D previews use the block/model
+capabilities too, so a blocked world-render path cannot be bypassed in UI.
+Optional Night Vision/trading/Connected Textures/server-pack startup failures
+roll back their adapters and keep settings/unrelated features available;
+critical input/render foundation failures still abort startup.
+Review follow-up: effect hiding, FreeCamera hiding, chat placement and schematic
+rendering now report failed or throwing hook removals as `RemovalFailed` for
+every dependent capability. Shared cleanup continues through the other hooks,
+and restart cannot reattach hooks belonging to a latched cleanup failure.
+Schematic blend and actor-light hooks track partial installation individually.
+Files: `app/Capabilities.h`, `Versions.*`, `PausedFeatures.h`, guarded feature
+adapters listed in GAME-UPDATES.md, paused UI/Actions/translations, tests,
+release/catalog checks and documentation. Low-level memory/input/HUD helper
+deduplication is separate work, not bundled into this migration.
+Game checks: normal changed-feature smoke (especially FreeCamera terrain and
+restoration), pending before first native use, partial failures and reasons,
+unverified-game vanilla fallback, enable/disable and world re-entry. Builds
+and pure/native tests alone do not establish these Minecraft outcomes.
+
+### L-198 Fake Offhand blocks primary use and misses secondary instant use
+Done 2026-10-15: the three reported priority/firework/eating cases passed the maintainer's local normal-build checklist on `d5978e2`. Broader and server coverage remains in VALIDATION.
+Kind: Bug / Research. Maintainer report 2026-10-15.
+Status: fix built with pure regression tests; game verification pending.
+Reported: a block in the main hand prevents fireworks and similar secondary
+uses; when both hands have blocks the secondary can take priority
+over the main hand; a secondary block prevents eating primary food.
+Clarified by the maintainer: fireworks while gliding and aiming into air;
+the priority case has blocks in both slots. The placement branch now asks
+whether primary use passes and refuses an active primary timed use. Normal
+blocks pass in air before considering a reported native duration; the
+reported block's native traits have not been traced.
+Preserve ordinary target interaction and meaningful primary use before
+secondary placement or instant use. Never select away from an active timed
+use. Investigate air versus block aim and gliding for the fireworks case;
+do not turn a valid primary placement into a secondary use.
+Files: `FakeOffhand.cpp`, `FakeOffhandPlan.h`, `tests/FakeOffhandTests.cpp`;
+contract: [FAKE-OFFHAND.md](FAKE-OFFHAND.md). Check food while hungry,
+both hands holding blocks/instant items, fireworks while gliding with air
+and block aim, containers, repeated input and selection restoration.
+
+### L-199 Waypoint distance stays at the body during FreeCamera
+Done 2026-10-15: the maintainer's local checklist on `d5978e2` covered FreeCamera marker distance/range and restoration; no issue reported. Server coverage remains open.
+Kind: Bug / Ready. Maintainer report 2026-10-15.
+Status: fix built; game verification pending. The previous code used player
+feet even during FreeCamera.
+Use the viewing position for world-marker distance, its range filter and
+near/far ordering while FreeCamera is active. Keep the existing horizontal
+distance convention and ordinary-view behavior. Check flight toward/away
+from a waypoint and the death point, range filtering and restoration.
+Files: `WaypointMarkers.cpp`; contract: [MAP.md](MAP.md).
+
+### L-200 FreeCamera underground visibility regressed after loader update
+Done 2026-10-15: underground visibility and restoration passed the local normal-build checklist on `d5978e2`, loader 26.51.7; ordinary log records native `3 -> 5` retention. Server coverage remains open.
+Kind: Bug / Research. Maintainer report 2026-10-15.
+Status: fix built, game verification pending. The local log identifies
+loader 26.51.7 rejected by the explicit 26.51.5/26.51.6 allowlist
+(`unsupported loader version`). This installed patch is now admitted while preserving executable,
+renderer ownership, virtual-entry and native request/retained-field checks.
+The initial .7 allowlist edit is superseded by L-202's common 26.51 series,
+minimum patch 5 policy; the adapter no longer owns a loader version list.
+Do not remove the fail-open gates or change player abilities/game type.
+Files: `FreeCameraCulling.h`, its tests; contract: [CAMERA.md](CAMERA.md).
+Check caves from solid ground, normal view after leaving FreeCamera, local
+and server worlds, and the ordinary log's retained 3 -> 5 request.
+
+### L-201 World map opens but cannot close with Mouse 5 binding
+Done 2026-10-15: the maintainer's local M/Mouse 5/chord open-close and editing checklist on `d5978e2` reported no issue.
+Kind: Bug / Ready. Maintainer report 2026-10-15.
+Status: fix built with chord-completion tests; game verification pending.
+The report was M closes, Mouse 5 opens only.
+The assigned opener must also close the map for keyboard and mouse chords,
+once per new press. Preserve editing, waypoint prompts, key capture and
+native input releases; never close immediately from the opening press.
+Files: `SettingsScreen.cpp`, input binding helpers and tests;
+contract: [MAP.md](MAP.md). Check M, Mouse 5, a modified mouse chord,
+held/released input, waypoint name/coordinate editing and prompts.
+
+### L-195 Separate the Done and Shown headers in the Placed list
+Done 2026-10-15: measured headers (`bd28452`) passed in English, Japanese and docked.
+Kind: Bug / Ready. Maintainer screenshot/report 2026-10-15.
+Status: recorded for later; explicitly outside the current Target View work.
+The English Schematics > Placed column headers read as "DoneShown" because
+their text touches/overlaps. The screenshot shows two placements and 0%/1%
+progress; the row switches remain recognizable. Reserve separate measured
+widths and a normal shared gap for both headers, keeping the headers aligned
+with their progress values and switches. Check English, Japanese and Simplified
+Chinese at normal and docked widths. Built 2026-10-15 for 0.2.2 (maintainer
+raised it before tagging): both headers measured, "Shown" centered over the
+switch within the list, "Done" right-aligned 6 units before it. Not checked.
+
+### L-182 Intermittent settings crash during schematic checking
+Done 2026-10-14: the preview reset on world exit (`95a09e0`) passed a rejoin and repeated preview check locally; the reporter has not confirmed yet.
+Kind: Bug / Research. User report 2026-10-14; not yet reproduced.
+Where the logs are (2026-10-14): the reporter's `lamium.log` has no crash
+lines (Lamium logs only its own messages). LeviLamina's CrashLogger writes
+`<instance>/logs/crash/trace_<date>.log` and `minidump_<date>.dmp`; the
+trace names Lamium frames as `Lamium.dll+offset` without the PDB, which can
+be resolved here with the release's symbol asset. Ask for both files and
+the Lamium version.
+Status: cause found 2026-10-14 from the reporter's three 0.2.1 traces
+(VALIDATION-LOG): the schematic 3D preview kept blocks and block actors from
+the previous world and made actors from them; fixed in `95a09e0` (reset on
+world exit). Check in game: leave and rejoin a world with a checked
+placement, open the Check tab preview repeatedly.
+Original report: pressing the settings key (default L) while a schematic is
+being checked/used can occasionally crash. Capture crash log/stack and
+placement, Check-tab, background work and world-exit state; look for
+lifetime/reentrancy, UI ownership and stale pointers without assuming a
+specific cause. Test repeated open/close with active checking and after
+world/dimension changes. No release target; crashing is a priority when
+reproducible. [SCHEMATIC.md](SCHEMATIC.md).
+
+### L-178 Schematic piston face texture does not match geometry
+Done 2026-10-14: piston heads and arms in ghosts (`b9c9d69`, state restore `46ff471`) and in the 3D preview (`27150e5`) passed. The glass border flicker between two placements continues as L-193.
+Kind: Bug / Research. User report 2026-10-14; not yet reproduced.
+Status: world ghosts right since `5711cc3` (extended, rotated, mirrored;
+seen 2026-10-14). The 3D preview lacked the heads; fix `27150e5` unchecked. Glass
+next to piston ghosts no longer fights; glass ghosts of two different
+placements still do (open). Earlier status: cause found and fix built 2026-10-14 (`b9c9d69`). The maintainer's test file `pistons.mcstructure` showed the real
+symptom: the base draws, but the pushing face and arm never draw, in any
+state. Ghosts drew a block actor only for blocks without a mesh; a piston's
+mesh is only its base. The z-fighting seen beside it (glass next to piston
+ghosts and next to another placement's glass) is fixed in `17d7201`.
+Original wording: a piston ghost can show the texture intended for its extending
+face on a face that does not extend. The rendered shape and face texture
+disagree; this is not yet evidence that the stored facing/state is wrong.
+Compare retracted/extended, facing and rotation/mirror combinations with the
+file's states and an actual block. Keep mesh/state and texture/UV diagnosis
+separate. [SCHEMATIC.md](SCHEMATIC.md).
+
+### L-180 Auto Elytra does not trigger on Riptide travel
+Done 2026-10-14: the Riptide launch child (`e8c5e3f`) passed locally. A server stays in VALIDATION.
+Kind: Bug / Research. User report 2026-10-14; scope of expected trigger
+needs confirmation. Rule decided 2026-10-14 (EQUIPMENT.md "Auto Elytra
+feedback"): put the elytra on at the Riptide launch, default on, no
+automatic glide. Status: built, not checked in game. Check in game: a
+Riptide launch in water and in rain puts the elytra on; jumping in the air
+glides; it comes off after landing; the child off keeps vanilla; charging
+without a launch changes nothing; a server.
+Auto Elytra is reported not to respond when a Riptide trident launches the
+player. The current documented trigger is jumping with fireworks in the main
+hand (L-70), so first establish the intended Riptide trigger and the observable
+transition into flight, rather than treating every trident use as an existing
+guarantee. Test whether an elytra is available, whether launch occurs in
+water/rain, and whether any attempted equip/glide is authorized by the
+server. Do not change vanilla movement without an agreed rule.
+[EQUIPMENT.md](EQUIPMENT.md).
+
+### L-176 Preserve Chunk Borders and Hitboxes line colors in Vibrant Visuals
+Done 2026-10-14: colors seen in Vibrant Visuals on `9b3b8a9` (fix `2d176aa`). Ordinary modes, graphics switching and depth stay in VALIDATION.
+Kind: Bug / Research (strong model). Imported from the maintainer's Notion
+idea inbox and chosen for the backlog 2026-10-14; no implementation or
+release selected in this step.
+Status: fixed; colors seen in Vibrant Visuals on `9b3b8a9` (2026-10-14).
+Ordinary modes, graphics switching and depth remain in VALIDATION. The
+maintainer reports that Chunk Borders loses its colors
+with Vibrant Visuals enabled, and has now confirmed the same loss on
+Hitboxes in game. The build/hash and detailed environment for this report
+were not separately identified (VALIDATION-LOG).
+Goal: retain the existing five Chunk Borders color groups and the white
+bounds, red eye marker and blue look line of Hitboxes in both ordinary
+graphics modes and Vibrant Visuals.
+
+Current evidence and candidate fix:
+- `src/overlay/WorldOverlay.cpp` `drawLines()` writes per-group vertex
+  colors into one mesh drawn with the `debug` material. Both features use
+  this path; the renderer's exact cause remains a hypothesis.
+- `src/overlay/LineColor.h` already provides `lines::material()`
+  (`selection_box`, with a `debug` fallback) and `lines::colored()` to set
+  and restore `ShaderColor`. The schematic line path has runtime evidence
+  of colors retained under Vibrant Visuals (SCHEMATIC.md, 2026-10-09).
+- Investigate using that existing path for each nonempty color group:
+  up to five submissions for Chunk Borders and three for Hitboxes. Merely
+  changing the material on a single multicolor draw cannot supply distinct
+  per-draw shader colors. Preserve color/alpha semantics and restore shader
+  state after every draw, including early returns.
+
+Scope: keep geometry, chunk caching, camera following, `worldLinePull`,
+Hitboxes distance filtering and frame interpolation unchanged. Audit all
+shared `drawLines()` callers for side effects; do not expand this task into
+unconfirmed Light Overlay or other rendering changes. Bound submissions
+and retain the existing version/capability and invalid-material fallbacks.
+Likely files: `src/overlay/WorldOverlay.cpp`, `src/overlay/LineColor.h` if
+needed; pure group helpers/tests only if introduced; OVERLAYS and VALIDATION.
+
+Acceptance: compare both features in ordinary modes and Vibrant Visuals,
+including switching graphics settings during play. Verify all existing
+color groups, line thickness, terrain depth/occlusion, lines on walls and
+over the vanilla selection outline, drawing order with other overlays,
+camera tracking and feature OFF restoration. Build/tests alone cannot
+close the item. Technical notes: [OVERLAYS.md](OVERLAYS.md).
+
+### L-179 Schematic ghost orientation for shulker boxes and similar blocks
+Done 2026-10-14: ghost openings under rotation and mirror match a structure block (`dfc262d`, seen on `9b3b8a9`); the Check compares a placed box's opening (`27fff48`) and marks it yellow in the world (`c92d93a`), both passed on `7548f0f`.
+Kind: Bug / Research. User report 2026-10-14; not yet reproduced.
+Status: ghost fix checked 2026-10-14 on `9b3b8a9`: openings under rotation
+and mirror match a structure block. The Check now also compares a placed
+box's opening (`27fff48`, seen working 2026-10-14) and marks it yellow in
+the world (`c92d93a`, unchecked). Check in game: all six directions, each rotation and both
+mirrors against a structure block load of the same file; if an unturned
+placement is also wrong, the cause is elsewhere (actor load or renderer).
+Shulker boxes in a schematic can be rendered without their
+recorded orientation. Determine whether the file contains the expected
+BlockState/NBT and where the placement rotation/mirror, block actor or mesh
+draw path loses it. Test all six shulker directions and transformed placements;
+audit other orientation-sensitive blocks without assuming they share the
+cause. [SCHEMATIC.md](SCHEMATIC.md).
+
+### L-162 Edge Guard: fall after a server correction re-runs recent ticks
+Done 2026-10-13: `4fe7b29` captures guarded replay input through an owned copy;
+`e8b0a52` also aligns the outgoing raw move vector without modifying physical
+input. BDS checks confirm normal controls and slab bridging, twelve correction
+windows including nine guarded replays with no input loss or fall dump.
+The normal artifact from the same source is restored; its next-launch smoke,
+longer play, other servers and unsupported-position correction limits remain
+in BACKLOG's Pre-release checks. The exact original fall chain and the server's
+internal raw-field handling are not proven; completion covers the verified
+input-consistency fix, not a guarantee against every correction.
+
+Follow-up 2026-10-13: the restored normal `e8b0a52` artifact passes BDS edge
+stopping and short slab bridging. At margin 0.02, approaching while holding
+Shift and releasing it also does not fall. The normal-build smoke gap is
+closed; keep default 0.10 and the existing range (maintainer), with the other
+coverage limits unchanged. See the newest VALIDATION-LOG entry.
+
+Implementation and validation history below retains superseded candidates
+and their dated next steps. Current coverage is in VALIDATION.md and the
+latest VALIDATION-LOG entry.
+
+Kind: Bug, Research (strong model). Split from L-161, 2026-10-12; rare.
+Current status 2026-10-13: round 2 establishes guarded horizontal input
+being lost during history replay. The scoped capture candidate passes the
+four smoke checks in BDS and solo play, but the additional BDS run records
+full direction keys in eight of nine correction replays. It is insufficient.
+The second candidate (`981f630`) broke normal WASD operation and has been
+removed along with the ineffective scoped capture candidate. The instance
+was restored to `8b8823d`, with WASD, key-release and edge stopping confirmed.
+Read-only diagnostic build `a32e9bb` then passes those checks and several
+minutes of BDS bridging. Its actual capture/application hooks attach and
+connect two guarded captures to full direction-key replay in three correction
+windows. Candidate `4fe7b29` substitutes an owned copy at actual input
+capture, without changing live physical input. The initial BDS smoke checks
+pass. The additional slab-bridging run reproduces a fall after a correction,
+even though two correction replays retain guarded raw/processed input. The
+copy fixes the observed input loss, but is insufficient: the larger correction
+already moves the feet outside the last logged support. Next investigate
+slab-placement/correction ordering and guarding the corrected replay position.
+No further repetition on the unchanged DLL is requested. The next candidate
+aligns the outgoing packet's raw move vector with already guarded analog
+input, addressing a remaining full-speed field in the fall trace. Whether
+the server uses it to cause this correction is still a hypothesis. The exact
+original fall chain is not established by this new case; this item stays open.
+Seen once on the local test BDS (trace of `2dc7e45`, VALIDATION-LOG "L-161
+margin 0.1"): after a +0.047 block server correction, the client's next
+position was 0.17 block further out, off the block, and it fell. The client
+re-runs its recent ticks after a correction (`ReplayableActorInput` captures
+`MoveInputComponent`; `preApplyInput` restores it); Edge Guard seems not to
+apply during that re-run. Next: trace `calculateMoveVector` calls during the
+re-run (which state, which position) and whether the captured input is the
+guarded one; fail open if the replay path cannot be told apart.
+Investigation 2026-10-13: the live input guard only accepts the addresses of
+the local player's input component states and only on the client thread;
+the collision guard also consults the live player's walking state. Whether
+replay uses those states, a copied entity, or its captured `mMove` directly
+is not established by the headers. No movement fix yet.
+Initial diagnostic approach (round 1, replaced by round 2 below):
+the maintainer authorized an `--edge_trace=y` test build on the existing
+test BDS and client instance. It observes `ReplayableActorInput::capture`,
+`preApplyInput`/`postApplyInput`, the correction-replay tick, move-vector and
+collision calls (including counters for replay on another thread), and
+packet ticks. It keeps 400 lines, writes the first guarded approach even
+without a correction/fall, up to 16 correction windows after three input
+sends, and the existing maximum of 12 falls. No history pointers are kept
+or replay data changed. Test ordinary edges and slab bridging at margin
+0.10 first; a fall is not required to collect useful input-capture evidence.
+The history methods' SDK thunks are unavailable at link time; the diagnostic
+attaches through the SDK interface's virtual slots on the actual captured
+input, verifying executable game code and stable targets. An unavailable
+path is logged and left alone; the normal build has none of these hooks.
+Normal and diagnostic builds, LamiumTests, LamiumNativeTests and the hook
+inventory check pass. Diagnostic DLL SHA-256 (source and deployed copy):
+`b612379a7034312c2999cc3d08c0382dd06216dba81cdd0f4c8907d0fee92f5f`.
+Round 1 (`d476ae5`) checked 2026-10-13 on the test BDS, actual loader
+26.51.7: ordinary edges stop at margin 0.10, slab bridging has no pullback
+or fall, jumping may leave. No rare fall reproduced. One correction was
+recorded; replay calculated vectors from `other` input states, skipped the
+live input guard and ran collision in registry 2. The history virtual-slot
+diagnostic refused to attach (unsupported SDK thunk), so input capture and
+replay ownership were not established. This does not prove the earlier
+fall's cause or a fix.
+Round 2 replaces that unavailable diagnostic with exported methods:
+`ActorHistory::addFrame`, `prepareEntityForRewindFromCapture` and
+`ClientPlayerRewindSystem::applyHistoryChangesToLiveEntity`. Record the
+local player's captured/live/rewind inputs, box and motion, frame ticks and
+the live result, retaining no game pointers and changing no movement.
+Next: establish which replay entity belongs to the local player and what
+input/position it uses before connecting a replay guard. Build configuration
+returns to `--edge_trace=n`; restore the instance's normal DLL after testing.
+Round 2 diagnostic builds and LamiumTests pass; it is deployed for another
+short run at margin 0.10. Source and deployed DLL SHA-256:
+`7f10147c19e878b0ced7d4da94c70c2e8d6ca0e15c35e2ca6b760b67c4e238d0`.
+Round 2 checked 2026-10-13: the same three smoke checks passed, with five
+corrections and no fall. Preparation ties each copied replay entity to the
+local player. The copied processed input is guarded, but its raw direction
+keys rebuild full input during replay (for example guarded (0.030,0.036)
+becomes (-0.707,-0.707)). History capture retains those raw keys. The live
+collision guard sometimes clamps the replay, but does not prevent this
+loss of the guarded input. This identifies a concrete bug without proving
+the earlier rare fall's cause.
+First candidate (superseded after the additional BDS run): `EdgeGuardHistoryHook` guards an owned copy of
+the local raw input at `ActorHistory::addFrame`, which runs before that
+tick's movement calculation. Vanilla calculates the copy's move vector and
+the existing input guard uses the current live position and velocity. Only
+if the guard changes it, horizontal raw fields are substituted during
+capture, then restored. Exact entity/registry and client-thread ownership,
+feature enable and the capability gate are required; missing data stays
+vanilla. Jump, sneak and look fields stay as captured, and the existing
+jump/walking exclusions apply. No input or game pointer is retained across
+frames, worlds or dimensions. Pure tests cover scoped restoration and a
+correction-replay example; SDK tests cover independent snapshot copies and
+restoration after unwinding.
+Next: trace build to check raw history now agrees with the guarded input,
+replay no longer rebuilds full direction-key movement, and the three smoke
+checks plus disable, sneak release and rejoin remain normal. Do not mark
+the rare fall fixed from build/tests or no-fall smoke alone.
+The final normal and diagnostic builds, LamiumTests, LamiumNativeTests and
+hook inventory check pass. The fix's trace DLL is deployed for validation;
+source and deployed SHA-256:
+`476dc27c76b6943d19fac13f13df06da4e0dcefe77cf8f5314f6f30acc780077`.
+Configuration is back to `--edge_trace=n`; the normal DLL is retained locally
+for restoring the instance after the diagnostic run.
+Fix build `d59f16b` checked 2026-10-13: margin 0.10 stops at ordinary edges,
+slab bridging has no pullback or fall, jumping leaves, sneak release does
+not fall, disabling restores vanilla movement, and enabling then rejoining
+restores the stop. The trace verifies guarded raw input during capture and
+physical raw movement outside it. No correction window was recorded;
+replay and the original rare fall remain unverified. The maintainer agreed
+to a few more minutes of diagonal edge approaches and slab bridging with
+the same diagnostic build. A subsequent solo-play run passes all four
+checks too; its separate log verifies guarded raw history input and the
+local server-copy guard, with no correction window or fall dump. The
+additional BDS run subsequently passes all four checks, but records nine
+corrections: prepared raw snapshot input is guarded, while eight replays
+still calculate full Down movement (0,-1). This scoped substitution is
+insufficient; the live history raw fields still contain physical direction
+keys when later replay input is captured. No fall dump was recorded.
+Second candidate (rejected and removed after its runtime check): remove `EdgeGuardHistoryHook`. At the existing
+`calculateMoveVector` hook, after guarding the exact local processed input
+state, copy only its eight horizontal flags and encoded analog vector to
+`MoveInputComponent::mRawInputState`. Do this even if the earlier device
+input calculation already applied the guard, so later capture retains the
+same movement. Vanilla refreshes device input next tick; no game pointer
+or input is retained across calls. Preserve jump, sneak, sprint and look
+fields; keep the client-thread, exact-state, walking/jump and capability
+checks. Pure/SDK tests cover field preservation and an independent delayed
+snapshot surviving the next device refresh. Runtime validation pending;
+keep L-162 open until correction replay is checked.
+Second-candidate normal and diagnostic builds, LamiumTests,
+LamiumNativeTests and the hook inventory check pass. The diagnostic DLL is
+deployed (source and deployed SHA-256
+`49dab77189696704dd485d5206eebab2a86b2c243af75ce3c8467a30d78cda89`).
+Configuration is reset to `--edge_trace=n`; the normal DLL is saved for
+restoration (SHA-256
+`d5b75af3c0190cc73ce046c1eee0790d9a9e420253aeea0f744aa0f4a1abac81`).
+Next BDS check: diagonal approaches and slab bridging at margin 0.10 for
+several minutes, plus jump, sneak release, disable and enable/rejoin. Trace
+must show whether synchronized raw fields reach actual replay input,
+not just the prepared snapshot. No runtime success claimed yet.
+Second-candidate result: `981f630` on BDS broke WASD; the maintainer could
+only slide slowly relative to the view direction and could not run the
+four checks. The trace retains the synchronized analog value across normal
+raw move calculations, consistent with feedback into device processing.
+The assumption that vanilla would refresh this field independently next
+tick was wrong. Field-copy tests did not cover that runtime dependency.
+Both candidate mutations are removed from source, along with their
+candidate-specific helper/tests. The instance is restored to `8b8823d`
+diagnostics (DLL SHA-256
+`7f10147c19e878b0ced7d4da94c70c2e8d6ca0e15c35e2ca6b760b67c4e238d0`).
+Do not deploy either saved failed candidate as a normal-build restoration.
+Next: verify normal WASD and edge stopping are restored, then trace the
+actual `IReplayableActorInput` capture/application boundary, which is
+distinct from the prepared entity snapshot. Keep live physical/history raw
+input untouched across frames. No further movement fix is runtime-verified.
+The reverted normal build, LamiumTests, LamiumNativeTests and hook inventory
+check pass; trace configuration is off. A clean normal artifact is saved
+(SHA-256 `cdc270e3ab5e8cd3a195b754dbe10b73b7f58d02cf45d2c723cb8d72dfa03c51`),
+while the instance uses the previously tested `8b8823d` diagnostic artifact.
+SDK investigation found exported `ReplayStateComponent::getCurrentCapturedInput`
+as a potential observation point for the actual selected replay input;
+no hook or mutation has been added there yet.
+Recovery confirmed on BDS: WASD, key-release stopping and margin 0.10 edge
+stopping are restored. Two correction windows retain the unfixed replay
+path, without a fall dump.
+Next diagnostic: observe `getCurrentCapturedInput` and bind read-only
+capture/preApply/postApply hooks from the actual selected implementation.
+The first-round SDK slot helper rejected clang-cl's load-then-jump thunk
+form; a standalone program measured the actual SDK thunks, and a bounded
+decoder plus pure/native tests handle those forms without assuming slots.
+Check the exact local component, client thread, capability gate, readable
+game vtable and executable game targets; unsupported or changed targets
+fail open. Retain function addresses only, no input/entity pointers across
+frames. Gameplay remains the recovered baseline. Runtime attachment and
+capture/application observations are pending.
+Normal and diagnostic builds, LamiumTests, LamiumNativeTests (including
+the actual SDK thunk check) and the hook inventory check pass. The new
+read-only diagnostic DLL is deployed; source and deployed SHA-256
+`f7b23cf81bcb228209497a24ab220d17c8f53147aab7c136fca11ff16f34bef1`.
+Configuration is reset to `--edge_trace=n`; the safe normal artifact is
+retained (SHA-256
+`0e773c452cd845d4892bfcae6691b5ec65676a3710795b7141773385115daa95`).
+Next BDS run: verify WASD/key release and margin 0.10 edge stopping first,
+then diagonal approaches and slab bridging for a few minutes. Check that
+input diagnostics actually attach and connect local capture to the selected
+input's pre/post application. A fall is not required; no new movement fix.
+Diagnostic build `a32e9bb` checked: normal controls and margin 0.10 edge
+stopping work; several minutes of diagonal approaches and slab bridging
+found no problem. Capture/application hooks attach; three correction
+windows include two direct guarded-input-loss chains, with the same input
+object observed at local capture, selection and replay pre/post application.
+For example guarded (0.170,-0.145) is captured alongside raw Down/Right,
+then replay rebuilds (-0.707,-0.707). No fall dump was recorded.
+Next candidate: at that actual local `capture(MoveInputComponent const&)`
+boundary, pass an owned component copy whose horizontal raw fields agree
+with its guarded processed input. Preserve non-horizontal raw fields and
+the original live component, and retain all ownership/capability checks.
+This avoids both the ineffective earlier frame-snapshot substitution and
+the physical-input feedback that broke WASD. The candidate is now implemented
+in `EdgeGuardHistory.cpp` with an owned-copy helper. Pure and SDK-type tests
+verify independent stored input, preserved non-horizontal fields, later
+device refresh/key release, analog input and a modeled correction replay.
+Normal and diagnostic builds, LamiumTests, LamiumNativeTests and the hook
+inventory check pass; actual capture ownership and correction replay
+remain runtime-unverified. Completion requires normal controls and evidence that correction replay
+uses the guarded captured input, with remaining rare/large-correction and
+other-server coverage stated explicitly.
+The actual-capture copy diagnostic DLL is deployed for the next BDS check;
+source and deployed SHA-256:
+`2fd64e3bbbd9706a8ef4e5b5d66a5aadd275d6ace9950c9e1abfad66d4ec05ed`.
+Configuration is reset to `--edge_trace=n`. The normal candidate is saved
+locally (SHA-256
+`c811d03c3a48298c2485309f1c9fe444b8f566db349a22bc83c107dfbf6678cc`);
+it is not a runtime-verified recovery build. The previously tested read-only
+baseline remains saved separately.
+Next check: WASD and key-release stopping first; Edge Guard on, margin 0.10,
+diagonal edge approaches and slab bridging for several minutes, then jump,
+sneak release, disable and enable/rejoin. Inspect the one-time capture-copy
+message and actual replay raw/processed input in correction windows. A fall
+is not needed; no success or completed fix is claimed from the builds alone.
+Candidate `4fe7b29` checked on BDS: WASD/key release, margin 0.10 diagonal
+approaches and slab bridging, jump, sneak release, disable and enable/rejoin
+all pass. The capture hook attaches and executes its owned-copy path;
+read-only diagnostics attach too. One correction (server tick 802) replays
+a normally captured full Down/Right vector, not a guarded capture. This is
+expected and does not settle the fix's replay behavior. No fall dump or
+hook failure. Keep L-162 open; the next check is a bounded additional BDS
+run on this same DLL, alternating diagonal approaches and slab bridging
+for roughly five minutes. Fall reproduction and the full smoke checklist
+are not needed; inspect whether a correction actually includes guarded input.
+Additional BDS result on `4fe7b29`: the maintainer falls while placing slabs
+to bridge. Three corrections and one fall dump. Correction 1 verifies the
+owned-copy path: guarded (0.042,0.024) survives preApply, both replay
+calculations and postApply, without raw direction keys. At correction 2,
+server tick 979, x=0.161 becomes x=0.339 (about +0.178); the corrected box
+starts at x=0.039, beyond the last logged slab ending at x=0.000. Guarded
+(-0.084,-0.099) survives replay too, but replay adds about +0.075 x and
+starts falling. Client placement/refusal calls precede it; which server
+placement/collision causes the larger correction remains unverified.
+The current collision guard intentionally leaves unsupported boxes vanilla,
+and copied replay inputs bypass the live-state input guard. Investigate
+correction-position handling and slab placement rather than repeating
+input-copy tests. Do not mark L-162 done or remove the verified copy fix
+solely because it does not cover this additional failure. See the newest
+VALIDATION-LOG entry for the preserved fall trace.
+Next candidate (packet consistency): at the fall's tick 979, outgoing move
+and analog are (-0.084,-0.099), but `mRawMoveVector` is still (-0.707,-0.707).
+The server's treatment of this raw field is unverified; the larger correction
+does not by itself prove a raw-input or placement cause. Align only that
+outgoing field with the guarded analog vector at `LoopbackPacketSender::send`.
+Require exact sender subclient, client thread, walking, feature/capability,
+no horizontal direction flags, no jump/teleport/vehicle exit, and finite
+packet move/analog matching the current local component. Preserve physical
+input and all other packet fields, including placement data and sneak state.
+Use unscaled analog rather than the separately scaled move vector. Pure/SDK
+tests cover stop, brake, sneak scaling, ordinary directions, intentional
+exits, stale/mismatched values and independent physical input. The diagnostic
+logs the raw change before the send dump. No correction position is changed
+and no unsupported replay is frozen. Runtime success is not claimed.
+Normal and diagnostic builds, LamiumTests, LamiumNativeTests and the hook
+inventory check pass. The packet-consistency diagnostic DLL is deployed;
+source and deployed SHA-256:
+`406861193453a1f8e8256ce540c38dd6ea803785da2609b5157de5f93a938553`.
+Configuration is reset to `--edge_trace=n`; the normal candidate is saved
+locally (SHA-256
+`c698ec122e28399d5bf82a539cb9b2ea449ecf7e00af98641f11979ae1794699`).
+Next BDS check: WASD/key-release and margin 0.10 edge stop first, then
+repeat the slab-bridging operation that fell for two to three minutes.
+Check jump, sneak release and disable still restore their normal behavior.
+Stop if movement breaks or a fall occurs. Inspect the packet raw-change
+message, matching outgoing raw/analog fields and any correction/fall window.
+Do not infer a solved server correction or a placement cause from smoke
+success alone; keep L-162 open until the new trace is reviewed.
+
+
+### L-156 Low bookshelves above glass become dark under Vibrant Visuals
+Done 2026-10-13 by L-164: the darkening followed the split; sprite faces show none under Vibrant Visuals (checked in game).
+Kind: Bug, Research (strong model).
+Status: open. Maintainer's actual-play report, 2026-10-12, Lamium 0.2.0.
+Reported conditions: Vibrant Visuals enabled, glass below, lower bookshelves
+become dark. Screenshot: `スクリーンショット 2026-10-12 014000.png`
+(report attachment), showing dark vertical areas in the bookshelf faces.
+The maintainer says the appearance closely resembles the existing darkening
+issue (L-133). This is a comparison of symptoms, not evidence of a shared
+cause. L-133 concerns split translucent panes; bookshelves also use split
+Connected Textures geometry but are a separate reproduction.
+Maintainer follow-up, 2026-10-12: Connected Textures on/off compared; the
+dark vertical bands appear only with Vibrant Visuals and Connected Textures
+both on, so Lamium's split bookshelf geometry is implicated under Vibrant
+Visuals (shadows/normals of the split faces are the first suspects).
+Next: glass present/absent, bookshelf height/view direction, time of day
+(sun shadow direction), and sandstone (also split) under the same setup. Record
+lighting, Night Vision and resource packs. Separate vanilla lighting from
+Lamium tessellation or renderer-state effects before changing the path.
+Linked to L-133 (maintainer 2026-10-12: the look is too similar to treat
+separately). Both appear only when Lamium splits a face into several quads,
+and both are dark gradients rather than wrong texels; research them as one
+question (what per-quad value the renderer interpolates or sorts differently
+for split faces), but confirm the shared cause before reusing L-133 results.
+Do not treat old pane experiments as a proven fix or cause for this report.
+L-164's spike answered it (round 4, 2026-10-12): bookshelf sides drawn as
+one quad with a generated sprite show no dark bands under Vibrant Visuals;
+the one-sided split next to them does. The fix is L-164's method.
+Keep investigation bounded; native render changes must fail open.
+Exact reproduction, affected extent and cause remain unverified by an agent;
+no fix or post-fix runtime check yet.
+
+### L-157 Chunk Borders are intermittently hard to see
+Done 2026-10-12: Chunk Borders and Hitboxes pulled toward the eye by 0.996 (`6cd2a68`); lines on walls stay whole, checked in game.
+Kind: Bug, Research; Design only if a visibility policy change is needed.
+Status: open. Maintainer's actual-play report, 2026-10-12, Lamium 0.2.0.
+Reported symptom: Chunk Borders sometimes become difficult to see.
+Screenshot: `スクリーンショット 2026-10-12 015458.png` (report attachment).
+Lines remain visible in the image; some are much less distinct against
+terrain than against the sky. The report does not establish missing geometry,
+a change from earlier releases, or the trigger. Maintainer follow-up,
+2026-10-12: taken under Fancy graphics at night; other video settings not
+checked.
+Next: compare the same scene/view with different lighting and graphics
+modes, camera distance and direction, near/behind terrain, and other overlay
+combinations. Inspect the shared line material/depth path in WorldOverlay
+and record whether geometry, depth, color/alpha or contrast is responsible.
+Preserve existing colors and grid structure until evidence justifies a
+change. Check Chunk Borders and Hitboxes together if shared rendering changes.
+See OVERLAYS.md for the current contract.
+Maintainer 2026-10-12: the lines break up where they meet terrain (other
+choices offered: thin lines, colors blending in, lines vanishing). In the
+screenshot a dirt wall lies on the chunk wall's plane and the lines on it
+show as dashes: lines coplanar with block faces fight for depth. Chunk
+Borders and Hitboxes were the only world lines not pulled toward the eye
+(Depth.h rule 2). Built 2026-10-12: `drawLines` pulls them by 0.996
+(`worldLinePull`); colors and grid unchanged. In-game check pending.
+
+### L-161 Edge Guard: refuse slab merges that push the player off an edge
+Done 2026-10-12: pushing slab merges refused at build start and `useItemOn`, the edge margin 0.1 by default and a setting (0.02-0.30; `bd65aae`); checked on the local test BDS and locally. The rare fall after a server correction moved to L-162.
+Kind: Bug follow-up of L-160 (strong model). Decided with the maintainer
+2026-10-12 (DESIGN.md, Edge Guard).
+Found on BDS while bridging with slabs: walking with Edge Guard at an edge,
+a slab placed onto the slab the player barely stands on merges into a full
+block in the player's own cell, and the game pushes the player out sideways
+(the shallowest way out), off the edge. Sneaking refuses placements into the
+player's own cell, so vanilla sneaking never hits this.
+Built 2026-10-12, in-game check pending: `GameMode`/`SurvivalMode`
+`useItemOn` hooks refuse a slab when the target cell (the clicked slab through
+its top or bottom face, or the neighbor cell when it holds a slab) overlaps
+the player's box while the box's center lies outside that cell (pure
+`mergePushesOff`, tested). Under the center the merge lifts the player and
+stays allowed. Only while Edge Guard is on and walking (not sneaking).
+Checked 2026-10-12 (`b36cf7b`, normal build): on BDS the slab still went into
+the player's own cell and they fell; not seen locally. The maintainer
+suspects the BDS-only fall predates this change. Next: a trace build logging
+`useItemOn` decisions and `buildBlock` calls, to see whether BDS placement
+reaches the hook and what it decides.
+Trace (VALIDATION-LOG): the check runs and refuses; one BDS fall came from a
+server correction 0.04 further out than the client at 0.026 overlap, the
+other from a merge whose check was not logged. Next build: the overlap margin
+grows to 0.1 block and the merge check also runs in `startBuildBlock` and
+`buildBlock`, before the client may ask the server to place.
+Checked 2026-10-12 (`2dc7e45` trace build): no falls on BDS or locally
+except one. That one: after a small server correction the client re-ran its
+recent ticks and moved 0.17 block outward in one tick, off the block; the
+guard seems not to apply while the client replays inputs (open, rare).
+Next build: the margin becomes a setting (DESIGN.md), default 0.10.
+
+### L-160 Edge Guard lets the player fall on BDS
+Done 2026-10-12: the move vector and the sent input state are guarded, with look-ahead, partial input, gentle braking, a 0.02 block overlap margin (also while sneaking) and stepping back off a bare edge (`1153107`..`29bf8ad`); checked on the local test BDS and in a local world with trace builds (the trace only logs). Slab merges that push the player off went to L-161.
+Kind: Bug, Research (strong model).
+Status: open. Maintainer's report, 2026-10-12 (0.2.0-era builds): in a
+local world Edge Guard holds the player at edges; on BDS the player stops
+for a moment at the edge, then falls within a second. Expected since L-40:
+the guard shortens the move request in `MoveCollisionSystem` on the client
+(and on the integrated server's copy in a local world, `910d2eb`); a
+dedicated server simulates movement itself from the client's input and
+corrects the client, so the client-only guard is undone.
+Next: confirm with the log/trace on BDS (correction packets after the stop);
+then look for a client-side change the server also honors, such as changing
+the movement input the client sends (the input vector before it is packed
+into the auth-input packet) near an edge, rather than the client's resulting
+speed. Sending real sneak input is not acceptable (L-40: no sneak pose,
+speed loss or network sneak state). Fail open on an unverified version.
+Record the server's movement settings if they are visible.
+Built 2026-10-12, in-game check pending: a second hook on
+`PlayerMovement::calculateMoveVector` (the vector the client simulates and
+sends; move x positive to the left, per L-132) guards the local player's own
+input states on the client thread. Pure `guardInput` (EdgeGuardPlan.h,
+tested against a simulated server) keeps input on an axis only if the feet
+stay supported along the slide that follows when it stops (ordinary friction
+0.546), drops it otherwise, and reverses it when the slide alone would leave.
+Jump input passes. Ice and other slippery blocks slide further than assumed.
+The client-side movement-request guard stays. Test server: official BDS
+1.26.51.1 at C:/Users/kenke/Documents/Lamina/bds-1.26.51.1 (outside the repo;
+local, players are operators, world `lamium-edge`).
+That build stopped locally but still fell on BDS: the trace showed the server
+rebuilding the vector from the sent input state (direction keys, raw and
+analog move), not from the packet's move (VALIDATION-LOG). Next build: when
+the guard changes the vector it also rewrites the local player's input state
+(direction keys cleared, the guarded vector as the analog and raw move). Not
+yet checked; sprinting may end when the forward key is cleared at an edge.
+Checked 2026-10-12 (`68d2211`): stops on BDS and locally; bridging was
+sometimes pulled slightly back. Next build: keep the largest safe share of
+the input instead of dropping it, and brake only as hard as needed.
+Checked (`1870ca1`): no pull back; still fell on BDS after sneaking to an
+edge and letting go (the box only touches the block, which the server treats
+as no support). Next build: the input guard also runs while sneaking and keeps
+0.02 block of overlap; feet only touching an edge step back onto the block;
+the sent analog input undoes sneaking's 0.3 scale. Slab bridging unverified.
+Checked (`c73fc16`): sneak release and slab bridging hold on BDS and locally;
+sliding along a wall into a block corner still fell (box only touching the
+corner, step back blocked by the wall). Next build: the movement-request
+clamp keeps the same margin and runs while sneaking; step back only goes
+where the body is free.
+
+### L-155 Connected Textures action shows its translation key in search
+Done 2026-10-12: labels for connectedtextures, inventoryhud and usedslots (`3767542`); checked in game in English, Japanese and Simplified Chinese.
+Kind: Bug, Ready (small).
+Status: open. Maintainer's actual-play report, 2026-10-12, Lamium 0.2.0.
+Reproduction: search settings for `connected`; an action row displays
+`key.Lamium.connectedtextures` instead of a translated label. Screenshot:
+`スクリーンショット 2026-10-12 013700.png` (report attachment).
+Static check: Binding.h declares action ID `connectedtextures`;
+SettingsRows.h forms its `key.Lamium.` translation key, but that exact key
+is absent from Translations.h and TranslationsZhCN.h. The translated feature
+name is present, which does not cover the action label.
+Next: add the English/Japanese/Simplified Chinese action label in matching
+table order; check all registered actions for the same omission and extend
+translation coverage tests if needed. Keep saved action IDs unchanged.
+When built, verify search and Hotkeys in all three languages, with and
+without a binding; labels must show words rather than raw translation keys.
+Fixed 2026-10-12 (source): labels added for connectedtextures and, found by
+the same check, inventoryhud and usedslots; SettingsRowsTests now requires an
+English, Japanese and Simplified Chinese label for every non-retired action.
+Post-fix runtime check pending.
+The immediate missing-label fix stays here; L-158 owns systemic prevention.
+
+### L-142 Enchanted items lost their glint in Lamium's icons (0.1.9)
+Done 2026-10-11: glinting items drawn on the direct path before any batch, glint right after the icon (`70590f6`, checked on `df79b8d`). Enchanted leather's undyeable parts see-through: recorded under L-91.
+Kind: Bug. Reported on Discord after 0.1.9 (maintainer's notes,
+2026-10-11): enchanted swords and pickaxes show no glint in the shulker
+preview. Cause (from the code; not traced): since `cbaacfc` flat items are
+drawn in a shared-mesh batch, and the caller's foil call draws no glint
+over a batched icon. Fix built 2026-10-11: glinting items (`Item::isGlint`)
+keep the direct icon path as in 0.1.8, so the foil call draws over them
+again; enchanted leather pieces then lose their undyeable layer as before
+0.1.9. Applies to every Lamium icon (previews, HUD, offhand slot, settings).
+In-game check pending; the shield (L-91) is unchanged.
+Round 1 (`beece33`, checked 2026-10-11): still no glint in the shulker
+preview. 0.1.8 drew each icon and then its glint; since `cbaacfc` all
+icons are drawn first and the glints after, and the foil call apparently
+covers only the icon drawn just before it (the offhand slot, one icon then
+its glint, kept its glint). Round 2: `drawItemIcons` draws a glinting
+item's foil call right after its own icon (`IconAt::glint`), for the
+previews, the inventory HUD and the offhand slot.
+Round 2 (`77ceea4`, checked 2026-10-11): still none in the preview, for a
+pickaxe, an enchanted golden apple and a shield. Left as the difference
+from 0.1.8: the preview now runs shared-mesh batches before the foil
+calls (0.1.8 had none). Round 3: glinting items (icon, then glint) are
+drawn before any batch in `drawItemIcons`. Passed on `df79b8d`
+(2026-10-11): pickaxe, golden apple and book glint in the shulker preview.
+Known cost: enchanted leather armor's undyeable parts are see-through
+there (L-91). Done; moves to BACKLOG-DONE with the 0.2.0 release notes.
+
+### L-141 Ghosts of two schematic placements on the same cells flicker
+Done 2026-10-11: the earlier placement draws shared cells; no flicker, hiding it shows the later one's ghosts (`9c173b7`, checked).
+Kind: Bug. Found by the maintainer 2026-10-11 on `9e675cc`: two placements
+whose ghost blocks occupy the same cells flicker where they overlap (both
+faces drawn on the same planes). Not yet known whether 0.1.9 does the same
+or the L-136/L-138 split introduced it. Expected: a steady look where
+placements overlap (one placement's ghost wins, decided by a stable order).
+Status: built 2026-10-11, in-game check pending. The placement earlier in
+the list draws a shared cell (a ghost block of it, within its shown
+layers, while it is shown in this dimension); the later one leaves the cell
+out, mistake marks included. The earlier overlapping placements are part of
+a placement's build key, so moving, hiding or changing one rebuilds the
+overlap (`schematic/PlacementOverlap.h`, tested). Known limit: the later
+placement still culls its faces against its own blocks in the left-out
+cells. Verification and progress are unchanged (each placement counts its
+own cells).
+
+### L-119 Fence gates show no icon where Lamium draws item icons
+Done 2026-10-10: fence gates fixed by the shared-mesh icon path (`cbaacfc`, checked). The shield glint stays under L-91.
+Kind: Bug. Reported by the maintainer 2026-10-08; widened 2026-10-10.
+Status: open after two runtime rounds (2026-10-10, VALIDATION-LOG), both
+reverted. Trace: vanilla slots draw fences, gates, stairs and walls as chunk
+type 0 into `_renderGuiBlockTypeItem`; Lamium's `renderGuiItemNew` uses chunk
+type 12 into the same function, for gates and fences alike, with block
+graphics present. Drawing the preview as chunk type 0 with the slot's alpha 0
+showed no block icons; with alpha 1 it looked exactly like
+`renderGuiItemNew` (fences and blocks drawn, gates missing). So the call
+route is not the cause: the gate mesh itself does not show outside a
+vanilla slot. Third round (`1e46a3e`, reverted): without a slot background
+and at z 40 the gates stayed missing; drawn at scale -1 (flipped winding,
+the snow block then showed its inside faces) they stayed missing too. So
+neither depth nor face culling hides them: outside the slot batch the gate
+mesh draws nothing at all. Stopped after three rounds (2026-10-10). The fix
+that remains is the one parked under L-91: draw icons through the vanilla
+slot path (drive an `InventoryItemRenderer` or its pass setup), which
+could fix gates, the shield glint and leather layers together. A larger
+change; the maintainer decides whether to start it.
+Started 2026-10-10 together with L-91 (maintainer). Round 4 (trace
+`7dac7d5`, VALIDATION-LOG): vanilla slots do not use the geometry atlas
+(`GeometryAtlas::ItemRenderContextImpl` and `renderItemToTile` never ran).
+Block items (fences, gates, stairs) are a shared-mesh batch (`UIBatchType`
+1, UI material 13, `atlas.terrain`): inside a slot `renderGuiItemInChunk`
+adds the block to a mesh the batch draws afterwards with its material,
+which is why the slot passes alpha 0. Shields and leather are default
+batches (type 0); an enchanted shield has three passes (materials 9, 5 with
+`enchanted_item_glint`, 7). Calling `InventoryItemRenderer::getItemRenderInfo`
+on a preview stack crashed the game; do not call it again.
+Next round (proposal): wrap Lamium's icon in the vanilla flow,
+`MinecraftUIRenderContext::beginSharedMeshBatch(batch)` ->
+`renderGuiItemInChunk` -> `endSharedMeshBatch(batch)` with a
+`ComponentRenderBatch` built like the slot's (key: batch type, material 13,
+textures), first for block items in the shulker preview only. Risk: the
+context's persistent mesh list is indexed per frame
+(`mCurrentPersistentMeshItemIdx`); adding batches outside the UI pass may
+disturb vanilla's, so the round watches for flicker and crashes.
+Done 2026-10-10 for block and flat items (`cbaacfc`, checked in game):
+`inspection/render/ItemIcon` batches chunk types 0 (`atlas.terrain`, alpha
+0) and 2 (`atlas.items`, alpha 1) with UI material 13 for every Lamium icon;
+fence gates and leather layers now match vanilla. Left: the shield glint
+(default batch, passes 9/5/7); the offhand icon was 1 px low (fixed
+2026-10-10, icon one unit higher). Shield glint round (`75433f6`,
+reverted): drawing chunk 4 then 5 directly after the icon, and chunk 4 inside
+a batch with UI material 5 and the glint texture in either texture slot,
+all showed no glint. The slot's glint pass needs
+`InventoryItemRenderer::preRenderSetup` and the default batch's per-pass
+material, neither reachable without a vanilla renderer instance. Parked
+until the maintainer wants it; a next try would clone a slot's
+`InventoryItemRenderer` and drive its `_render` passes.
+A fence gate inside a shulker box shows only its count in Shulker Box
+Preview, without the item icon. The maintainer saw the same in the other
+places that draw icons the same way (Lamium's own `renderGuiItemNew` calls,
+for example the Info HUD item lines), so this is the shared icon path, not
+the preview. Expected: icon and count everywhere. Find out whether every
+fence gate kind does it and whether other special block items (doors,
+signs, beds...) do too, then compare with how the inventory slot draws the
+same item (see also L-91 for icons that differ from vanilla slots).
+
+### L-121 Night Vision darkens areas around light sources at low Brightness
+Done 2026-10-10: checked in game on the batch build (VALIDATION-LOG).
+Kind: Ready (small). Found by the maintainer 2026-10-09 as a bug; the same
+day they showed it is the game's own behavior (VALIDATION-LOG).
+Status: built 2026-10-10 (`2e29216`, not yet checked in game): child option
+"Even brightness" (`lighting.nightVisionEven`, default on) raises
+`BaseLightData::mGamma` to 1 while Night Vision is on; the log prints the
+game's gamma once per change ("Night Vision: light gamma ..."), to confirm
+it is the Brightness value. Decided 2026-10-09 (maintainer): a Night Vision child option
+that removes the darkening, **default on**; Lamium's Night Vision should
+look fully bright by default. Off gives the vanilla look.
+Restated by the maintainer 2026-10-10: with a low game Brightness, Night
+Vision makes the area around light sources darker than the rest; Smooth
+Lighting widens that area. In the first report this showed as the corners
+and gaps that smooth lighting darkens turning dark blue, in a wide ring
+around a hole in a floor. The vanilla Night Vision effect does the same, also without
+LeviLamina. The game's Brightness setting decides how strong it is: strong
+at 0%, weaker at 50%, almost gone at 100%. With Smooth Lighting off the
+picture is even.
+
+| Smooth Lighting | Night Vision | Seen |
+| --- | --- | --- |
+| on | off | normal shading |
+| on | on | bright tops, gaps dark blue |
+| off | off | weaker shading in the gaps |
+| off | on | gaps lit too, even brightness |
+
+Lamium's Night Vision (`NightVision.cpp`) sets the game's own night vision
+fields of the light texture data and adds nothing else, so it shows the
+vanilla look. Candidate fix within the same hook: while Lamium's Night
+Vision is on, raise the light texture's `BaseLightData::mGamma` toward
+what Brightness 100% gives, so the user's Brightness setting is not
+changed. To find out in a first round: whether `mGamma` is the Brightness
+slider's value and whether raising it removes the blue ring, and how much
+brighter everything else gets. If `mGamma` does not do it, stop after two
+runtime rounds and report before trying a deeper path. The option follows
+the usual settings steps (Settings, Options, store, row, English, Japanese
+and Chinese strings) and only acts while Night Vision is on.
+Constraints (maintainer): do not turn Smooth Lighting off for the player;
+keep natural shading where possible; avoid deep render hooks. Check all four
+Smooth Lighting / Night Vision combinations, at Brightness 0, 50 and 100%,
+in bright and dark places, near light sources and on dense builds.
+
+### L-113 Numbers sit higher than Japanese text in the settings screen
+Kind: Bug. Reported by the maintainer 2026-10-08 while checking the change
+arrow.
+Status: closed 2026-10-10 (maintainer): no longer seen where checked; the
+Latin raise fixes already cover it. No change made under this item.
+With the Japanese locale, Lamium raises Latin runs (letters and digits) by
+1.5 units (`latinRaise()` in `Widgets.cpp`, DESIGN.md) so they share the line
+with kana and kanji. In the settings screen the numbers now read as higher
+than the Japanese text beside them, which suggests the raise is too large
+there (the change arrow, placed for Latin text, sat about 0.8 units above
+the kanji). Changing the raise moves every Japanese label, so measure it on a
+screenshot of the settings screen (and the HUD) before choosing a new value;
+check stepper values, sliders, the key cells and the Info HUD lines.
+
+### L-122 Fake Offhand fires a firework when placing blocks or opening doors
+Kind: Bug, high priority. Reported from use 2026-10-09 (maintainer's notes).
+Status: fixed and checked in game 2026-10-09 (`77e698e`, checked on
+`34c3593`): doors and block placement, the last of a stack too, launch no
+firework; gliding and block-target fireworks still do. Cause: with the
+right-click binding, the native click handler and the queued press both
+decided the same click; after vanilla acted (a door opened, the last block
+placed), the queued press saw the changed world and borrowed the firework
+too. Now the first of the two decides (`queuedPressDecides`, tested).
+With a firework set as the Fake Offhand item, an action that is not meant to
+use it (placing a block, opening or closing a door) sometimes launches a
+firework. Expected: the placement or door works as usual and a firework
+launches only on an intended use (gliding, or a block target with nothing
+else to do there; FAKE-OFFHAND.md). First find the reproduction: which
+blocks, held items and targets, singleplayer or server. Then check the order
+of the slot borrowing, the use-target decision and the right-click handling.
+
+
 ### L-110 Overlay faces z-fight with the blocks they cover
 Kind: Bug **(strong model)**. Reported by the maintainer 2026-10-08 while
 checking L-15 step 1.
@@ -115,6 +1048,706 @@ result is only the converted text; Latin typing and Backspace unchanged.
 ---
 
 ## Ready
+
+### L-169 Item Transfer — 0.2.2 part
+
+Done 2026-10-15: implemented on c8c1f1b, built and LamiumTests passed; the
+maintainer confirmed the normal-build smoke checklist all behaved as
+expected. Windows x64 release client, traces/probes off, built and installed
+DLL SHA-256 `2A6B0A52B397511108815C2BE4315EFBA84403343AAA242B632D2B9FEF6BE515`.
+Unreleased. Chest/furnace/brewing/beacon smoke checks were requested;
+the full gesture/screen matrix, servers and controlled failure cases remain
+in BACKLOG's Pre-release checks and VALIDATION. Later L-169 Design parts
+remain in BACKLOG. Evidence and implementation: ITEM-TRANSFER.md and
+VALIDATION-LOG.md (2026-10-15).
+
+**0.2.2 contract (decided 2026-10-15).** Gestures, in the meaning a widely
+used Java inventory mod gives them (PROVENANCE: public key list only):
+| Gesture | Effect |
+|---|---|
+| Ctrl + wheel | every stack of the hovered kind to the other side (up: into the container, down: into the inventory, as the plain wheel) |
+| Ctrl + Shift + wheel | everything to the other side; from the inventory the hotbar stays |
+| Alt + left click | as Ctrl + wheel, toward the other side from the clicked slot's side |
+| Alt + Shift + left click | as Ctrl + Shift + wheel, from the clicked slot's side |
+| Shift + right drag | from each passed slot, all but one item to the other side |
+
+- Screens: every screen that holds items beside the player inventory: chest
+  family, barrel, shulker box, ender chest, furnace, blast furnace, smoker,
+  dispenser, dropper, hopper, brewing stand, crafter, beacon and any other
+  found while testing. Record the list of checked screens in DESIGN.
+- Slots with roles: send to the slot that accepts the item (fuel to the fuel
+  slot, smeltable items to the input, bottles / ingredient / blaze powder to
+  their brewing slots, the payment to the beacon slot); take from outputs only.
+  An item a slot role cannot take is not moved; no valid destination does
+  nothing. Where vanilla shift-click already routes by role, follow it.
+- The existing four gestures keep their meaning and switches. Each new
+  gesture gets its own child switch, on by default like the existing ones.
+- Same safety as today: one request at a time, each confirmed from
+  authoritative state; stop on screen close, focus loss, a cursor item, text
+  editing, a rejected or timed-out request or a changed source count.
+- Research first, report before building around it: whether Alt reaches the
+  game in screens (if not, stop and ask; do not pick another key); whether
+  vanilla's take-all / place-all / auto-place handlers do exactly the above
+  and can be called from the client thread; that Shift + right drag has no
+  vanilla meaning on Bedrock that players rely on.
+- Not in 0.2.2 (maintainer 2026-10-15): Shift + click on an empty slot with
+  items on the cursor, a wheel version of "all but one", drop gestures, W/S
+  moves.
+- Check in game per screen family and gesture, locally and on a server.
+
+The investigation on e3f9276 confirmed Alt arrives, take-all/place-all are
+cursor operations, and Shift transfer follows native auto-place orders.
+Vanilla Shift + right drag moves a whole stack; the chosen enabled gesture
+leaves one and its off switch preserves vanilla. Furnace slots may accept
+items that cannot smelt/burn: native acceptance/routing is preserved without
+a stricter Lamium recipe/fuel filter. The normal implementation discovers
+native roles, filters out same-player-side fallbacks and output destinations,
+and confirms per-request counts from reacquired authoritative slots.
+
+### L-189 Fake Offhand fallback when primary right-click has no useful action
+Done 2026-10-15: the target-specific primary uses passed locally on `a1a758e` (VALIDATION-LOG). Hoes, shears, honeycomb, crossbows, Riptide tridents, primary fireworks and servers stay in VALIDATION.
+Kind: Feature (was Research, then Design). User feedback 2026-10-14.
+Clarified by the maintainer 2026-10-15: the primary hand's item suppresses
+the fake offhand whenever its kind has a right-click role, whether or not
+it would act: bread at full hunger aimed at a block, a shovel aimed at stone.
+Decided 2026-10-15 (maintainer): include as much as possible, using the
+game's own checks where they exist. Status: built, not checked in game
+(FAKE-OFFHAND.md "Target-specific primary uses"). Check in game: bread at
+full hunger on stone; a shovel on stone (passes) and on grass (paths);
+seeds on stone (passes) and on farmland (plants); bone meal on stone and on
+grass; an axe on a log, on copper and on stone; a minecart on stone and on
+a rail; a bow without arrows aimed at the sky; an empty bucket at the sky
+and at water.
+Original goal: if the main-hand right-click has no meaningful applicable action,
+allow the configured Fake Offhand item to receive that use. Reported
+examples are fireworks that cannot be used while the player is full or is
+holding a shovel/axe; this is a generalized input priority rule, not a
+firework-only exception.
+Research the native action/result and target-interaction outcomes: a
+non-mutating or nominally successful primary callback may not be a real
+use; conversely a false return does not prove that trying the other hand
+is safe. Never double-use, break valid block/entity interactions, fire
+accidentally, overwrite the selected slot or assume server success.
+Settle what counts as a genuine no-op before defining exact fallback order;
+check air, blocks, entities, cooldowns and server correction.
+[FAKE-OFFHAND.md](FAKE-OFFHAND.md).
+
+### L-187 Increase the world map's maximum zoom-out
+Done 2026-10-14: zoom out to the whole explored area (`85207e9`, seen on `9b3b8a9`); the zoom-in drawing fixes `00be8f0` and `f25188f` passed on `7548f0f`. First far build time on very large maps and servers stay in VALIDATION.
+Kind: Feature. User feedback 2026-10-14; maintainer chose the range the
+same day: zoom out until everything explored fits on one screen.
+Status: checked 2026-10-14 on `9b3b8a9` (VALIDATION-LOG): whole explored
+area on screen, small worlds unchanged. Open: zooming in after a far view
+(`00be8f0` then `f25188f`, which fixes finer tiles never replacing the
+coarse stand-ins) to check. Steps to
+1/256 GUI units per block open as far as the layer's explored bounds need;
+coarse images skip empty space and rebuild only changed quarters.
+Check in game: zoom out on a large explored world (Overworld and a Nether
+layer), the first far build time, waypoint/marker readability at the
+farthest step, recording while open, and that a small world still stops at
+1/8. Not chosen: auto-centering on the explored area. No release chosen.
+This request is not to generate or retain more unexplored terrain.
+
+### L-188 Let the settings key toggle the settings screen closed
+Done 2026-10-14: `a123eba` passed on `9b3b8a9` (open/close, held L, typing, binding). A remapped key and the tool pages stay in VALIDATION.
+Kind: Feature. User feedback 2026-10-14. Status: checked 2026-10-14 on
+`9b3b8a9` (open/close, held L, typing, binding); a remapped key and the tool
+pages remain in VALIDATION.
+The default L shortcut closes Lamium Settings as well as opening it; the
+chosen rule is in UX-FOLLOWUP.md "Settings key feedback". Check in game:
+L opens and closes; holding L opens once; typing L in search, a number or
+a name does not close; key capture of L still binds; the world map keeps
+M/Esc; a remapped Settings key works the same; no input leaks into
+gameplay after closing. Do not fold the
+separate crash report (L-182) into a mere UX toggle fix.
+
+### L-174 Chat messages placed like Java Edition, through the HUD layout
+Done 2026-10-14: initial native chat placement (`5b5750c`) and the
+component-render expiry fix (`b28a40d`) passed the maintainer's checklists,
+including wrapped long messages with no flicker. The chosen default is
+flush left with the bottom 44 GUI units above the screen edge: two default
+Durability HUD rows, their bottom inset and a 4-unit gap. Existing saved
+placements remain intact. Experimental removed after the checks.
+Reset/fresh-settings default smoke and broader UI/pack/server checks remain
+in BACKLOG Pre-release checks and VALIDATION; no release selected.
+Current contract: [CHAT-POSITION.md](CHAT-POSITION.md).
+
+Follow-up 2026-10-14: reset to the final default passed on `dc3ac45`, DLL
+SHA-256 `f0f51371a77025a533a73730630cf05f8c1bc66d650c7dce53c9b8716a10a0fb`.
+The maintainer accepted closing L-174. Fresh settings and broader coverage
+remain in VALIDATION; the reset smoke gap above is now closed.
+
+Implementation history below retains the superseded defect/next-step state.
+
+Kind: Research, then Ready (strong model). Chosen 2026-10-14; no release selected.
+Goal: show the ordinary chat messages at the bottom left as on Java
+Edition, ideally placed by drag in Lamium's HUD layout.
+Proposal (not decided): only the message display at first (not the chat
+input screen): Vanilla or Custom, Custom with a bottom-left preset and free
+placement; width, line count and scale later.
+Research first: `hud_screen.json` has a `chat_panel`; Lamium already finds
+vanilla HUD controls with `VisualTree::getControlByName()`. Find whether
+that panel alone can be moved while vanilla keeps its messages,
+background and fading, and when to apply the position (UIControl position
+API and timing unknown). Moving the whole `chat_stack` would move other
+elements (the coordinates). Check HUD re-layout, resource packs, screen
+sizes and GUI scales, and the return to vanilla when off. A chat of
+Lamium's own is out of scope.
+Decided (maintainer 2026-10-14): first version has a saved, default-off
+Chat position switch, moves the ordinary messages to the bottom left on
+enable, and allows free placement in HUD layout. Background, font size,
+shadow and fading stay vanilla; the chat input screen is outside this scope.
+No width, line-count or appearance controls in this step. Research and
+the first implementation checkpoint: [CHAT-POSITION.md](CHAT-POSITION.md).
+Current (2026-10-14): the maintainer passed the three-step checklist on
+`5b5750c` (text/background placement and fading, layout/save/reset, OFF and
+coordinates/input unaffected), but remaining messages briefly flicker when
+an older message disappears. Fix in progress: apply translation at the
+native component draw, after layout, without forcing all position caches
+dirty each frame. Runtime recheck pending; keep this item open.
+
+### L-172 Text fields: caret movement, paste and click
+Done 2026-10-13: shared `TextEdit` with caret, Delete, paste, copy and click (`94e48b5`); caret in the spacing column and typed world map coordinates (`ed4a4e7`); checked in game. The IME window stays at the field's left edge (no SDK call moves it).
+Kind: Ready (strong model), decided with the maintainer 2026-10-12.
+Problem: every Lamium text field (settings search, number fields, Shapes,
+Waypoints and Schematics names, save prompts, the world map search) only
+appends at the end; Backspace removes the last character and select-all
+replaces everything. There is no caret position, no Left/Right, Home/End or
+Delete, and no paste (`SearchQuery` and `NumberInput` in `src/ui/`).
+Scope (maintainer: movement, paste and click):
+- One shared pure editor (header, tested) with a caret kept on UTF-8
+  codepoint boundaries: insert at the caret, Backspace before it, Delete
+  after it, Left/Right by codepoint, Ctrl+Left/Right by word, Home/End,
+  Ctrl+V paste (control characters dropped, length limits kept), Ctrl+C
+  copy of the whole field (`app/Desktop` already writes the clipboard;
+  reading it is new), select-all kept as today.
+- IME: a composition's backspaces act before the caret, and the native
+  keyboard's caret position (`syncTextKeyboard`) follows the caret.
+- Click inside a field puts the caret at the nearest character boundary
+  (text width from the same measure the widgets use).
+- The caret is drawn at its position; long text scrolls to keep it visible.
+- Every existing field moves to the shared editor; `NumberInput` keeps its
+  digit rules on top of it.
+Later: selections (Shift + arrows, Shift + Home/End, drag) and replacing a
+selection.
+Built 2026-10-13: `TextEdit` (`src/ui/TextEdit.h`) under `SearchQuery` and
+`NumberInput`; the settings screen routes the caret keys, Delete and
+Ctrl+V/C to the focused field and a click inside it to `placeCaret`; one
+`drawEditField` draws every field (selection highlight instead of the old
+"[...]" brackets and "_" markers). Not possible: moving the IME window with
+the caret (the SDK's keyboard takes a position only when it is enabled), so
+it stays at the field's left edge.
+Tests: insert/delete around multi-byte characters, word jumps over spaces
+and punctuation, paste limits, IME backspace sequences at a middle caret.
+
+### L-159 Find actions by key in Hotkeys
+Done 2026-10-12: Find by key, then the follow-up (button order, focus after a find, binding editor buttons on the edited row; `e93606e`); all checked in game.
+Kind: Ready. Requested by the maintainer 2026-10-12 ("what did I put on Z?");
+they chose press-a-key over typing key names or a `key:` syntax. Contract in
+DESIGN.md (Settings screen, resets paragraph).
+Built 2026-10-12: `chordUses` (Binding.h) and a `KeyFilter` for
+`buildSettingsRows`; the screen reuses the binding capture path and applies
+the found inputs with the next frame, outside input events. Vanilla
+bindings are not searched. Tests cover matching, default bindings and the
+button's place. Checked in game 2026-10-12 (`c4ac083`): all OK.
+Follow-up decided 2026-10-12 (DESIGN.md): swap the buttons so Find by key
+sits next to the key column and Reset all keys left of it; after a find the
+search field takes focus with "Key: Z" as one unit (Backspace clears it,
+typing starts a text search, Esc clears, Down/Enter go to results); the
+binding editor's Clear/Reset/Cancel move from the footer onto the edited
+row next to its key cell, replacing its switch while editing (A in
+[demos/binding-editor.html](demos/binding-editor.html); footer hint kept).
+Built 2026-10-12; in-game check pending.
+
+### L-135 Leave the PDB out of the release ZIP (with 0.2.0)
+Done 2026-10-11: v0.2.0 released with the ZIP (1.8 MB, no PDB) and `Lamium-0.2.0-client-windows-x64.pdb.zip` (9.7 MB) as its own asset; the release script checked GUID and age.
+Kind: Distribution. Decided by the maintainer 2026-10-11.
+Status: built 2026-10-11 (`d274227`); the first release made this way is
+the check. The symbols asset is `Lamium-<version>-client-windows-x64.pdb.zip`
+(the PDB compressed: 17.6 MB instead of 170 MB for 0.1.9's); the identity
+check is `scripts/PdbIdentity.ps1`.
+`Lamium.pdb` is about 90% of the release ZIP and grows each release
+(compressed 13.2 MB in 0.1.7, 15.6 MB in 0.1.8, 17.3 MB in 0.1.9; the DLL is
+1.8 MB). No crash report has arrived, and a description of the situation is
+expected to be enough to reproduce one. From 0.2.0 the ZIP ships without the
+PDB (`scripts/New-ReleaseArchive.ps1`, `Check-Package.ps1`, DISTRIBUTION.md,
+the LIP package contents). The PDB is attached to the GitHub release as a
+separate asset (`Lamium-<version>-client-windows-x64.pdb` or similar,
+decided 2026-10-11), so LIP and LeviLauncher install only the DLL while the
+symbols stay available for crash addresses. CI checks that the PDB belongs
+to the same build as the DLL in the ZIP (matching debug GUID and age).
+
+### L-139 Map layers (0.2.0, L-111 B)
+Done 2026-10-11: session ids, mark keys and layers (`534134f`, `7f85e7d`, `cf54db8`), names on hover (`9e675cc`); passed the 0.2.0 regression checks and the outside reviews (2026-10-11).
+Kind: Feature **(strong model)**. Step 4 of the 0.2.0 order (L-111), after
+the WorldMap.cpp and SettingsScreen.cpp tidy-up (step 3).
+Status: built 2026-10-11, in-game check pending (0.2.0 regression checks).
+Session ids (`534134f`, app/SessionIds.h), selection and menus by mark key
+(`7f85e7d`), layers (`cf54db8`). Settled in the step: marks are
+`MarkKey{layer, id}` (MapMarks.h); under the cursor waypoints and the death
+point come first, then placements, then shapes, the smallest footprint
+first within a layer (`markAt`, tested); a provider that turns off
+(Schematics off, shapes not drawn) returns no marks, and a selection or
+menu on a mark that is gone is dropped; the minimap only draws, the world
+map hit-tests and acts. World map actions: placements select (also the
+schematic's selected placement), show/hide, open in the Placed tab; shapes
+show/hide, open in the Shapes view; the side panel shows the selected
+footprint's extent, a Show switch and the open button. Shape boxes are
+cached by the overlay until a shape changes; placements (at most 64) are
+listed per frame. Shapes on the minimap: map option "Shapes", off by
+default. Not done: one combined side-panel list per layer (the list stays
+waypoints; placements and shapes are selected on the map).
+Follow-up (maintainer 2026-10-11, 0.2.0): names crowded where marks
+overlap, so the world map shows a name on hover, for the selection and an
+open menu; option "Always show names" (off by default). Built and passed
+2026-10-11 (`9e675cc`).
+One list of things drawn on the minimap and the world map, filled by the
+features that own them (INTEGRATION.md B): waypoints and the death point
+(as today), schematic placements first, then Shapes. On the world map they
+share one way of selecting and acting (show/hide, select, the feature's own
+actions); the minimap only draws.
+Design points to settle in the step (outside review 2026-10-11):
+- Marks are identified by a stable id from their provider, never by list
+  index, so adding or removing one cannot retarget a selection. Today only
+  Shapes have one (`ShapeId`, in memory, not saved); `Waypoint` and
+  `SavedPlacement` are plain vector entries (`PlacementSet::selected` is an
+  index) and the death point is a single optional. Proposed: each provider
+  assigns a session id when an entry is loaded or added, never reused within
+  the session and unchanged by reordering, edits or other deletions; the
+  death point uses a fixed key. Ids are not saved (selections reset on world
+  exit anyway), so no file format changes; saving them is a separate
+  decision if a cross-session reference is ever needed. Tests: two
+  waypoints or placements with the same name and position; deleting another
+  entry while one is selected; editing a map-selected placement from the
+  schematic screen; world exit and rejoin clear the selection; an action on
+  an id that no longer exists does nothing.
+- A fixed priority when marks of different layers overlap under the cursor.
+- When a provider turns off (feature disabled, world exit, dimension
+  change), its marks, selection and open actions are dropped.
+- What the minimap and world map share (marks, hit tests) and what stays
+  apart (the world map's panel and menus).
+- Drawing cost with many placements or shapes: footprints are computed when
+  an entry changes and cached, not rebuilt every frame; drawing uses the
+  visible range and is bounded per frame.
+- Shapes on the minimap: a setting (decided 2026-10-11), since many shapes
+  would crowd it.
+Does not share: storage (waypoints, placements and shapes keep their own
+files). Keeps: today's waypoint and death-point behavior unchanged.
+
+### L-145 Info HUD hides the game's paper doll where it covers it
+Done 2026-10-11: the paper doll and the position line hidden where the Info HUD covers them (`df79b8d`, `f822b70`, checked).
+Kind: Feature (small). Maintainer 2026-10-11 (after L-143): at the default
+place the Info HUD overlaps the paper doll. Chosen: an Info HUD option
+"Hide the game's paper doll under it", on by default, that hides the doll
+only while the drawn Info HUD box meets the doll's area (its `hud_player`
+control widened by one control width each side, from the top of the
+screen down to the chat's 50-unit room for it; `PaperDoll.h`, tested);
+placed elsewhere nothing changes. Shares the L-143 paper doll hook.
+Passed on `df79b8d` (2026-10-11). Follow-up the same day: the game's
+position line (Show Coordinates) overlapped the Info HUD too, so the
+option also hides the `player_position` control where the Info HUD box
+meets it (label "Hide the game's paper doll and position under it").
+In-game check pending.
+
+### L-144 The game's hotbar in the HUD layout editor
+Done 2026-10-11: the hotbar's images in the HUD layout editor (`07afa45`, checked on `9c173b7`).
+Kind: Feature (small). Reported on Discord after 0.1.9 (maintainer's notes,
+2026-10-11): the editor shows Lamium's elements but not the hotbar, so
+elements are placed blind next to it. Built 2026-10-11: the editor draws
+the hotbar's images (not an element, not clickable) where the game last
+laid it out on a screen of the same size (also Pocket UI), else at the
+desktop place (182x22, bottom center). In-game check pending.
+
+### L-143 Debug View hides the game's position line and paper doll
+Done 2026-10-11: Debug View hides the game's position line and paper doll while open (`535267a`, checked on `9c173b7`).
+Kind: Feature (small). Reported on Discord after 0.1.9 (maintainer's notes,
+2026-10-11): with Debug View open, the game's own coordinates and paper
+doll still show in the top left under it. Built 2026-10-11: Debug View
+option "Hide the game's position and paper doll while open" (on by
+default); while Debug View is shown the `player_position` panel and the
+HUD paper doll (`HudPlayerRenderer`) are not drawn. The game's options are
+not touched, so nothing needs restoring. In-game check pending.
+
+### L-140 Zoom: Wide-angle view as a setting (0.2.0)
+Done 2026-10-11: Zoom setting Wide-angle view, off by default (`cea3014`, checked on `9e675cc`).
+Kind: Feature (small). Decided by the maintainer 2026-10-11 (noted in their
+notes first, chosen for 0.2.0 the same day). Most players use Zoom to
+magnify, so the wide view below 1x becomes an explicit choice.
+- Zoom setting "Wide-angle view" (広角表示, 广角视野), off by default; help
+  "Allow the zoom wheel to go below 1x for a wider view."
+- Off: the wheel goes 1x-50x. On: 0.5x-50x as before (the 160 degree
+  limit stays). The initial magnification (2x-50x) and its default do not
+  change; the stop on exactly 1x stays.
+- Turning it off brings a kept level below 1x up to 1x, so the old wide
+  level does not return.
+Status: built 2026-10-11 (`cea3014`); passed on `9e675cc` (stop at 1x off,
+0.5x on, 1x after turning it off). Not reported separately: toggle mode,
+saving across a restart.
+
+### L-131 Player list: players in other dimensions and permission marks
+Done 2026-10-10: built (`4ad4e18`) and checked in game on BDS and a PC-hosted LAN world with a phone (VALIDATION-LOG).
+Kind: Research. Split from L-128 on 2026-10-10 (maintainer: later, but find out).
+Status: open.
+The player list shows dimension and distance only for players known to share
+your dimension: loaded players and Locator Bar positions, which the server
+sends only for your dimension. Find out whether the client can tell which
+dimension other players are in (packets, the player list, Locator Bar data
+when they leave), and whether it knows other players' permission level
+(operator, member, visitor) for the vanilla `permissions_op_crown`,
+`permissions_member_star` and `permissions_visitor_hand` marks. Today only the
+host is marked (singleplayer: you; a dedicated server: nobody).
+Trace 2026-10-10 (`3adc21c`, BDS, the maintainer changing dimension): the
+client holds every listed player's permission (all members there, you too);
+Locator Bar data gives a position for players in your dimension and turns to
+"hidden" when either side leaves it ("absent" for players never seen). So the
+current dimension of others is unknowable, but where they were last seen is.
+Decided (maintainer): show the last-seen dimension faded, without distance;
+mark operators (crown), visitors (hand) and custom (dots), members only with
+the "Member marks" option (default off); no separate host mark. Built
+2026-10-10; permission changes not yet traced (a LAN world with a phone can
+do it).
+
+### L-128 Player list while a key is held
+Done 2026-10-10: built (`d8c16d2`, fixes `f7e6f87`, `ea0ade4`) and checked in
+game (VALIDATION-LOG). Dimensions and distances are known only for players
+in your dimension (loaded or Locator Bar); the rest went to L-131.
+Kind: Design. From the maintainer's notes and a user request ("tab for the
+player list", 2026-10-09); not chosen for building yet.
+Status: spec decided 2026-10-10 (mockup `docs/demos/player-list.html`, fifth
+version); building.
+Spec (maintainer, 2026-10-10):
+- Hold a key (default Tab, rebindable) to show the players the server lists
+  (`Level::getPlayerList()`), not only those in render distance. Hidden while
+  chat or a screen is open. The parent row has only the key (like Zoom).
+- One row per player: face from the skin, name, host crown
+  (`textures/ui/permissions_op_crown`, loaded at runtime), platform, dimension,
+  distance. Platform, dimension and distance are child switches, all on by
+  default. Columns are aligned across the list; an empty value keeps its
+  column width; distance is right-aligned.
+- Platform as short text from `BuildPlatform`: Win, Mac, Linux, Android,
+  iOS, Fire, PS, Switch, Xbox, Server, ? (logos are not drawn).
+- Dimension as the item icon of grass block / netherrack / end stone through
+  the shared icon path; unknown stays blank (how far it is known: Research).
+- Distance "123 m" for players in your dimension when known (loaded entity
+  or locator data), "—" when unknown; players in another dimension show no
+  distance (conversion out of scope).
+- Self first in the accent color, then names case-insensitively. Names cut
+  with an ellipsis at 16 characters' width (10 when one column does not fit).
+  Count header. Up to 20 rows per column, as many columns as fit, then "and
+  N more"; no scrolling. Works in singleplayer.
+- HUD layout element at the top center; background card by default (card /
+  per line / none). No Minecraft texture is copied into the repository.
+While a key is held, show the players currently in the world. Default key
+candidate Tab, freely rebindable through Lamium's key settings (never fixed);
+check conflicts with vanilla and Lamium keys. Names first; head icons or
+latency if the client has them. Source: the player list the server sends the
+client (`Level::getPlayerList()`, already read by the minimap), not the
+entities in render distance; do not guess missing data. Open: layout, wrap or
+scroll for many players, what singleplayer and different servers provide.
+
+### L-130 Search recipes and items by English names too
+Done 2026-10-10: built (`8488e3b`, fix `3646a11`) and checked in game. Furnace-type screens stay out of this item.
+Kind: Research, then Design. Promoted by the maintainer 2026-10-09 from
+their notes; scope and release not decided.
+Spec (decided 2026-10-10, maintainer accepted the agent's proposal): one
+switch "Search English names too", default on; it only adds matches, never
+hides what vanilla finds. A query matches when every word appears in the
+item's English display name (the game's en_US strings, resource packs
+included) or its identifier without the namespace (`oak_planks`, with `_`
+read as a space), ignoring case. First scope: the crafting screen's recipe
+book, crafting table and creative search (one filter); furnace-type screens
+later. Not included: kana readings, names given in an anvil.
+Status: open. SDK findings 2026-10-10 (headers only, nothing run): the
+crafting screen filters each item through
+`CraftingContainerManagerModel::_filterByText(ItemInstance const&,
+TextSearchMode)` returning `FilterResult` (Show/Hide...), with the typed
+text in `mSearchString`/`mCaseFoldedSearchString`; a hook could retry a
+hidden item against its English name. English strings:
+`getI18n().getLocaleFor("en_US")` gives a `Localization` whose `get(id,
+out, params)` looks up a key (the item's description id + ".name").
+`FurnaceContainerManagerModel` has its own search string. The OreUI recipe
+book is not covered by this path. Next: a trace build to check that the
+en_US locale is loaded while another language is active.
+Keep the game's display language but let recipe and item search also match
+English names. Candidate modes: Game language (vanilla), English, Both; the
+modes are a proposal, not a decision. First target: crafting screen and
+recipe book. Research first: where the search filters
+(`CraftingContainerManagerModel::setSearchString()` / `_filterByText()`, the
+OreUI recipe book search), whether the `en_US` names can be read
+(`I18n::getLocaleFor("en_US")`, item description ids) with resource packs,
+reload on language or pack change, and items whose description id does not
+match the shown name (potions, custom names). Prefer adding English matches
+at the filter over reimplementing the game's search. Open: UI, modes and
+furnace-type screens.
+
+### L-129 Villager trades of every level
+Done 2026-10-10: all levels and locked tooltips checked (`0a41937`, `c7beed9`, `3cffc44`). Servers unchecked (VALIDATION).
+Kind: Research, then Design. From the maintainer's notes (2026-10-09); not
+chosen for building yet.
+Status: research answered 2026-10-10 (trace `6e29917`, local world): the
+client receives every trade. A level 1 weaponsmith's `UpdateTradePacket`
+carried 9 recipes with `tier` 0 to 4 (3/2/1/2/1), each with buy/sell items,
+counts, uses and `traderExp`, plus `TierExpRequirements` (0, 10, 70, 150,
+250) and the trader tier. An exact client-only display of locked trades is
+possible; servers send the same packet but were not traced.
+Design direction (maintainer 2026-10-10): blend into the vanilla trade screen
+as far as possible. Agent's proposal: the higher levels appear in the
+vanilla trade list under their usual level headers, below the unlocked
+ones, with the look vanilla uses for unavailable trades plus a lock, not
+selectable; hovering says which level unlocks it and how much trader XP is
+missing. Research first: the list comes from `Trade2ScreenController`
+(per-tier collections, `Trade2ContainerManagerModel::getEntityTradeTier`,
+`getNumberOfTradesByTier`); find whether the client already holds the
+locked recipes there and only stops at the trader's tier, and whether
+showing them can stay display-only (no trade request for a locked row).
+Fallback if the vanilla list cannot take them: a panel beside the screen in
+vanilla's look.
+Built and checked 2026-10-10 (`0a41937`): option "All trader levels"
+(`inspection.lockedTrades`, default on, toggle action `lockedtrades`)
+turns vanilla's `#tier_visible` on for every entry of `trade_tiers`; the
+locked look and non-selection stay vanilla's. Open (maintainer): hovering a
+locked trade's items should show their description like unlocked ones.
+Hover trace `af4f6f4` (round 3, 2026-10-10): unlocked rows bind
+`#hover_text` on hover with the full description ("Iron Sword / Looting I /
+Bane of Arthropods II / +6 Attack Damage / Durability"); locked rows bind
+nothing. The locked toggle (`#trade_toggle_enabled` false, vanilla's
+`toggle_locked` state) does not pass the hover to the item buttons inside,
+so vanilla never asks for their text. Options for the maintainer: (A) keep
+the locked look and have Lamium draw the item's tooltip when the pointer is
+over a locked trade's item (find the item controls in the screen's control
+tree, as the offhand slot finds the hotbar; text from the item itself); (B)
+enable the locked rows' toggles so vanilla hovers work, block their
+selection, and lose the locked look on the rows (the level header stays
+grey). Maintainer chose (A). Built and checked 2026-10-10 (`c7beed9`):
+`LockedTrades.cpp` keeps the offer's items from `UpdateTradePacket`, finds
+the locked item under the pointer in `trade_selector_stack_panel`
+(tier panels, rows, `trade_item_1`/`trade_item_2`/`sell_item`) and draws
+`getFormattedHovertext` in the preview frame; pure parts in
+`LockedTradeIndex.h`. Jitter fix `3cffc44` not yet checked.
+Show a level 1 villager's trades up to level 5, the locked ones marked and
+not usable. First find out whether the client receives the future trades at
+all: trace `UpdateTradePacket`, the trade NBT and the UI collection when the
+trade screen opens. If they are not sent, an exact client-only display is
+not possible and the idea is reconsidered. Open: fitting it into the vanilla
+trade screen without a separate feature.
+
+### L-126 Leave FreeCamera when the body is hit (option)
+Done 2026-10-10: checked in game on `d2f288c` (hits ended FreeCamera, event 2).
+Kind: Ready. From use 2026-10-09 (maintainer's notes).
+Status: built 2026-10-10 (`792c931`, not yet checked in game): option
+"Leave when the body is hit" (`camera.freeCameraLeaveOnHit`, default off);
+`LocalPlayer::handleEntityEvent` with `Hurt` or
+`HurtWithoutReceivingDamage` ends FreeCamera and logs "FreeCamera left: the
+body was hit". Decided 2026-10-10 (maintainer): an option, **default off**,
+that ends FreeCamera and returns to the body's view when the body is hit,
+including hits that cost no health (a snowball counts). Being off by
+default, a wide trigger is fine: any damage counts, continuous damage
+(fire, hunger, poison) included, even though it ends FreeCamera at once;
+a player who minds turns the option off. Off keeps FreeCamera through
+damage as today. Research first: which client-side signal fires for every
+hit (the hurt event the server sends for the local player, hurt time or
+animation) and works on servers, not a health drop alone.
+
+### L-125 Waypoints at the current position use the camera during FreeCamera
+Done 2026-10-10: checked in game on `d2f288c`.
+Kind: Ready (small). From use 2026-10-09 (maintainer's notes).
+Status: built 2026-10-10 (`7a19fc0`, not yet checked in game): the Add
+waypoint key, the Waypoints screen's add and Move here. Schematic "here"
+stays the body's. Decided 2026-10-10 (maintainer): during FreeCamera, a waypoint
+added "at the current position" uses the camera's position. The waypoint
+creation screen opens as usual (name, color...); only the position it is
+filled with changes, and nothing is added to say which one. Otherwise the body's position as today; a position picked
+explicitly on the map wins. FreeCamera ends on dimension travel, so the
+camera and body share a dimension. Separate from L-124 (what the HUD shows).
+
+### L-124 Camera and player position and facing during FreeCamera
+Done 2026-10-10: checked in game after the angle fix `3c17f84`.
+Kind: Ready. From use 2026-10-09 (maintainer's notes).
+Status: built 2026-10-10 (`af7479f`, not yet checked in game). Decided
+2026-10-10 (maintainer chose the agent's proposal): Debug View shows Camera
+and Player position and facing lines; block, chunk, light and biome follow
+the camera. The Info HUD switches its place and angle lines (coordinates,
+scaled coordinates, block, chunk, facing, yaw, pitch, rotation, biome,
+light, weather) to the camera with a "Cam" label; speed stays the body's.
+During FreeCamera, Info HUD and Debug View show the body's coordinates and
+the body's facing (yaw/pitch, direction). The camera has its own position
+and its own facing, and neither is shown. Knowing where the body is and
+where it faces stays useful, so the camera's values are added, not swapped
+in: where there is room (Debug View first) show Camera and Player position
+and facing, labeled. Open (Design): how the compact Info HUD shows it (both
+lines, a switch, density-dependent), whether position and facing are paired
+per owner or per kind, and which owner chunk and biome follow. Body-only
+values (health, inventory) never follow the camera.
+
+### L-60 Map: minimap, waypoints and world map (experimental)
+Kind: Design completed; implementation built. Remaining work is validation
+and the separately listed radar follow-ups.
+Status: done 2026-10-10 (maintainer: the remaining checks, including
+waypoint storage per server, are fine). L-86 stays under Later / parked.
+History: minimap, radar, waypoints and world map built and checked locally
+(2026-10-01); minimap/radar/world map also checked on an external BDS with a
+large explored area (2026-10-02). L-89 distant players and L-104 map
+follow-ups are done.
+Requirements, technical notes and the retained decision/build record:
+[MAP.md](MAP.md). Runtime coverage: [VALIDATION.md](VALIDATION.md).
+Open:
+- Waypoint storage per server address/port: in-game validation.
+- L-86 radar-face follow-ups (Later / parked).
+- Dedicated-server/release coverage for distant players and server checks
+  of L-104: see Pre-release checks.
+Seed-based terrain, biomes and structures remain a non-goal (L-82).
+
+### L-57 Client info counters
+Kind: Research, then built. Split from L-53 on 2026-09-27 (wave 2).
+Status: done. Built 2026-10-08 and checked in game the same day locally;
+the maintainer reported the server check fine on 2026-10-10. Debug View
+shows one line after the fps line, read once a second (`ClientCounters.cpp`;
+line model in `DebugLines.h`, tested): entities = `Level::getRuntimeActorList`
+filtered to the player's dimension; chunks = the size of the dimension chunk
+source's `getStorage()` map (never walked, other threads fill it); particles
+= the sum of `ParticleEngine::particleCount` plus
+`ParticleSystemEngine::mTotalParticleCount`. Each count fails open (left out).
+The help text names what stays out. In game, check that the numbers are
+plausible (entities against what is around, chunks against render distance,
+particles rising with rain/torches/explosions), in a local world and on a
+server, and that the frame time does not change.
+- Candidate lines: loaded entity count, loaded chunk count and particle
+  count. The SDK exposes `Level::getRuntimeActorList()` and
+  `Level::getEntities()`, chunk tracking under `LevelChunkViewTracker`, and
+  `ParticleEngine`'s per-type `particleCount`; it is not yet known what each
+  returns on the client (whole level vs. focused dimension, cost per frame).
+- Establish what one cheap call gives, then decide the lines and their read
+  cadence (not per frame if expensive). Keep it read-only.
+- Not available on the Bedrock client and must stay out: slime chunk (no
+  seed), server TPS/mob caps, Java heap memory, region files, chunk
+  section/update stats, the effect list and local difficulty. Record this in
+  the help text where users would look for them.
+
+### L-109 Restore the death-time hotbar and inventory layout on pickup
+Kind: Design decided 2026-10-08, then Ready **(strong model)**. Idea from the
+maintainer 2026-10-07; chosen for building 2026-10-08.
+Status: done; shipped in 0.1.8. Built 2026-10-08 (default off, Experimental); checked in game the
+same day except two failures, fixed after (VALIDATION-LOG): rejoining read
+the player as not alive and dropped the layout (now `LifeWatch`: only a
+player seen alive in the world can die), and removing the death point
+before the first pickup went unnoticed (now watched every tick). Restore
+scope (maintainer, 2026-10-08): the hotbar, armor and offhand by default; a
+switch "Also restore the inventory" (off) adds the rest, which takes a
+while. A hotbar-only choice was dropped as unneeded, and the two-choice
+setting ("Hotbar & equipment" / "Everything", checked on `89950fc`) became
+the switch because the English value was cut off and read awkwardly. The
+fixes passed the recheck on `1bd1102`. Planner `DeathLayout.h` (one move at a time: swap, or move part of a
+stack; equipment never emptied; tested, including 2000 random inventories
+for termination and conservation), document `DeathLayoutStore.cpp`
+(`death-layout.json` beside the waypoints), glue `DeathRestore.cpp`: the
+inventory is snapshotted every tick while alive and the last one becomes the
+layout on death; a pickup of a layout item arms a run that starts 1 s after
+the last pickup, moves every 250 ms in gameplay only, re-reads the inventory
+before each move, and stops after the same move three times or 100 moves
+until the next pickup. Known risk: with instant respawn the inventory may
+still read full at respawn and be taken for keepInventory.
+When the player picks up the items dropped at their death point, rearrange the
+inventory to be as close as possible to the layout at death: the same items
+back in the same hotbar, inventory, armor and offhand slots. When the feature
+is on, the rearrangement runs automatically.
+Requirements stated by the maintainer:
+- Never drop or destroy an item. Anything that cannot go back to its old slot
+  stays in the inventory.
+- Items picked up since death and items that were lost (burned, despawned,
+  taken by others) are handled by priorities so the result looks close to the
+  original to a person, not only by slot count.
+Decided 2026-10-08 (agent's proposal, maintainer chose the trigger and armor):
+- Trigger: automatic. After an item pickup, once about one second passes
+  without another pickup, rearrange; later pickups trigger again.
+- Lifetime (corrected by the maintainer 2026-10-08): no real-time expiry.
+  Dropped items despawn only while their chunk is loaded and ticking, so a
+  long trip back must still restore. The death layout lasts until the next
+  death, until everything in it is back, or until the death point is
+  removed; it is saved per world with the death point, so it survives
+  leaving and rejoining.
+- Order: armor and offhand, then hotbar, then the main inventory, each back
+  in its death-time slot. Armor is put back on; a slot already wearing
+  something else is left alone.
+- Matching: the same item with the same enchantments and durability first,
+  otherwise the same item. A stack goes back up to its death-time count.
+- Items gained since death stay where they are unless they block a target
+  slot; then they move to a free slot. Nothing is ever dropped or destroyed;
+  a move that needs a free slot and finds none is skipped.
+- keepInventory: if the inventory is not empty at respawn, that death is not
+  restored.
+- Servers: a bounded number of moves per tick, each confirmed from the
+  authoritative inventory before the next.
+- Default off, Experimental.
+Builds on the death-point tracking in L-60 (waypoints) and the inventory
+transaction path used by inventory transfer (DESIGN.md "Inventory transfer").
+Rearrangements must be confirmed from the authoritative inventory, never
+from sent transactions (DESIGN.md Engineering behavior).
+
+### L-112 Readable block state names in the target card
+Kind: Ready. Chosen 2026-10-08 with the L-93 target-card redesign.
+Status: done. Built 2026-10-08 (`interpretBlockState`, tested) and checked in game
+the same day (stairs, trapdoors, slabs, logs, doors). Other blocks with
+directions stay raw until named. Text directions (cardinal, facing, block face) now show translated
+direction names instead of the raw English word.
+Show common block states by name instead of their internal keys and values,
+for the card's own state rows and the schematic differences: stairs facing
+(`weirdo_direction`), upside down (`upside_down_bit`), slab half
+(`minecraft:vertical_half`, `top_slot_bit`), axis (`pillar_axis`),
+trapdoor facing (`direction`), alongside the existing facing, open, half and
+hinge rows. Unknown states keep their internal name and value. The value
+mappings come from the game's documented state values; each new one is
+checked in game against the block's look before it counts as verified.
+
+### L-90 Simplified Chinese localization
+Kind: Design decided, then implementation. Chosen by the maintainer
+2026-10-02.
+Status: built 2026-10-02 (agent-drafted text for all keys, `TranslationsZhCN.h`
+with a build-time order check, docs/TRANSLATING.md). Checked in game on
+`ca25c2c` (fit, baseline and behavior fine; no Latin raise needed). Open: a
+native review of the wording, invited from FeixiangTMC as a PR. It shipped
+in 0.1.6 as a first AI-assisted translation with corrections welcome; the
+native review remains open and is not a release gate.
+Closed 2026-10-10 (maintainer): a native review is unlikely to come; wording
+corrections are handled one by one if they arrive.
+Add Simplified Chinese (`zh_CN`) as Lamium's third official UI locale.
+English and Japanese remain supported; Traditional Chinese is not claimed
+until there is actual demand and a separately reviewed translation.
+Scope:
+- Translate user-facing Settings text, feature descriptions, editor/prompt
+  text and toasts. A full translated README is not required for this item.
+- Replace the fixed two-language `Entry { key, english, japanese }` shape
+  with a translation representation that can add another locale without
+  duplicating lookup logic at call sites.
+- Match the game locale to `zh_CN`; unsupported locales still fall back to
+  English.
+- Keep every locale complete. Tests must fail when a shipped translation key
+  is missing in English, Japanese or Simplified Chinese.
+- The first Chinese wording may be prepared by an agent, but Minecraft/mod
+  terminology corrections from native users are explicitly welcome. Add a
+  short contribution note when the locale ships.
+Do not generate Traditional Chinese by mechanical conversion and present it as
+official support.
+
+### L-118 Hide distance fog
+Kind: Ready. Chosen for 0.1.8 (maintainer, 2026-10-08), from a user
+request ("no fog").
+Status: done for 0.1.8; checked in game 2026-10-09 on `34c3593` (land
+day/night/rain, Nether, End, restoration). Child "Distance fog", selected by
+default like the other effects (maintainer, 2026-10-09; `f336be7`). After
+vanilla `setupFog` the resolved `mCurrentDistanceFog` moves to 16384/32768
+and vanilla's value is put back before the next setup. No effect under
+Vibrant Visuals (like Night Vision there): left for later with it.
+A new Hide effects child, "Distance fog", for the ordinary fog on land, in
+the Nether and the End. The existing underwater, lava and powder snow
+children stay separate, so either can be hidden alone. After vanilla
+resolves the fog in `LevelRendererPlayer::setupFog` (already hooked in
+`HideEffects.cpp`), move the distance fog's start and end far beyond the
+render distance; use a safe finite distance, not a huge integer, because of
+float precision in the shaders. Render distance itself does not change; the
+chunk edge becoming visible is expected. Restores vanilla when off. Check in
+game: overworld day/night and rain, Nether, End, with Vibrant Visuals on
+and off (fail open if its path differs).
+
 
 ### L-104 Map follow-ups: biome foliage, relief and teleport
 Kind: Ready (decided with the maintainer 2026-10-07). Status: done
@@ -1201,6 +2834,352 @@ two new sprite paths load (icons appear at all).
 
 ## Design
 
+### L-204 Placements and shapes in the world map's side panel list
+Status (2026-10-15): the maintainer chose a menu in the panel header
+instead of the tabs below and accepted the rest of the proposal (DESIGN
+"World map side panel lists"); built in `34d71ca`, passed in game the
+same day (VALIDATION-LOG). Rows sort
+nearest first like waypoints, not in the feature screens' order.
+Kind: Design. Raised by the maintainer 2026-10-15 after the L-146 check:
+the side panel's list could show schematic placements and shapes as well as
+waypoints, so they can be found and opened without spotting them on the
+map. Today the list holds waypoints and the death point; a placement or
+shape is reached by clicking it on the map. Open questions for the
+maintainer before building: one mixed list or a section (or a filter) per
+layer; whether the L-146 layer switches also hide their entries from the
+list; whether marks from other dimensions are listed; what a row's switch
+does (show/hide, as for waypoints) and what clicking a row does (center the
+map and select, as for waypoints).
+Maintainer 2026-10-15: separate the layers, with a switch-like control,
+since the lists can grow long; asked for the agent's proposal first.
+Agent's proposal (not decided):
+- A three-part tab row at the top of the side panel, Waypoints /
+  Schematics / Shapes, each with its count; the panel shows one layer's
+  list. The choice is remembered like the panel itself. Selecting a mark
+  on the map switches to its tab. "+" (add a waypoint here) shows only on
+  the Waypoints tab.
+- Rows as for waypoints: the layer's symbol, the name, the distance when
+  the player is in that dimension, and the show/hide switch; a click
+  centers the map on it and selects it, with the existing details and
+  "Open" button below the list.
+- Only the dimension the map shows, as the map marks do; the tab count
+  counts those.
+- A layer switched off in the top bar keeps its tab and list (the list is
+  where it is found); a faint line at the top says it is hidden on the map.
+- Order: the order of the feature's own screen (Placed tab, Shapes view);
+  a search field when lists grow, later and only if asked.
+
+### L-146 Layer switches on the world map (with the next integration review)
+Status: done 2026-10-15. Maintainer chose the look and behavior the same
+day (DESIGN "World map layer switches"); built in `5928818` and the
+maintainer's in-game checklist passed (VALIDATION-LOG 2026-10-15). The list
+of placements and shapes in the side panel became L-204.
+Kind: Design. Raised by the maintainer 2026-10-11 before the 0.2.0 release;
+parked until the links between features are reviewed again (after 0.2.0).
+Today placements and Shapes always show on the world map while their
+feature draws them; a hidden one stays faint there so it can be shown
+again, so the only way to clear them off the map is turning the feature
+off. Agent's proposal: switches for Waypoints, Schematics and Shapes in the
+world map's top bar (remembered across openings), rather than a settings
+option, since the map is where that choice is made. Add when players ask
+for it or when the integration review takes it up.
+
+### L-175 Lamium settings outside a world (title screen)
+Done 2026-10-14 (maintainer checks, VALIDATION-LOG): the settings key opens
+the Lamium settings on the title screen (`start_screen`) and on OreUI pages
+before a world is joined (not the dressing room or Marketplace, which the
+maintainer accepted). The title screen also shows "Lamium <version>" on a
+dark band stacked on LeviLamina's version line, matched to it from
+screenshots; clicking the band opens the settings. Shapes, waypoints,
+schematics, the world map and the HUD layout editor are dimmed outside a
+world and say "Available inside a world."; settings, keys, the calculator
+and the game language work there. Lamium's client-thread queue
+(`app/ClientTasks`) now drains from `MinecraftGame::update` before a world
+is joined, where LeviLamina's executor does not run; input actions and the
+language apply use it. In-world switching keeps its 10 s interval; outside a
+world there is none.
+Not offered outside a world: the HUD layout editor (it previews the in-world
+HUD). Original request:
+Kind: Design, then Build. From the maintainer (2026-10-14); not chosen for
+building, no release.
+Goal: open the same Lamium settings screen from the title screen (and
+other menus outside a world) and change settings there, instead of only
+inside a world.
+Questions: how it is opened there (key, a button on the title screen),
+which views make sense without a world (waypoints, schematics, shapes and
+the world map need world data; settings, keys and HUD layout do not), and
+what the HUD layout editor previews without a HUD. Lamium's screen is
+drawn from in-world UI render events today; check what renders on the
+title screen (OreUI) before designing.
+
+### L-171 Calculator
+Done 2026-10-13: the two-column calculator (calculator-v3.html "B"): field, result with one split copy button, chest amount, a six-column scientific key grid, twenty history cards scrolled smoothly; opened by its key or the settings sidebar (`e664562` .. `de9792d`); checked in game in English and Japanese. Container screens are out of scope.
+Kind: Ready (strong model); designed with the maintainer 2026-10-12
+(demos/calculator.html). L-172's text editing is in (2026-10-13). Not
+scheduled, no release.
+Goal: a quick calculator inside the game; playing often needs arithmetic
+(stacks, coordinates, farm rates) and there is no way to do it in game now.
+Agent's proposal (not decided):
+- A hotkey (unbound) opens a small Lamium panel with one text field; the
+  result updates while typing. Enter keeps the line in a short history
+  (about 10, this session only), a button copies the result. Nothing is
+  ever sent to chat or the server.
+- Arithmetic: + - * / % ^, parentheses, decimals, `ans` for the last
+  result; functions sqrt, abs, floor, ceil, round, min, max.
+- Minecraft units as words after a number: `st` (64), `ch` (a chest, 27
+  stacks), `sb` (a shulker box, the same as `ch`), `lc` (a large chest, 54
+  stacks). Results of 64 or more are restated the way Schematic's material
+  amounts are ("39 chests + 7 stacks + 46"), through the same pure helper
+  (`MaterialAmount.h`, moved somewhere shared). Ticks and seconds (20 per
+  second). Overworld/Nether coordinates (x8, /8) as functions.
+- Optional: the player's `x y z` as variables.
+- Pure expression parser and unit formatting in a header with tests; the
+  panel uses the existing text field (IME already works, L-84).
+Decided (maintainer 2026-10-12): a panel opened by a hotkey, not chat. It
+needs an agreed mockup first: [demos/calculator.html](demos/calculator.html)
+(A centered window, B tall panel on the right, C one line at the bottom;
+over gameplay and over a chest screen).
+Decided (maintainer 2026-10-12): restatements only for results of 64 or
+more, written like Schematic's materials (chests of 27 stacks, stacks,
+items; the hint says a chest holds as much as a shulker box); ASCII unit
+words `st` `ch` `sb` `lc` (no `dc`); `x y z` as the player's position; 10
+history lines kept for the session only.
+Opening over container screens is wanted but is a second step: first find
+how to keep E, Esc, number keys and the drop key from reaching the vanilla
+screen while the panel has the keyboard. Variant A (maintainer 2026-10-12): a
+centered window near the top (result, one restatement line, 3 history
+lines, older ones through Up/Down); when it opens over a container screen
+(second step) it sits left of that window so it does not cover it. Text
+editing comes from L-172, so L-172 goes first. Spec complete; Ready
+(strong model) once L-172 is in.
+Built 2026-10-13 (`e664562`, `bef8059`): variant A, the sidebar item
+"Calculator" (opens it; Esc returns), checked in game (VALIDATION-LOG).
+Maintainer after use: the hints are too small and cut off; copying only the
+value is not enough (the line and the chest amount too); the history lists
+newest first while Up goes back, which reads upside down; only three lines
+are visible; with the chest-side placement moot, the panel can be larger.
+Second mockup: [demos/calculator-v2.html](demos/calculator-v2.html).
+Decided (maintainer 2026-10-13, after that mockup): container screens are
+out of scope (the second step is dropped); make an ordinary, easy
+calculator and use as much of the screen as it needs. Layout 2, two
+columns: left the field, the result with its chest amount, copy buttons
+(value / "expression = value" / chest amount; Ctrl+C value, Ctrl+Shift+C
+the line) and buttons: digits, + - * / ( ) ^ % ans, C, backspace, = (Enter),
+a row of st ch lc and x y z, and "fn" switching the digit block to sqrt abs
+floor ceil round min max nether ow ticks secs; buttons insert at the caret.
+Right the history as cards (expression, = value, chest amount), newest at
+the bottom, scrolled, 20 cards for the session only; a click loads a card,
+hovering shows its copy buttons; Up goes up through them. Help behind a ?
+button, with short tips on the buttons. Third mockup:
+[demos/calculator-v3.html](demos/calculator-v3.html).
+Decided (maintainer 2026-10-13, on the third mockup): copying sits beside
+what it copies, each button saying "Copy": "Copy line" by the field
+("20 lc - 1234 = 67,886"), "Copy" by the result (the value) and by the
+chest amount (its text); a note "Copied: ..." follows; history cards show
+the same buttons on hover. The space under the buttons shows coordinates:
+here, and the other dimension's place (Nether: /8 rounded down; Overworld:
+x8; the End: here only); a click inserts a number. No item list, no
+reference table.
+Revised the same day (maintainer, superseding the two points above and
+"fn"): one copy button per result, split: the body copies the value, its
+arrow offers "Copy the line" and "Copy the chests" (history cards show the
+same button on hover). No coordinates block and no variables list; the
+function buttons fill that space on the same page (sqrt abs round floor
+ceil / min max nether ow , / ticks secs pi), so there is no fn switch;
+x y z stay in the row with st ch lc.
+Final layout (maintainer 2026-10-13, calculator-v3.html "B"): one
+six-column grid of equal keys like a scientific calculator: st ch lc x y z
+on top, then sqrt abs ( ) C backspace / round floor 7 8 9 / / ceil min 4 5
+6 * / max ^ 1 2 3 - / nether ow 0 . ans + / ticks secs , pi % =; keys
+grow taller to fill the column. No switch to a plain calculator (add a
+"hide functions" option only if asked).
+
+### L-147 Status Effects HUD
+Done 2026-10-12: built and checked in game locally through `ee84063` (VALIDATION-LOG); beacon effects, Pocket UI and servers left for Pre-release checks.
+Kind: Design, with Research for native data and vanilla HUD visibility.
+Status: imported from the maintainer's notes on 2026-10-12; not implemented.
+Goal: make active effect names, levels and remaining time readable in play
+and movable through the existing HUD Layout Editor.
+- Proposed: replace only vanilla effect HUD drawing with a compact list of
+  vanilla icons, names, levels and M:SS times. An icons-and-time style is an
+  alternative; infinite effects and short-time warning presentation need a
+  design decision. Do not change effect application or time progression.
+- Reuse the editor's anchors, dragging, scale, background, shadow and saved
+  layout. Show sample effects when editing without active effects. Append
+  a new HUD element ID; never reorder existing IDs.
+- Research safe local-player effect enumeration, amplifier, remaining ticks
+  and infinite duration, then suppression of only the vanilla effect HUD.
+  `mob_effects_renderer` is an investigation lead, not a verified hook.
+  Leave vanilla visible if data or the replacement path cannot be verified.
+- Open: default switch, initial position, list versus icons, ordering,
+  overflow, long names and refresh behavior on effect renewal. Review a
+  mockup before implementation; keep the first version small.
+- Checks when built: all three languages, GUI scales, Desktop/Pocket UI,
+  editor preview/save, F1, Debug View, inventory screens, renewal/removal,
+  world/dimension exit, resource packs and servers. No runtime evidence yet.
+- 2026-10-12: mockup [demos/status-effects-hud.html](demos/status-effects-hud.html)
+  (A list, B icons with times, C icon-and-time column; backgrounds, position,
+  short-time warning, order, overflow, language) under review.
+- Maintainer 2026-10-12: default position right middle (top right and left
+  middle already hold Lamium HUDs; vanilla shows effects at the right
+  middle). Asked for the settings rows, vanilla HUD suppression and the
+  agent's picks in the mockup; added (A list with a "Show names" child that
+  gives C, hide vanilla icons while on, color-only warning under 10 s except
+  beacon effects, shortest first with infinite last, show all, default off).
+  Maintainer: the picks are fine (decided 2026-10-12). Next: research the
+  local player's effect list (amplifier, remaining ticks, infinite, beacon
+  ambient flag) and how to hide only vanilla's effect icons; then build.
+- Research and first build 2026-10-12 (not checked in game). Data: the
+  local player's `MobEffectsComponent` (id, duration ticks, amplifier,
+  ambient), names from `MobEffect::mDescriptionId` through the game's
+  language, icons from `mIconName` (resolved to `textures/ui/<name>`, where
+  the vanilla pack keeps `*_effect` icons; a missing texture draws no icon).
+  Infinite is assumed to be a negative duration and shows as the infinity
+  sign; whether the client counts the time down between server updates is
+  unverified. Vanilla icons: `HudMobEffectsRenderer::render` (the hud
+  screen's `mob_effects_renderer`) is skipped only in frames where the HUD
+  read the component; not gated (skipping a draw writes nothing). New
+  element `StatusEffects` (appended), right middle 48 below center (under
+  the automation status), card, per-line allowed; `Toggle the Status effects
+  HUD` action appended, unbound. Harmful names in the heart red, running-out
+  times in the warning color. To check: names/levels/times, ∞ glyph in the
+  game font, beacon effects, renewal/removal, vanilla icons gone only while
+  on, inventory screen effects untouched, Pocket UI, editor sample, F1.
+- First check 2026-10-12 (`95a34d5`): names, levels, order, times and the
+  vanilla icons hidden work; no icons drew (the effect's `mIconName` did
+  not resolve to a texture) and the infinity sign is missing from the
+  Japanese font. Changed: icons from a table of the vanilla pack's
+  `textures/ui/<name>_effect` by effect id (instant health/damage and
+  saturation have none), and infinite effects read "Infinite" / "無期限" /
+  "无限". Checked in game 2026-10-12 (`c670147`): icons and the word show.
+- Maintainer: levels looked mixed (V, then 11) and the names-off rows did
+  not line up. Decided 2026-10-12: Arabic numerals (level 1 blank) in a
+  column of their own; columns laid out by width with no separators: icon,
+  name (left), level and time (right-aligned); an unused column takes no
+  room; per-line bands span the table. Checked in game 2026-10-12
+  (`cd738e5`). Then decided: level 1 shows "1" too. Unchecked.
+
+
+### L-150 Arrow-count HUD
+Done 2026-10-12: ammo counts in the Durability HUD, built and checked in game locally through `ee84063` (VALIDATION-LOG); servers left for Pre-release checks.
+Kind: Design (small), then Ready after counting and visibility are agreed.
+Status: imported from the maintainer's notes on 2026-10-12; not implemented.
+Goal: show the arrows available to the player without opening inventory.
+- Proposed: an inventory-wide total, perhaps visible only while holding a
+  bow or crossbow. This is a display feature, not offhand replenishment.
+- Open: ordinary/tipped arrow grouping, offhand and loaded-crossbow contents,
+  visibility condition, and a line in an existing HUD versus a new element.
+  Review overlap with Inventory HUD before choosing presentation.
+- Keep counting bounded; show only client-observed contents. Test the agreed
+  pure counting rules and later verify consumption/refill and HUD behavior.
+- Scope survey (2026-10-12, maintainer asked to consider more than arrows):
+  bows use arrows and tipped arrows (Bedrock has no spectral arrows);
+  crossbows also load firework rockets; rockets boost elytra flight;
+  throwables are their own ammo (snowballs, eggs, ender pearls, wind
+  charges, splash and lingering potions, bottles o' enchanting), where the
+  hotbar shows only the held stack's count; tridents need no ammo. Options
+  under discussion: what to count per held item, and where to show it (the
+  Durability HUD's held-item row, beside the hotbar slot, or a new element).
+- Maintainer 2026-10-12: extend the Durability HUD rather than a new element:
+  with a bow the arrows, with a crossbow arrows and fireworks, with elytra the
+  fireworks. Tipped arrows count with plain arrows (showing them separately
+  is wanted if feasible; a later mockup may settle it).
+- Mockup [demos/durability-ammo.html](demos/durability-ammo.html): ammo on a
+  small line under the weapon row (on the same row it ran into the hotbar at
+  the bottom-left default), tipped arrows as total / total with tipped /
+  per kind, a mark on a loaded crossbow, the elytra row while gliding even
+  with armor rows off. Under review.
+- Decided 2026-10-12 (maintainer): the picks, except the ammo goes on the
+  same row, right of the durability. Total only for tipped arrows, red 0,
+  a mark on a loaded crossbow's icon, the elytra row while gliding even with
+  armor rows off, a "Show ammo" child of Durability HUD (default on). The
+  mockup showed a crossbow row reaching the hotbar at the bottom-left
+  default; keep the ammo text compact and check the overlap when built.
+- Maintainer after checking in game: the real HUD has more room than the
+  mockup; no need to shrink the text. Also asked for a per-line background
+  for the Durability HUD (only card and none so far); built 2026-10-12
+  (band per row, right-aligned on the right side, as the Info HUD).
+  First build: "Per line" could not be chosen (settings normalization still
+  limited Durability to card/none); fixed, with a test that every offered
+  choice survives normalization. Checked in game 2026-10-12: per line works,
+  bands line up on the right edge when moved to the right.
+- Built 2026-10-12: a "Show ammo" child (default on). Bow rows show the
+  inventory-wide arrow total (offhand included, tipped arrows counted with
+  plain ones), crossbow rows arrows and fireworks, elytra rows fireworks; a
+  zero is drawn in the bar's empty red. A loaded crossbow gets its charge as
+  a half-size icon on the lower right of its icon (not counted). The elytra
+  row also shows while gliding with armor rows off (only with ammo on).
+  Counting is pure (`DurabilityHud.h`, tested) and runs over 37 slots only
+  while a row needs it.
+- Checked in game 2026-10-12 (`95a34d5`): counts, crossbow mark and gliding
+  row work. Maintainer: ammo icons looked larger than the tools, the red zero
+  did not match the yellow full used-slot counter, and the gliding elytra
+  row deserves its own switch. Changed: ammo icons at three quarters, zero
+  in the warning color, a "Elytra while gliding" child (default on) instead
+  of tying the gliding row to "Show ammo". Unchecked.
+- Checked 2026-10-12 (`c670147`). Measured on the earlier screenshot, the
+  ammo icons were about 1.2 times the tools though drawn at the same scale:
+  the freshly made icon stacks kept the pickup pop the HUD clears on its
+  copies. Now cleared (also on the crossbow mark) and drawn 1:1, with the
+  same 4-unit gap before the count as the tools. Maintainer: split armor
+  and elytra instead of a gliding row: "Armor" covers helmet, chestplate,
+  leggings, boots; "Elytra" (default on) shows a worn elytra at the chest
+  position. Checked in game 2026-10-12 (`bc3e830`): same size as the tools,
+  the gap, and the separate switches work.
+- Maintainer 2026-10-12: the gap between a crossbow's arrows and fireworks
+  was too wide (8 units); now 6 between kinds, 8 after the durability.
+  Unchecked.
+
+
+### L-120 Entity counts by kind in Debug View
+Done 2026-10-11: built (`75620ed`) and checked in game locally and on a server (VALIDATION-LOG).
+Kind: Design. From the maintainer's notes (2026-10-09); extends L-57.
+Status: built (`75620ed`). Decided 2026-10-11 with the
+mockup [demos/entity-counts.html](demos/entity-counts.html): the breakdown
+is one line under the total (setting, default on); the most common types,
+top 5 by default (off / 5 / 10), close the left column (the maintainer
+preferred the left over the right column), with game names in the game
+standard labels and identifiers without `minecraft:` in the Java F3 style.
+Kinds come from the actor's categories: Player, ItemEntity, Monster, Mob,
+else other. A Java-like pie chart was judged too much for now.
+Keep the `E:` total and optionally break it down without double counting,
+in this order: players, dropped items, hostile, passive, other, so the parts
+add up to `E:`; optionally per identifier (`getTypeName()`, add-on entities
+included). Same source and cadence as the L-57 count (the client's actor
+list for the player's dimension, once a second). Dropped items count
+entities, not stack sizes; block entities are not actors. Open: a separate
+small panel or lines inside Debug View, sorting and how many identifiers.
+
+### L-127 Inventory HUD and slot counter
+Done 2026-10-11: built (`1789bee` to `7906581`) and checked in game by the maintainer (VALIDATION-LOG).
+Kind: Feature; Design done (maintainer 2026-10-10), revised after the first
+in-game use (2026-10-11).
+Status: built (1789bee, 603ca1b); first build checked in game 2026-10-11.
+Design settled 2026-10-11 (mockup version 3); the latest build is unchecked.
+Mockup: [demos/inventory-hud.html](demos/inventory-hud.html) (version 3).
+Two HUD layout elements, each with its own switch (both default off) and a
+toggle hotkey (unbound by default):
+- Inventory grid: the main 27 slots as 9x3 in the vanilla inventory screen's
+  order; a setting adds the hotbar (36) as one more row below a gap.
+  Armor and offhand are not included (equipment has its own display). Every
+  slot has a faint frame around the whole 18-unit cell, clear of the icon
+  (look D; a frame on the icon's edge felt cramped); empty slots show only
+  that. Items use the shared
+  vanilla-like icon path (`inspection/render/ItemIcon`) with stack counts,
+  durability bars and glint; the shield glint is still missing (L-91).
+- Used slots (使用中の枠, 已用格子): a separate small element showing
+  used/total such as "13/36", in the palette's warning color when full. The
+  total shows the counted range and makes the purpose plain (chosen over a
+  free count, 2026-10-11). It works with the grid off.
+- Size: one slot is 18 units like the hotbar at 100 %; the layout editor's
+  75-150 % scale applies. Backgrounds: card / none (per line looked the same
+  and was dropped, 2026-10-11).
+- Shown whenever switched on, hidden while any screen is open.
+- Default position: bottom right, the used-slot counter in the corner and the grid
+  just above it (chosen in game 2026-10-11; clear of the hotbar).
+- Hotbar: one "include the hotbar" switch per element; the grid shows the
+  main 27 by default, the counter counts all 36 (decided 2026-10-11).
+
 ### L-95 Fake Offhand beyond block placement
 Kind: Research (strong model). Resumed by the maintainer 2026-10-06.
 Closed 2026-10-07 by the maintainer after the property-based eligibility,
@@ -2020,6 +3999,396 @@ https://github.com/maruohon/tweakeroo/blob/ornithe/1.12.2/src/main/java/tweakero
 
 ## Research
 
+### L-166 Villager trade helpers: part 1
+Done 2026-10-13: `0193c02` implements the Shift + right-click row trigger;
+`481dc7d` prevents native refill from dropping existing ingredient overflow.
+The normal build passes local/BDS trading, sold-out/material stops, full
+inventory, two-input enchanted books, settings-off, controlled response delay,
+focus/close interruption and re-entry observations. A delayed partial run
+stays stopped through a Nether round trip. Build and pure/native tests pass.
+Evidence: VALIDATION-LOG; contract: [TRADE-HELPERS.md](TRADE-HELPERS.md).
+No release selected. Network RTT/loss, exact stop-phase isolation, forced
+world exit during a pending response, price changes and other servers stay
+in pre-release checks. Optional part 2 remains undecided in BACKLOG.
+
+Earlier backlog checkpoint retained below; its pending status is superseded
+by this completion record and current VALIDATION coverage.
+
+Kind: Research (strong model) for part 1; Design for optional follow-ups.
+Imported from the maintainer's notes (2026-09-25) on 2026-10-12.
+Status 2026-10-13: after the initial diagnostic checkpoint, the maintainer
+authorized agent Computer Use for runtime checks and completing part 1.
+The vanilla request path and predicted client offer uses are observed locally;
+the one-at-a-time implementation and its Shift + right-click trigger
+(remapped at the row's input component) are locally verified. Normal BDS
+`481dc7d` buys one axe with plain right click, then the remaining 11 with
+Shift + right click; reopening preserves sold-out state. The input-return
+preflight fixes full-inventory ingredient drops: the repeated gesture leaves
+both stacks unchanged and no dropped items. Settings-off keeps modified row
+clicks inert; a two-input book offer produces eight enchanted books, consumes
+both costs exactly and stops when ordinary books run out. Delayed responses
+and interruptions remain; L-166 is not complete.
+Completion requires matching request acknowledgments and inventory deltas,
+with server offer state checked by reopening on BDS. Research and checklist:
+[TRADE-HELPERS.md](TRADE-HELPERS.md). Part 2 remains undecided; no release.
+Builds on L-129 (every trader level shown); separate from L-154's inventory
+gestures.
+Goal: fewer clicks for repeated trades in the vanilla trade screen.
+Agent's proposal (not decided):
+1. Trade repeatedly: a modifier click on a trade in the list (gesture open,
+   below) trades it as many times as allowed: until the offer is sold out
+   (uses reach max uses), the inputs in the inventory run out, the output
+   no longer fits, or a limit. Each round goes through vanilla's own trade
+   request (the server-side trade request already carries a craft count,
+   `CraftHandlerTrade::mNumCrafts`), Lamium does not build trade
+   transactions, and the next round starts only after the inventory and the
+   offer's uses changed on authoritative state. Locked trades (L-129) are
+   never traded. The output is never dropped: stop when it would not fit.
+2. Later, only if wanted: remember a favourite trade per profession and
+   select it when the screen opens; show the remaining uses before an offer
+   sells out.
+Out of scope: trading with several villagers at once, moving villagers,
+restock timers, anything that changes prices.
+Research entry: `Trade2ScreenController` (`_onContainerSlotPressed`, the
+`TradeItemCollections`, `_getBaseItemCountForTrade`), `Trade2ContainerManagerModel`,
+`UpdateTradePacket` after each trade (does `uses` update, how fast).
+Validation: local world and BDS, with latency; sold-out mid-run, full
+inventory, closing the screen mid-run, two-input trades, enchanted books.
+Decided (maintainer 2026-10-12, trigger revised 2026-10-13): Shift + right click
+on a trade row trades it as often as allowed; left click and plain right click
+stay vanilla (Shift + right click on a row does nothing in vanilla); default on.
+Open (maintainer): whether part 2 is wanted at all.
+
+### L-164 Connected Textures: one quad per face with generated sprites
+Done 2026-10-13: every connected face is one quad with a sprite generated into the terrain atlas, with texture sets for Vibrant Visuals (`028b1ed`, `6274b53`); split cells and the pane stretch removed; checked in game.
+Kind: Research (strong model), then a rebuild of L-96's method layer.
+Raised by the maintainer 2026-10-12: the per-block fixes keep running into
+the same dark shading (L-133 panes, L-156 bookshelves under Vibrant
+Visuals); should Lamium take a general connected-texture design instead
+(the maintainer referred to Continuity for Java)?
+Finding: every dark result so far appears only where Lamium splits one face
+into several quads (split cells for bookshelves and sandstone, split panes).
+Unsplit faces never showed it. Four pane rounds could not find which value
+the renderer interpolates across the extra vertices, and the cause sits in
+render code whose inputs the SDK does not show.
+What a general design changes: the face keeps vanilla's single quad and
+only its texture changes, to a sprite chosen from the neighbor mask. That
+removes the split as a class of problem instead of chasing each case, and
+makes blocks a matter of rule data. What Lamium does not take over: reading
+other connected-texture formats from resource packs (Bedrock packs do not
+carry them; a large scope with no current demand).
+Proposal (agent, 2026-10-12; adopt after the spike):
+1. Sprites generated from the loaded texture, not shipped: at atlas build,
+   each rule texture gets one variant per needed mask, baked with today's
+   look (glass: the border strips refilled from the middle texels; 15 extra
+   variants for the 4-side mask; bookshelves left/right: 3; sandstone top:
+   1). Resource-pack textures are used automatically and no game texture is
+   redistributed. The terrain atlas already supports images made at build
+   time (`TextureAtlas::mRuntimeImageGenerators`,
+   `RuntimeImageGeneratorInfo` with a generator callback); atlas names
+   resolve through `BlockGraphics::getTextureUVCoordinateSet`.
+2. Tessellation: the face hooks pass the variant's UV set to the original
+   face call; no extra quads. Panes use the same variants for their glass
+   faces, which also replaces the one-texel stretch.
+3. Pure rule table (`tests/`): block -> texture slots, connection predicate,
+   method (4-side mask, horizontal, vertical, top only; the 47-tile mask
+   with inner corners only if a block needs it), border widths and fill
+   sources. Adding a block is a table row.
+4. Variants exist whenever the game version is verified, so the switch
+   still only rebuilds chunks. Large textures (above 64 px) skip
+   generation and draw vanilla, to bound atlas memory.
+Spike (stop and report after two failed rounds): register one generated
+sprite for plain glass, draw a glass face with it, and check normal and
+Vibrant Visuals, a resource pack, a resource reload, and the game's mips.
+Vibrant Visuals also needs the texture set (normal/MER maps) of a variant;
+find whether `PBRTextureDataManager` / `TextureAtlasItemTextureSetTranslation`
+gives generated sprites one, or the variant must copy the base texture's.
+Spike status (2026-10-12, VALIDATION-LOG): a generated sprite works for
+plain glass, also under Vibrant Visuals (round 3, `67e9f26`). How: add a
+`texture_data` entry in `TextureAtlas::_createAtlas` for the terrain atlas,
+answer `ResourcePackManager::getPackStackIndexOfResource` for the sprite's
+image extensions with the base texture's pack, and serve a PNG from
+`load(ResourceLocationPair, ..., extensions)`; the texture group cache is
+not used by the atlas. Next: a bookshelf side variant under Vibrant
+Visuals (PBR texture sets, and the L-156 question).
+Round 4 (`d126608`, 2026-10-12): bookshelf sides joined on both sides drawn
+with a sprite show no dark bands under Vibrant Visuals, while a one-sided
+(split) join next to them does: the split is the trigger of L-156. The
+sprites carry no texture set (the bases have one in pack 13) and no
+surface difference was seen. Spike answered: adopt the generated-sprite
+method. A real build should give each sprite a texture set derived from
+the base's (color pointing at the sprite, MER/normal maps baked the same
+way) so blocks with stronger PBR maps match.
+If generated sprites cannot be added safely: keep split cells only where
+the dark shading has not been seen, and use the stretch under Vibrant
+Visuals (choice for the maintainer then).
+After it holds: move glass, panes, bookshelves and sandstone over, delete
+the split-cell code, and recheck L-133 and L-156 against it before closing
+them.
+
+### L-133 Connected Textures: split glass panes without dark halves
+Done 2026-10-13 by L-164: panes keep vanilla's quads and show glass sprites; no dark half, no stretch (checked in game).
+Kind: Research. Opened 2026-10-11 from L-96. Linked: L-156 (split
+bookshelves dark under Vibrant Visuals with the same look, 2026-10-12) and
+L-164 (one quad per face with generated sprites, which avoids the split).
+Status: parked 2026-10-11 after four trial rounds; panes ship with the stretch.
+Panes draw joined glass by moving the texture inward (a 1-texel stretch,
+`4ef3d51`); glass blocks, bookshelves and sandstone draw split at the
+texture's scale. Split panes (`17cedc6`..`20b9059`) looked right up close but
+translucent panes blended dark on one half of each block depending on the
+view: facing south at an east-west pane the west half, facing east at a
+north-south pane the south half; facing north or west nothing. Night Vision
+hid it. Ruled out with dumps and trial builds: the split values (positions,
+UVs, colors, light, normals, facing), redrawing the pane versus appending
+copies to the tessellator, and giving every cell its face's quad info
+(center included). The likely cause is the translucent face sorting and
+culling (`RenderChunkSorter::sortAndCullFaces`, `FaceInfo` with a `reverse`
+bit, `RenderChunkGeometry` face sorting metadata); its inputs are not
+visible in the SDK headers. Stained glass blocks, also split and blended,
+show nothing. A stained pane cross shows seams to its arms even with the
+feature off: vanilla, not Lamium's.
+Trials 2026-10-11 (`99a3089`..`84f4335`, split panes restored, then reverted):
+the dark half is the arm whose glass is cut at a joined edge (west arm of
+east-west panes, south arm of north-south ones). Reversing the quads inside
+the appended copies, keeping the largest cell in the first draw's place, and
+showing every cell its own texels all stayed dark; appended copies folded to
+a point with unsplit glass did not. Every quad has `facing` 6 and `twoFace`
+0. Up close the dark band is a smooth gradient, darkest at the seam about
+two texels from the joined edge, as if a value interpolated from the seam
+vertices. So splitting a pane's glass face into quads is the trigger, not
+the copies, their order, sort data or texels; the vertex data Lamium writes
+matches vanilla. Hypothesis, unchecked: the game derives per-vertex lighting
+from vertex positions after tessellation (the `uv1` values are near 0 in
+daylight), and the new mid-face vertices get dark values. Parked: the gain
+over the one-texel stretch is small.
+
+### L-148 Hide the Nether portal overlay
+Done 2026-10-12: Hide effects child "Nether portal screen" (default on), the portal effect time set back to 0 after each tick (`cd47a29`); checked in game.
+Kind: Research, then Design/Ready once the drawing route is established.
+Status: imported from the maintainer's notes on 2026-10-12; not implemented.
+Goal: optionally hide the purple screen overlay without changing portal
+contact, the time in the portal or dimension transfer.
+- Proposed home: a child of Hide effects, independent of L-149. Its proposed
+  default is off; settle this explicitly against the existing rule that
+  Hide effects children default selected before implementation.
+- Identify the purple overlay's draw route; existing nausea hiding does not
+  establish portal support. L-79's unresolved frame routes are a caution.
+- Leave distortion control to vanilla accessibility settings unless a
+  separate need is established. Do not change portal or server state.
+- Checks when built: hiding/restoration with child and master, other effects,
+  portal entry/exit and dimension transitions, supported graphics modes and
+  resource packs. Unsupported routes retain vanilla drawing.
+- Built 2026-10-12: Hide effects child "Nether portal screen" (default on,
+  key unbound); after `LocalPlayer::normalTick` the portal effect time and its
+  previous value go back to 0 (gate "Hide effects (portal screen)"). In-game
+  check of the normal build pending.
+- Leads (SDK, 2026-10-12, unverified): `LocalPlayer::mPortalEffectTime` /
+  `mOPortalEffectTime` (likely the overlay's strength), `mEnablePortalEffect`,
+  and `LocalPlayer::handleInsidePortal`. Trace build `--portal_trace=y`
+  (`src/features/visuals/PortalTrace.cpp`) logs them per tick with the top
+  screen name; awaiting a run through a portal.
+- Trace run 2026-10-12 (survival, local): touching the portal,
+  `handleInsidePortal` sets `mEnablePortalEffect`; from the next
+  `normalTick` the effect time rises 0.0125 per tick (0 to 1 in about 4 s,
+  transfer at 1.0), and in that same tick the open inventory closed
+  (inventory_screen -> hud_screen). Next trace build: the effect time is set
+  back to 0 after every tick, to see whether the overlay goes, the inventory
+  stays open and the transfer still happens.
+- Result 2026-10-12 (maintainer, survival): with the effect time zeroed after
+  every tick the purple overlay is gone and the transfer works as before; the
+  inventory is still closed on entry and cannot be opened inside. So hiding
+  the overlay is feasible this way (a client-only value; writing it needs a
+  version gate). The closing is separate (L-149).
+
+### L-149 Allow inventory access in portals
+Parked 2026-10-12 (maintainer) after research: keeping an inventory opened before entering works (answer `Actor::isInsidePortal` false for the local player; local and BDS), but opening one inside cannot: the client sends the same `InteractPacket` in and out of a portal and the server does not open it inside. The maintainer did not want the keep-open-only version. Idea raised the same day: a Lamium-drawn inventory instead of the vanilla screen (not started; see the discussion in L-132/L-149 notes).
+Kind: Research, with Design if screen behavior choices remain.
+Status: imported from the maintainer's notes on 2026-10-12; not implemented.
+Goal: open and use the ordinary inventory while inside a Nether portal.
+- First reproduce the current restriction and distinguish input suppression,
+  refusal to open, forced closing and server constraints. Screen tracking
+  and inventory controllers are leads, not proof of feasibility.
+- Proposed: an independent Inventory setting, default off. Never fake or
+  alter portal contact, transfer state or packets to bypass server authority.
+  Accept only a local client UI/input change that preserves game semantics.
+- On dimension transfer safely close/discard the old screen and outstanding
+  operations. Do not leave ghost items or stale controller state.
+- Checks when built: local worlds and BDS, opening and keeping the screen,
+  authoritative item movement/swaps/crafting, before/during transfer,
+  return through the portal, disable and restoration after leaving it.
+  Defer if feasibility requires deep invasive hooks or state divergence.
+- 2026-10-12: the L-148 portal trace also logs the top screen around
+  `handleInsidePortal`, to see where and when the inventory is closed.
+- The inventory closed after `handleInsidePortal` returned (still open there)
+  and before the next `normalTick`; zeroing the effect time did not stop it.
+  Next trace: `mEnablePortalEffect` cleared right after `handleInsidePortal`.
+- Result (maintainer, 2026-10-12): still closed on entry and refused inside;
+  transfer time unchanged. At the close the log showed the flag off and
+  "inside" false, so neither drives it. Next trace: `Player::
+  canOpenContainerScreen` logged when it refuses and answered yes for the
+  local player (a likely check for both opening and closing).
+- Result: it was never called in a portal; still closed and refused. Next
+  trace: `SceneStack::_schedulePopScreen` with the caller stack (offsets in
+  the game module, beside the offsets of candidate functions), the
+  inventory key handler and `LocalPlayer::openInventory`.
+- Result (2026-10-12): in a portal the inventory key handler runs but never
+  reaches `LocalPlayer::openInventory` (outside it does), so the refusal is
+  inside `ClientInputCallbacks::handleInventoryButtonPress`. The close comes
+  from a UI tick path (`_schedulePopScreen` via game offsets +22415a0,
+  +4df8519, +4e17616), not from player code; a chat close took another path.
+  Next trace names those offsets against 143 candidate functions (every
+  screen controller `$tick`, `ClientInputCallbacks`, `LocalPlayer`).
+- Naming failed twice: Lamium's game-function pointers and LeviLamina's
+  symbol lookup both return stubs, not game addresses. Next trace follows
+  the stubs and also tries a fix (trace builds only): when the inventory
+  key changes nothing near a portal, call `LocalPlayer::openInventory`; and
+  near a portal refuse `_schedulePopScreen` on the inventory screen unless
+  Esc or E is down.
+- Result (maintainer, 2026-10-12): with the close refused the inventory
+  stays open in the portal and Esc/E still close it, but items cannot be
+  moved; E opened it for an instant and it closed again (the opening E press
+  still counted as the player closing); on transfer it closed; no items lost
+  or duplicated. Naming still failed (only stubs resolved). Next trace: the
+  container model's `isValid` (base and crafting) logged and answered valid
+  near a portal, the likely check behind both the close and the refused
+  moves; E ignored as a close for 500 ms after Lamium opens the screen.
+- Result: the screen stays open (E and entry) and Esc/E close it, but items
+  and the 2x2 crafting still do not move; the model's `isValid` never said
+  no; 466 closes were refused, i.e. the screen kept asking to close every
+  frame. Auto Elytra swapped items in the portal, so the server accepts
+  moves there: the block is client UI. Next trace: the screens' own
+  `_isStillValid` (container and crafting controllers), answered valid near
+  a portal.
+- Result: answering `CraftingScreenController::_isStillValid` valid keeps the
+  inventory open in the portal and items and 2x2 crafting work when it was
+  opened before entering; opened inside with Lamium's direct
+  `openInventory` it stays but items do not move (the server likely never
+  opened it). Read from the game file via the open screen's vtable (slot
+  39, rva 4e18b20): it says no when the player's `InsideBlockComponent`
+  block is one of two block types (rva 1a1fd40; likely Nether and End
+  portal, likely `Actor::isInsidePortal`). Next trace: `Actor::isInsidePortal`
+  answered false for the local player on the client tick thread, with the
+  other workarounds off, to see whether the vanilla E key then opens a
+  usable inventory that stays open.
+- Result (maintainer, 2026-10-12): with only `isInsidePortal` answered
+  false, an inventory opened before entering stays open in the portal and
+  items and 2x2 crafting work; Esc/E close it; transfer still works and
+  closes it; nothing lost or duplicated. The E key inside still opens
+  nothing. Hypothesis: the server opens the inventory (the client's
+  `openInventory` came from another tick path, not the key handler) and
+  refuses while its copy of the player is in the portal. Next trace logs
+  what the client sends after the key, inside and outside a portal.
+
+### L-96 Connected textures, starting with glass
+Done 2026-10-11: glass, glass panes, bookshelves and sandstone behind the
+Experimental "Connected Textures" switch, checked in game (VALIDATION-LOG).
+Not checked: Vibrant Visuals, resource packs, servers, the unverified-version
+fallback (VALIDATION.md).
+Kind: Research **(strong model)** first, then Design for the settings.
+Taken up 2026-10-05 after a public request.
+Status: open. Steps 1-4 done for glass blocks (2026-10-11, `8c3d21a`,
+checked in game): the "Connected Textures" switch (つながるテクスチャ,
+visuals.connectedTextures, default off, Experimental, toggle key) trims clear,
+same-color stained and tinted glass, rebuilds loaded chunks on toggle and
+stays vanilla on an unverified game executable. Step 5 done for glass panes
+(2026-10-11, `3e76e7a`, checked in game): panes share one glass texture
+between the center post and the arms, so they are adjusted per part on the
+mesh vanilla built (`tessellateDoubleThinFenceInWorld`; the glass rectangle
+from `BlockGraphics::getTexture` slot 0, the thin edge is slot 5): a glass
+face's side border moves inward where its block edge touches the same pane;
+its top (bottom) border and the thin top (bottom) face go where the pane above
+(below) has the same part (center post, or the arm in that direction, from
+`ThinFenceBlock::addAABBs`; an L's boxes leave out the drawn center). Trimming
+the shared texture, and folding by collision boxes, failed in game first
+(trial rounds 1-9, `52fb6eb`..`473b4f2`).
+Bookshelves and sandstone, and the split method (2026-10-11, maintainer:
+connected bookshelves lose the divider between side-by-side shelves, stacked
+sandstone loses the band between blocks). Cropping stretched the texture,
+which showed while a block was placed and looked wrong on sandstone, so every
+block rule now draws split (`ec5aa69`..`a339a6d`): the face is drawn once per
+cell and each copy reshaped, the dropped border becoming a strip of other
+texels at the texture's own scale, with the face's corner color and light
+interpolated per cell. Rules: glass drops 2 texels on joined sides filled
+from the middle (texels 7-8) because a 1-texel strip next to the frame let
+far, mipmapped glass show the frame again; bookshelves drop the 1-texel side
+column, filled from the column next to it (books stay aligned up close);
+sandstone and red sandstone drop the 4-texel top band under another one,
+filled from the middle rock (rows 8-11). Panes were moved to the split method too
+(`17cedc6`): a joined pane is drawn once more per extra cell its most-split
+face needs and each copy reshaped, unused copies folded. More blocks only on
+request. Moved ahead of the Schematic follow-ups and the
+restriction redesign (maintainer 2026-10-11: higher demand).
+What it is for: blocks next to a block of the same kind draw as one surface,
+without the border line between them. Start with glass, then stained glass of
+the same color, then glass panes; panes joined to blocks, different colors
+and border options come later.
+Approach to test (a feasibility hint is recorded in PROVENANCE.md): change how
+chunk faces are tessellated, look at the neighbor through the block source and
+crop the texture coordinates at the touching edge; changing the setting marks
+chunks dirty so they rebuild. The schematic ghosts already drive
+`BlockTessellator::tessellateInWorld`, `Tessellator` and render materials, so
+the feasibility is high; the difference is that this changes vanilla's chunk
+meshes.
+Constraints:
+- This changes vanilla chunk tessellation, which is more version-sensitive
+  than the schematic ghosts' private tessellator. Capability-gated and fail
+  open: on an unverified game version do nothing.
+- Bound the neighbor lookups; a toggle rebuilds chunks.
+- Glass is the research target. Resource-pack-defined tile sets are not
+  promised. Widen beyond glass only after surveying which vanilla blocks have
+  an inner border line.
+Layering (proposed 2026-10-07, from the maintainer's notes): the first
+user-visible feature stays glass, but the code is split so it can grow
+without a glass-only hack that mixes rendering and connection rules.
+1. Render backend: from `BlockTessellator` / `Tessellator`, get the block,
+   position, face, original texture and block source. Everything
+   version-sensitive stays here.
+2. Connection core, pure and tested (`tests/`): does this neighbor connect
+   (first: the same block; stained glass only with the same color), and the
+   face-neighbor mask in the face's plane (up/down/left/right, and the four
+   corners for later methods).
+3. Method: only "edge trim" at first, cropping the border UVs on connected
+   sides of the loaded (vanilla or resource-pack) texture. No extra
+   textures and no properties parser.
+4. Later methods (a 47-tile set chosen from the 8-neighbor mask, horizontal,
+   vertical) only when a block that needs another sprite is wanted
+   (bookshelf, sandstone). No compatibility with other connected-texture
+   formats is claimed until it is built.
+5. Pane geometry and hidden inner faces are a separate backend from the
+   texture choice; do not force them into the cube-face path.
+Settings name: "Connected Textures", with glass as its first target. No
+rule table or resource-pack format is published at first.
+Order:
+1. Research spike: on one face of plain glass, get block, position, face,
+   texture and block source reliably from the tessellator.
+2. Connection core and edge trim as pure logic with tests.
+3. Glass blocks: clear glass, then stained glass (same color only by
+   default; different colors connecting is not the default).
+4. Lifecycle: block updates, chunk and subchunk borders, chunk load, setting
+   on/off, resource-pack reload, world and dimension change (the setting
+   marks render chunks dirty).
+5. Glass panes through their own tessellation backend.
+6. Optional 47-tile spike after glass is stable: the pure 8-neighbor to
+   47-pattern mapping and a replacement-texture path, to decide whether
+   Lamium should grow a general connected-texture engine.
+Spike result (2026-10-11, `xmake f --ctm_trace=y`,
+`src/features/visuals/ConnectedTexturesTrace.cpp`, `b3d93c7`): hooking
+`BlockTessellator::tessellateBlockInWorld` (world `BlockPos`, `mRegion`, the
+block) and the six face calls `tessellateFaceDown/FaceUp/North/South/West/East`
+(the face's `TextureUVCoordinateSet`, `p` = the world position) and passing a
+copy of the UV set with one texel cut on each side whose in-plane neighbor is
+the same block type removes the inner lines of glass and same-color stained
+glass; the outer frame stays and different colors keep their line. The
+in-plane side guesses held on all six faces (seen from outside: north left
++X, south left -X, east left +Z, west left -Z, top of side faces +Y; up face
+left -X top -Z, down face left -X top +Z). About 50x50 glass showed no
+slowdown. Not yet: a setting and chunk rebuild on toggle, panes, Vibrant
+Visuals, resource packs with other border widths, servers.
+Research output: the function(s) that can be intercepted on this game
+version, whether the crop works for glass and panes, the cost on a large
+view distance, and how it behaves with Vibrant Visuals / Deferred rendering.
+
+
 ### L-37 FreeCamera sees caves from underground (completed follow-up)
 
 Kind: Research. Reopened 2026-09-30; completed 2026-10-07 on `d56b81e`.
@@ -2695,6 +5064,190 @@ an in-game dirt/wood/stone hold check. If not, trace the attack/retarget path
 rather than polling arbitrary world state.
 
 ## Refactor
+
+### L-158 Prevent missing and inconsistent settings/action labels
+Done 2026-10-12: shared label resolution for search, toasts and the paused notice, catalog-wide label tests (`be0b1f1`); checked in game. Not done: shared references for repeated feature names in toggle labels (needs a wording decision; open a new item if wanted).
+Kind: Refactor (strong model), with Design for any user-visible wording change.
+Status: first pass built 2026-10-12, in-game check pending. Audit: action
+labels resolve through `actionTranslationKey` (SettingsRows.h); settings search
+built its own `key.Lamium.<id>` keys instead, so a child row's shown label
+(e.g. "Increase speed") did not match; toggle toasts and the paused-features
+notice built feature keys by hand. Done: search uses the shared resolver (child
+label plus the Hotkeys name as an alias); `featureNameKey` and `toggleToastKey`
+serve toasts and the notice; SettingsRowsTests checks from the catalogs, in all
+three languages, every section, feature name/description, action label (both
+contexts), toggle toast name, paused feature name and every choice value. No
+wording changed. Left: the shared-reference idea for repeated feature names in
+toggle labels (not started; needs a wording decision first).
+Keep separate feature and action labels: a feature name and commands such as
+increase speed, rotate or open a view have different purposes. Do not merge
+all labels or mechanically construct every action name from the feature name.
+The goal is to prevent missing required translations and accidental wording
+drift between settings, search results and Hotkeys, while retaining deliberate
+context differences (for example a short child label versus a standalone name).
+- Audit the feature/option/action metadata and every place that resolves their
+  names. Use a shared name-resolution policy for displayed and searchable
+  labels, with explicit context where needed. Search may still include IDs,
+  descriptions and other aliases; those are not replacements for display names.
+- Check required keys from the registered UI/action catalogs in English,
+  Japanese and Simplified Chinese, rather than checking only entries already
+  present in the translation tables. Cover active actions, primary actions and
+  action labels attached to option rows; explicitly exclude retired actions.
+- Add regression coverage that fails when a new active action lacks its label
+  and exercises the real label resolution in settings/search/Hotkeys. Preserve
+  intended context-specific names rather than requiring all strings to match.
+- Consider reuse or shared references for repeated feature names in simple
+  toggle labels, without assuming one grammatical template works in all three
+  languages. Choose the implementation after the audit; avoid a broad rewrite.
+- Preserve saved action IDs, settings format and binding behavior. Fix L-155
+  independently; this later work must not delay the immediate missing-key fix.
+Acceptance: a missing required label fails automated checks, supported UI
+paths do not show raw keys, and shared naming changes reach search/display
+consistently. Validate any changed wording in all three languages in game.
+
+### L-137 Game update readiness (with 0.2.0)
+Done 2026-10-11: inventory and playbook (GAME-UPDATES.md), nine gates, the unverified test build, release check and in-game notices of paused features; passed the 0.2.0 regression checks and the outside reviews (2026-10-11), the fail-open build included. Each later game version runs the playbook.
+Kind: Refactor, then Research for each new game version. Chosen by the
+maintainer 2026-10-11 as part of the 0.2.0 clean-up; scope corrected the
+same day.
+Lamium depends on the game through hooks (205 in 45 files, 2026-10-11),
+game structures it reads or writes by member, and game behavior. 88 of 308
+source files include game headers; GhostRenderer.cpp alone includes 70.
+What actually breaks on an update (checked 2026-10-11):
+- Member layouts come from the SDK headers, which are regenerated for each
+  game version, and only one place hard-codes a layout
+  (`StackClassifier.cpp`, the shulker box item vtable). Rebuilding against
+  the new SDK follows layout changes; removed or retyped members fail to
+  compile. An old Lamium on a new game is unlikely: `tooth.json` pins
+  LeviLamina `26.51.*`, and LeviLamina itself is tied to a game version.
+- What a rebuild cannot catch: changed meaning (vertex data whose fields
+  mean something else, packets handled differently, render behavior such as
+  the Vibrant Visuals fog), SDK header mistakes, and a different game
+  executable under the same loader.
+`verifiedGameExecutable()` gates four render paths today.
+Status (2026-10-11): the required part is built; its in-game check (the
+fail-open build) is in the 0.2.0 regression checks. Inventory and
+playbook: [GAME-UPDATES.md](GAME-UPDATES.md), checked by
+`scripts/Check-GameInventory.ps1` in CI. Gates: `versionSensitiveAllowed()`
+(`app/Versions.h`, `44f48a8`) on nine capabilities; test build
+`--unverified_game=y`.
+Discoverability (2026-10-11): the SDK lines in `xmake.lua` and
+`packages/levilamina-client-sdk.lua`, the `verifiedGame` constant and
+AGENTS.md rule 8 point to the playbook; `New-ReleaseArchive.ps1` warns when
+the SDK's game version differs from `verifiedGame` and refuses a tag build.
+Players see the pause (maintainer chose the agent's proposal 2026-10-11,
+`1da4316`): toggle toasts and settings feature rows add "paused" or
+"partly paused", the settings header shows "Some features paused" in the
+warning color with the reason in its tooltip, and the first HUD frame after
+joining a world shows an 8-second toast naming the paused features in use.
+Nothing shows on the verified game. Passed on the unverified build of
+`ddac26c` (2026-10-11; the join toast wraps, only the note is yellow).
+Required for 0.2.0:
+1. Inventory, kept next to the code (script-checked where possible): per
+   feature, its hooks and the game meanings it relies on (vertex fields,
+   packet order, render state), marking the ones a rebuild cannot catch.
+2. Playbook for a new Minecraft or LeviLamina version: SDK bump, build,
+   inventory-driven in-game checks, widening the verified version
+   (DISTRIBUTION.md or a new doc).
+3. Gate the risky operations, not whole features: a path that writes game
+   memory or relies on an unchecked meaning checks the verified version at
+   that path and fails open there, so safe parts of the same feature keep
+   working.
+4. A way to test the gates without an unsupported game: a build option
+   (like `--feature_skip`) that makes the version check fail, so the
+   fail-open branches can be run and checked in game.
+Later, per game version: run the playbook and extend the gates as the
+inventory shows.
+L-134 and L-136 help by separating game glue from pure logic, so an update
+touches the glue and the tests still vouch for the logic.
+
+### L-138 Shared face drawing for cell overlays (0.2.0, L-111 A)
+Done 2026-10-11: CellSurface/CellMesh for Shapes, the breaking region and the save area (`261c0e4`..`8a4c71a`); passed the 0.2.0 regression checks and the outside reviews (2026-10-11).
+Kind: Refactor **(strong model)**. Step 2 of the 0.2.0 order (L-111).
+Status: built 2026-10-11, in-game check pending (0.2.0 regression checks).
+`overlay/CellSurface.h` (pure, tested) builds the faces on the cells' own
+planes and the outline; `overlay/CellMesh` uploads and draws them with the
+face material, the outline coloring (vertex or shader color) and the pull.
+One feature per commit: Shapes (`d4a83d1`), the breaking region
+(`dd1f58c`), the schematic save area (`8a4c71a`; corners now on the block's
+planes with a nearer pull than its outline, `depth::markPull`).
+`overlay/Depth.h` already holds the depth rules every face overlay follows
+(L-110). Add one builder for the faces and outline of a set of cells that
+Shapes, the breaking restriction and the schematic area frame call.
+Shares: face and outline geometry for cells, the depth/inset rules, color
+and alpha handling. Does not share: the schematic ghost blocks (real block
+shapes, liquids, translucency, neighbor-dependent meshes stay in the
+schematic renderer), per-feature colors and when each overlay is shown.
+Keeps: each overlay's current look (no z-fighting, no flicker, no inset),
+per-feature on/off and fail-open. One feature moves per commit, with an
+in-game check of overlapping Shapes, restriction and schematic frames.
+
+### L-136 Split GhostRenderer.cpp by responsibility (with 0.2.0)
+Done 2026-10-11: split (`1a2c231`, `3ec2498`); passed the 0.2.0 regression checks and the outside reviews (2026-10-11).
+Kind: Refactor **(strong model)**. Chosen by the maintainer 2026-10-11 after
+an outside size review (SettingsScreen.cpp, GhostRenderer.cpp, WorldMap.cpp,
+InfoHud.cpp, Translations.h); planned with L-134 and L-111.
+Status: built 2026-10-11, in-game check pending (0.2.0 regression checks).
+`1a2c231`: GhostRenderer.cpp (the pass, 668 lines), GhostMesh, GhostVerify,
+AreaSave, GhostMarks, GhostBlocks, GhostActors, ResolvedPlacement; the pass
+owns the sections and resolved placements and hands them to the parts.
+`3ec2498`: classification (`classifyReading`, Verify.h), face culling
+(`dropFace`), back faces and blend order (`facesAway`, `farToNear`,
+GhostFaces.h) in tested headers. WorldMap.cpp and InfoHud.cpp were not
+split (the map got its layer model in L-139 instead).
+`src/features/schematic/GhostRenderer.cpp` is 2,792 lines (701 on
+2026-10-05, 1,693 on 2026-10-08) and changed in 107 commits since
+2026-10-01. Despite its name it holds more than drawing: the ghost mesh
+build (neighbors, culling against ghosts, back faces, duplicate quads,
+liquids, layers and quad order), the verification scan and progress
+(cell classification, entity checks, mismatches), the area save (stepped
+save, vanilla load self-check), block entity loading, the in-world drawing
+(selection, placement frames, waiting columns, entities, name tags) and
+the performance report. Split along those lines into files that keep
+behavior unchanged, with the pure parts (classification, culling rules,
+quad ordering) in headers with tests. Each part owns its state, and resource
+creation and release (meshes, scans, saves) keep one clear owner and the
+current timing across world exit and dimension change. Every step is
+checked in game against the L-93 rendering checks (doors, beds, panes, liquids, honey/slime, block
+entities, entity models, large placements' frame rate). WorldMap.cpp
+(~1,240 lines) and InfoHud.cpp (~1,400) are worth a look in the same pass;
+Translations.h is data and stays as it is.
+
+### L-134 Split SettingsScreen.cpp (with 0.2.0)
+Done 2026-10-11: split (`097d32a`, `b612e94`, `22b081a`); passed the 0.2.0 regression checks and the outside reviews (2026-10-11).
+Kind: Refactor. Raised by the maintainer 2026-10-11; planned together with
+L-111 integration and other 0.2.0 clean-up, not before.
+Status: built 2026-10-11, in-game check pending (0.2.0 regression checks).
+Part 1 (`097d32a`): ShapesView and WaypointsView; part 2: SchematicsView
+(`b612e94`), SettingsTableView with Hotkeys and key capture (`22b081a`).
+SettingsScreen.cpp keeps the scene, input queues, prompts, the schematic
+menu and the world map hand-over (1,371 lines). Each view owns its state;
+what the core offers them is ScreenParts.h (footer message, the number
+being typed, navigation, closing, where the player stands); navigation item
+ids are in SettingsNavigation.h; shared list widgets in ListViewWidgets.
+The cut was made by the agent without a separate plan with the
+maintainer (the goal set on 2026-10-11 asked for 0.2.0's required items).
+`src/ui/SettingsScreen.cpp` is 4585 lines (2026-10-11), the largest file by
+far, and changed in 131 commits since 2026-09-01. It mixes the settings rows
+and navigation, key capture and the Hotkeys view, text and number editing,
+the Shapes editor (drafts, swatches, docked rendering), the waypoint list,
+the map cache controls and the version tip. L-73 (BACKLOG-DONE, item D)
+dropped this split on 2026-09-30 at 1,878 lines: the Shapes view and the
+input listeners shared 20+ screen-wide variables, so a file split would only
+have moved text behind a header of shared variables ("split it when the
+screen grows again, after grouping its state first"). Group the state
+first, then split by those parts into files that keep behavior unchanged;
+pure layout and state logic moves into headers with tests where it can
+(AGENTS.md rule 1). Plan the cut with the
+maintainer before moving code: the split should match how L-111 regroups
+features. It runs in two parts (L-111 order): the Shapes view and waypoint
+list state before L-139 map layers, the rest (Hotkeys, the schematic view,
+the plain settings table) after. Each part owns its state and declares what
+others may read; moving the globals into one big context struct passed
+everywhere is not a split (outside review 2026-10-11). In game after each
+part: search, number entry, key binding and capture, shape editing,
+waypoints, HUD layout, Esc/Enter/Tab while editing (the L-73 regression
+area).
 
 Completed refactors are recorded here once their remaining steps are finished.
 

@@ -3,6 +3,7 @@
 #include <array>
 #include <cstdint>
 #include <map>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -23,6 +24,21 @@ struct PaletteBlock {
     // equal keys mean the same block state.
     std::string key() const;
 };
+// The other half of a two-block-tall block (doors, tall plants): the same
+// entry with `upper_block_bit` flipped, and +1 (above) or -1 (below) to
+// reach it. Nothing for other blocks.
+struct OtherHalf {
+    PaletteBlock block;
+    int step = 0;
+};
+inline std::optional<OtherHalf> otherHalf(PaletteBlock const& entry) {
+    std::int64_t upper = 0;
+    auto const* bit = entry.states.find("upper_block_bit");
+    if (!bit || !bit->integer(upper)) return std::nullopt;
+    OtherHalf out{entry, upper ? -1 : 1};
+    out.block.states.set("upper_block_bit", {static_cast<std::int8_t>(upper ? 0 : 1)});
+    return out;
+}
 struct EntityRecord {
     std::string identifier;
     // Relative to the structure's lower north-west corner.
@@ -33,14 +49,17 @@ struct EntityRecord {
 inline constexpr std::int32_t voidCell = -1;
 // Guards against corrupt sizes; far above the vanilla 64x384x64 limit.
 inline constexpr std::uint64_t maxCells = 16ull * 1024 * 1024;
+// What writeStructure writes: int-array layers, as the game's own exports.
+inline constexpr std::int32_t writtenFormatVersion = 2;
 
 struct Structure {
     Size size;
     std::array<int, 3> worldOrigin{};
-    std::int32_t formatVersion = 1;
+    std::int32_t formatVersion = writtenFormatVersion; // as read; writing always uses writtenFormatVersion
     std::vector<PaletteBlock> palette;
     // Palette index per cell, or voidCell. `liquids` is the second layer
-    // (water in a waterlogged block) and is empty when it holds nothing.
+    // (water in a waterlogged block) and is empty when it holds nothing; it
+    // is written only when some cell has one, like the game's exports.
     std::vector<std::int32_t> blocks, liquids;
     std::map<std::int32_t, nbt::Compound> blockEntities; // cell index -> block_entity_data
     std::vector<EntityRecord> entities;

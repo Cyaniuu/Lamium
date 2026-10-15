@@ -31,11 +31,13 @@ struct Settings {
         bool autoAttack = false, autoUse = false;
         bool breaking = false;
         bool edgeGuard = false; // Stop at block edges without sneaking.
+        float edgeMargin = 0.1f; // Blocks the box stays over the block (L-161): safety vs reach.
         bool toolGuard = true; // Swap or stop before a held tool breaks (L-62).
         bool toolGuardStrict = true; // A new press does not mine on with it either.
         bool elytraSwap = false; // Put on an elytra by key or a firework jump (L-70).
         float elytraReturnSeconds = 3; // Time after landing before the chestplate returns.
         bool elytraFireworkJump = true; // A jump holding fireworks puts the elytra on.
+        bool elytraRiptide = true;      // A Riptide trident launch puts the elytra on (L-180).
         interaction::RestrictionMode breakingMode = interaction::RestrictionMode::Plane;
         float breakingBand = 2; // Height band mode: rows from the feet up (L-15).
         interaction::RestrictionMode placementMode = interaction::RestrictionMode::Plane;
@@ -48,13 +50,17 @@ struct Settings {
         int freelookStartPerspective = 1; // First person, rear third, front third.
         bool freeCameraToggle = true;
         bool freeCameraWorldFixed = false;
+        bool freeCameraLeaveOnHit = false; // L-126: any hit, even without damage, ends FreeCamera.
+        int freeCameraHide = 1; // L-191: hidden while flying: 0 nothing, 1 hand, 2 hand and hotbar, 3 whole HUD.
         float freeCameraSpeed = 20.f;
         float magnification = 3.0f;
+        bool zoomWideAngle = false; // L-140: the wheel may go below 1x.
         bool showMagnification = true;
         bool operator==(Camera const&) const = default;
     } camera;
     struct Lighting {
         bool nightVision = false;
+        bool nightVisionEven = true; // L-121: full Brightness while Night Vision is on.
     } lighting;
     struct Inspection {
         bool containerPreviews = true;
@@ -65,9 +71,12 @@ struct Settings {
         bool emptyBundlePreviews = true;
         bool durability = true;
         bool foodValues = true; // Hunger and saturation gain on hovered food (L-64)
+        bool lockedTrades = true; // Every trader level in the trade screen (L-129)
+        bool englishSearch = true; // Recipe and creative search match English names too (L-130)
     } inspection;
     struct Inventory {
         bool sorting = true;
+        bool repeatTrades = true;
         bool offhandSwap = true; // The Swap with offhand key works (L-94)
         bool deathRestore = false; // Put picked-up items back in their death-time slots (L-109, experimental)
         bool deathRestoreAll = false; // Also the main inventory; off: the hotbar, armor and offhand
@@ -80,6 +89,16 @@ struct Settings {
         bool transferWheelStack = true;
         bool transferDragStack = true;
         bool transferDragOne = true;
+        bool transferWheelMatching = true;
+        bool transferWheelAll = true;
+        bool transferClickMatching = true;
+        bool transferClickAll = true;
+        bool transferDragKeepOne = true;
+        bool transferCursorMatching = true;
+        bool transferDropOne = true;
+        bool transferDropKeepOne = true;
+        bool transferDropAll = true;
+        bool transferDropMatching = true;
         bool toolSwitch = false;
         bool handRestock = false;
         bool restockFromHotbar = true;
@@ -111,6 +130,11 @@ struct Settings {
         ui::HudElement durability = ui::defaultHudElement(ui::HudElementId::Durability);
         ui::HudElement minimap = ui::defaultHudElement(ui::HudElementId::Minimap);
         ui::HudElement schematic = ui::defaultHudElement(ui::HudElementId::Schematic);
+        ui::HudElement playerList = ui::defaultHudElement(ui::HudElementId::PlayerList);
+        ui::HudElement inventory = ui::defaultHudElement(ui::HudElementId::Inventory);
+        ui::HudElement usedSlots = ui::defaultHudElement(ui::HudElementId::UsedSlots);
+        ui::HudElement chat = ui::defaultHudElement(ui::HudElementId::Chat);
+        ui::HudElement statusEffects = ui::defaultHudElement(ui::HudElementId::StatusEffects);
     } hud;
     struct Map {
         bool minimap = false;
@@ -122,6 +146,7 @@ struct Settings {
         bool biome = false;
         bool compass = false;
         bool debugHide = true; // Hide while Debug View is shown.
+        bool minimapShapes = false; // Shapes as outlines (L-139); many would crowd a small map.
         bool radar = true;
         bool radarPlayers = true, radarHostile = true, radarPassive = true, radarItems = false;
         bool radarInvisible = false; // Also show players and mobs that are invisible.
@@ -135,7 +160,11 @@ struct Settings {
         bool worldMap = false; // Recording and the world map screen.
         bool worldMapNetherAuto = true; // The Nether layer shown follows the player's height.
         bool seedLink = true; // World map menu: open an external seed map here, copy the seed.
+        bool worldMapNames = false; // Every mark's name; off: under the pointer, selected or with a menu.
         bool worldMapPanel = true; // The world map's waypoint side panel is open; changed on the map.
+        // The world map's layer switches (L-146), changed on the map.
+        bool worldMapWaypoints = true, worldMapSchematics = true, worldMapShapes = true;
+        int worldMapList = 0; // The side panel's list (L-204): 0 waypoints, 1 schematics, 2 shapes.
     } map;
     struct Schematic {
         bool enabled = false; // Ghosts and outlines of the placements (L-93, experimental).
@@ -144,6 +173,13 @@ struct Settings {
         int menuBackground = 1;   // The menu's dimming: 0 none, 1 light, 2 dark.
         bool menuSmall = false;   // Small in the lower right instead of centered.
         bool menuReopen = false;  // Reopen where it was closed instead of at the list.
+        float outlineDistance = 48; // Ghost outlines up to this many blocks away; 0 draws them all.
+        // L-186: the light-blue tint over ghost textures in percent (100 is
+        // the look before 2026-10-15, 0 none); and the outline width, 0 thin
+        // (one pixel), 1 normal, 2 thick.
+        // Defaults chosen by the maintainer 2026-10-15: the block and that it is a ghost both read well.
+        int ghostTint = 70;
+        int ghostLines = 1;
     } schematic;
     struct Overlays {
         bool chunkBorders = false;
@@ -160,6 +196,7 @@ struct Settings {
         // Master off, every effect selected: one switch turns them all on
         // (maintainer, 2026-09-30).
         bool hideEffects = false;
+        bool connectedTextures = false; // Glass without inner borders (L-96), Experimental
         bool hideWeather = true;
         bool hideParticles = true;
         bool hideBossBars = true;
@@ -167,14 +204,21 @@ struct Settings {
         bool hideWater = true;
         bool hideLava = true;
         bool hidePowderSnow = true;
+        bool hideDistanceFog = true;
+        bool hidePortal = true; // The Nether portal's purple screen (L-148)
+        // Remote servers' resource packs are accepted but not applied (L-167), Experimental
+        bool skipServerPacks = false;
     } visuals;
     struct Information {
         bool debug = false;
         int debugLabels = 0; // 0 game standard, 1 Java F3 style
         bool debugHideHud = true;    // Hide the Info HUD while Debug is on
         bool debugHideTarget = true; // Hide the Target card while Debug is on
+        bool debugHideVanilla = true; // Hide the game's position line and paper doll while Debug is on
         bool debugShadow = true;     // Text shadow on the debug panel
         int debugBackground = 1;     // 0 none, 1 a background behind each line (L-98, default per line)
+        bool debugEntityKinds = true; // The entity total by kind under it (L-120)
+        int debugEntityTypes = 1;     // Most common entity types: 0 off, 1 top 5, 2 top 10 (L-120)
         bool target = false;
         bool targetIdentifier = true;
         bool targetIcon = true;
@@ -184,15 +228,28 @@ struct Settings {
         float targetDistance = 6; // Blocks from the viewpoint (the body, or a detached camera)
         bool targetStates = false; // Other details
         bool targetCoordinates = false;
+        bool targetSchematic = true; // Ghosts and schematic differences on the card
         bool durabilityHud = false;
         int durabilityLook = 0; // 0 bar and number, 1 number, 2 bar (number below a quarter)
         bool durabilityOffhand = true;
         bool durabilityArmor = true;
+        bool durabilityAmmo = true; // Arrows and fireworks beside bows, crossbows and elytra (L-150)
+        bool durabilityElytra = true; // A worn elytra, apart from the armor rows
         bool offhandSlot = false;      // Offhand item beside the hotbar (L-75)
         bool offhandSlotEmpty = false; // Keep the empty frame when nothing is held
+        // Player list columns (L-128), all shown by default.
+        bool playerListPlatform = true, playerListDimension = true, playerListDistance = true;
+        bool playerListMembers = false; // Mark members too, not only operators, visitors and custom (L-131)
+        // Inventory grid and used-slot counter (L-127), each with its own hotbar switch:
+        // the grid shows the main 27 by default, the counter counts all 36 (2026-10-11).
+        bool inventoryHud = false, usedSlots = false, inventoryHotbar = false, usedSlotsHotbar = true;
+        bool chatPosition = false;
+        // Status Effects HUD (L-147): names off gives the icon-and-time column.
+        bool effectsHud = false, effectsNames = true, effectsWarning = true, effectsHideVanilla = true;
         bool saturation = true;        // Gold outlines on the hunger bar (L-63)
         bool saturationPreview = true; // What the held food would add
         bool hud = false;
+        bool hudHidePaperDoll = true; // L-145: the game's paper doll is not drawn where the Info HUD covers it.
         bool coordinates = true; // Defaults match DESIGN "HUD".
         bool scaledCoordinates = false;
         bool dimension = false;
@@ -243,7 +300,13 @@ struct Settings {
         information.targetArmor = std::clamp(information.targetArmor, 0, 2);
         information.debugLabels = std::clamp(information.debugLabels, 0, 1);
         schematic.menuBackground = std::clamp(schematic.menuBackground, 0, 2);
+        camera.freeCameraHide = std::clamp(camera.freeCameraHide, 0, 3);
+        schematic.ghostTint = std::clamp(schematic.ghostTint, 0, 100);
+        schematic.ghostLines = std::clamp(schematic.ghostLines, 0, 2);
+        if (!std::isfinite(schematic.outlineDistance)) schematic.outlineDistance = 48;
+        schematic.outlineDistance = std::clamp(std::round(schematic.outlineDistance / 16) * 16, 0.f, 192.f);
         information.debugBackground = std::clamp(information.debugBackground, 0, 1);
+        information.debugEntityTypes = std::clamp(information.debugEntityTypes, 0, 2);
         ui.hudRowHeight = std::clamp(ui.hudRowHeight, 9, 16);
         ui.hudBackgroundOpacity = std::clamp(ui.hudBackgroundOpacity, 0, 100);
         information.durabilityLook = std::clamp(information.durabilityLook, 0, 2);
@@ -251,6 +314,8 @@ struct Settings {
         information.targetGrowth = std::clamp(information.targetGrowth, 0, 1);
         if (!std::isfinite(information.targetDistance)) information.targetDistance = 6;
         information.targetDistance = std::clamp(std::round(information.targetDistance), 2.f, 64.f);
+        if (!std::isfinite(interaction.edgeMargin)) interaction.edgeMargin = 0.1f;
+        interaction.edgeMargin = std::clamp(interaction.edgeMargin, .02f, .3f);
         normalizeMode(interaction.placementMode, lamium::interaction::placementLabels.size());
         if (inventory.fakeOffhandSlot < 1 || inventory.fakeOffhandSlot > 9) inventory.fakeOffhandSlot = 9;
         inventory.toolSwitchSlot = std::clamp(inventory.toolSwitchSlot, 0, 9);
@@ -266,7 +331,8 @@ struct Settings {
         overlays.hitboxDistance = std::clamp(overlays.hitboxDistance, 8.f, 128.f);
         if (!std::isfinite(interaction.elytraReturnSeconds)) interaction.elytraReturnSeconds = 3;
         interaction.elytraReturnSeconds = std::clamp(std::round(interaction.elytraReturnSeconds * 2) / 2, 0.f, 10.f);
-        // Per-line backgrounds exist only for the line elements (Info, Status).
+        // Per-line backgrounds exist only for the line elements (Info, Status,
+        // the player list, Durability).
         auto normalizeElement = [](ui::HudElement& element, ui::HudElement defaultValue, bool lines = false) {
             if (!std::isfinite(element.dx)) element.dx = defaultValue.dx;
             if (!std::isfinite(element.dy)) element.dy = defaultValue.dy;
@@ -282,9 +348,17 @@ struct Settings {
         normalizeElement(hud.status, ui::defaultHudElement(ui::HudElementId::Status), true);
         normalizeElement(hud.toast, ui::defaultHudElement(ui::HudElementId::Toast));
         normalizeElement(hud.magnification, ui::defaultHudElement(ui::HudElementId::Magnification));
-        normalizeElement(hud.durability, ui::defaultHudElement(ui::HudElementId::Durability));
+        normalizeElement(hud.durability, ui::defaultHudElement(ui::HudElementId::Durability), true);
         normalizeElement(hud.minimap, ui::defaultHudElement(ui::HudElementId::Minimap));
         normalizeElement(hud.schematic, ui::defaultHudElement(ui::HudElementId::Schematic));
+        normalizeElement(hud.playerList, ui::defaultHudElement(ui::HudElementId::PlayerList), true);
+        normalizeElement(hud.inventory, ui::defaultHudElement(ui::HudElementId::Inventory));
+        normalizeElement(hud.usedSlots, ui::defaultHudElement(ui::HudElementId::UsedSlots));
+        normalizeElement(hud.chat, ui::defaultHudElement(ui::HudElementId::Chat));
+        hud.chat.scale = 100;
+        hud.chat.background = ui::ElementBackground::None;
+        hud.chat.shadow = true;
+        normalizeElement(hud.statusEffects, ui::defaultHudElement(ui::HudElementId::StatusEffects), true);
         map.zoom = map::clampZoomIndex(map.zoom);
         if (!std::isfinite(map.size)) map.size = 20;
         map.size = std::clamp(std::round(map.size), 10.f, 50.f);

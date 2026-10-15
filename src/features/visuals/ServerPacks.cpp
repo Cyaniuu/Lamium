@@ -1,0 +1,70 @@
+#include "features/visuals/ServerPacks.h"
+#include "app/Runtime.h"
+#include "app/Versions.h"
+#include "ll/api/memory/Hook.h"
+#include "mc/client/events/PlayerJoinWorldContext.h"
+#include "mc/client/game/ClientInstance.h"
+#include "mc/client/network/ClientNetworkHandler.h"
+#include "mc/network/packet/ResourcePackStackPacket.h"
+#include <atomic>
+
+namespace lamium::visuals::serverPacks {
+namespace {
+// Vanilla says at the start of each join whether it is a local world; a join
+// it did not announce keeps its packs.
+enum class Join { Unknown, Local, Remote };
+std::atomic<Join> join{Join::Unknown};
+std::atomic<int> skipped{0};
+bool joinInstalled = false, stackInstalled = false;
+}
+LL_TYPE_INSTANCE_HOOK(ServerPacksJoin, ll::memory::HookPriority::Normal, ClientInstance, &ClientInstance::$onStartJoinGame,
+    void, bool isLocalServer, std::string const& correlation, std::string const& serverName, std::string const& worldName,
+    ::NetworkType networkType, ::Social::MultiplayerServiceIdentifier service, ::PlayerJoinWorldContext context) {
+    join.store(isLocalServer ? Join::Local : Join::Remote);
+    skipped.store(0);
+    origin(isLocalServer, correlation, serverName, worldName, networkType, service, context);
+}
+// The stack to apply arrives after the download handshake has finished, so
+// the server already has the client's acceptance; the packet is consumed by
+// this call only.
+LL_TYPE_INSTANCE_HOOK(ServerPacksStack, ll::memory::HookPriority::Normal, ClientNetworkHandler,
+    &ClientNetworkHandler::$handle, void, NetworkIdentifier const& source, ResourcePackStackPacket const& packet) {
+    try {
+#if defined(LAMIUM_SDK_26_20_7)
+        auto& ids = const_cast<ResourcePackStackPacket&>(packet).mTexturePackIdsAndVersions.get();
+#else
+        auto& payload = const_cast<ResourcePackStackPacketPayload&>(static_cast<ResourcePackStackPacketPayload const&>(packet));
+        auto& ids = payload.mTexturePackIdsAndVersions.get();
+#endif
+        if (join.load() == Join::Remote && !ids.empty() && Runtime::instance().snapshot()->visuals.skipServerPacks
+            && versionSensitiveAllowed(capabilities::Id::SkipServerPacks)) {
+            Runtime::instance().self().getLogger().info("Server resource packs: not applying {}", ids.size());
+            skipped.store(static_cast<int>(ids.size()));
+            ids.clear();
+        }
+    } catch (...) {}
+    origin(source, packet);
+}
+bool start() {
+    if (joinInstalled && stackInstalled) return true;
+    capabilities::begin(capabilities::Id::SkipServerPacks);
+    if (!joinInstalled) joinInstalled = ServerPacksJoin::hook(true) == 0;
+    if (joinInstalled && !stackInstalled) stackInstalled = ServerPacksStack::hook(true) == 0;
+    if (!joinInstalled || !stackInstalled) {
+        capabilities::hooks(capabilities::Id::SkipServerPacks,false);
+        stop();
+        return false;
+    }
+    capabilities::ready(capabilities::Id::SkipServerPacks);
+    return true;
+}
+void stop() {
+    capabilities::stop(capabilities::Id::SkipServerPacks);
+    if (stackInstalled && ServerPacksStack::unhook(true)) stackInstalled = false;
+    if (joinInstalled && ServerPacksJoin::unhook(true)) joinInstalled = false;
+    if (joinInstalled || stackInstalled) capabilities::fail(capabilities::Id::SkipServerPacks,capabilities::Reason::RemovalFailed);
+    join.store(Join::Unknown);
+    skipped.store(0);
+}
+int takeSkipped() { return skipped.exchange(0); }
+}

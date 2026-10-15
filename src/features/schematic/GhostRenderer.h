@@ -2,19 +2,100 @@
 // Draws schematic placements as ghost blocks in the world (BACKLOG L-93),
 // using the path found by the ghost probe: a private BlockTessellator,
 // in-world tessellation per section, tinted vertex colors and the
-// moving-block renderer's materials, lit as if fully bright.
+// moving-block renderer's materials, lit as if fully bright. The public face
+// of the ghost files (L-136): GhostRenderer.cpp runs the pass, GhostBlocks,
+// GhostActors, GhostMesh, GhostVerify, AreaSave and GhostMarks hold the parts.
 #include "features/schematic/SaveArea.h"
 #include "features/schematic/PlacementStore.h"
 #include "features/schematic/Verification.h"
+#include "features/schematic/LiquidShape.h"
+#include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
+class Block;
+class BlockSource;
+class BaseActorRenderContext;
+class BlockActor;
+class BlockPos;
+class Vec3;
+class BlockTessellator;
+class ScreenContext;
+class Tessellator;
+enum class BlockRenderLayer : unsigned char;
+namespace lamium::schematic { class SchematicRegion; }
 namespace lamium::schematic::ghosts {
+// The game block for a palette entry (its name, states and version), or null.
+Block const* gameBlock(PaletteBlock const& entry);
+// What a palette entry is called and its item icon (binary NBT, "" if none).
+struct BlockLabel {
+    std::string name, icon;
+};
+BlockLabel blockLabel(PaletteBlock const& entry);
+// The checked placement's cell at `world` as it is now (any state, Correct
+// included); nullopt outside it or before the first check.
+std::optional<Mismatch> mismatchAt(BlockSource& region, Point world);
+// The nearest drawn ghost along a ray before a real block (L-184, the target
+// card), with the placement it belongs to; this frame's block pointer only.
+struct GhostAt {
+    Point cell;
+    Block const* block = nullptr;
+    std::string placement;
+};
+std::optional<GhostAt> ghostAlong(BlockSource& region, int dimension, double x, double y, double z, double dx, double dy,
+                                  double dz, double reach);
+// Whether a block hides the neighbor faces it touches: an opaque full block
+// that the in-world tessellation draws (a honey block draws nothing there).
+bool coversNeighbors(Block const& block, BlockTessellator& tessellator, ScreenContext& screen);
+// Which sides of its cell a block's mesh reaches, as bits in faces::offsets
+// order (63: all six), within `epsilon` of the cell's planes; blended layers
+// count only with `blendedToo`.
+int sidesReached(Block const& block, BlockTessellator& tessellator, ScreenContext& screen, bool blendedToo, float epsilon);
+// The sides of its cell a block's mesh covers entirely (any layer), as bits
+// like sidesReached: a stair's back, not its partly open sides.
+int sidesCovered(Block const& block, BlockTessellator& tessellator, ScreenContext& screen);
+// Calls `visit` with each render layer a block draws in: its own, then its
+// extra ones (honey and slime blocks). Liquids get one call with nullopt
+// (the tessellator's default pass).
+void eachLayer(Block const& block, BlockSource& region, BlockPos const& pos,
+               std::function<void(std::optional<BlockRenderLayer>)> const& visit);
+// Tessellates the block's geometry for one render layer (nullopt: the
+// tessellator's current one) in the world at `pos`.
+void tessellateLayer(BlockTessellator& tessellator, Tessellator& batch, Block const& block, BlockPos const& pos,
+                     std::optional<BlockRenderLayer> layer);
+// A block actor for a ghost of `block` at `pos`, with the file's block
+// entity data when there is some (a skull's rotation turned by `placement`).
+std::shared_ptr<BlockActor> makeBlockActor(Block const& block, BlockPos const& pos, nbt::Compound const* data,
+                                           Placement const& placement, BlockSource& region);
+// Draws a ghost block actor at full brightness, against `view`, which must
+// answer the ghost's block at `worldPos` (a banner's mount, a head's kind).
+void renderBlockActor(BaseActorRenderContext& context, SchematicRegion& view, BlockActor& actor, Block const& block,
+                      Vec3 const& renderPos, BlockPos const& worldPos);
+// 1 for water, 2 for lava, 0 for anything else.
+int liquidKind(Block const& block);
+// A liquid block's liquid_depth (0 for a source or anything else).
+int liquidDepth(Block const& block);
+// Appends a missing liquid at `pos` as a simple shell: the faces where
+// `open(side)` holds (faces::offsets order) and that no opaque neighbor
+// hides, each top corner (cx, cz: 0 or 1) at `corner(cx, cz)` above the
+// cell's floor (LiquidShape.h), textured with the liquid's own atlas
+// texture and colored (water blue, both translucent); the top shows the
+// flowing texture along `flow` when the liquid moves, else the still one.
+// False when nothing was added.
+bool liquidShell(BlockTessellator& tessellator, Tessellator& batch, BlockPos const& pos, Block const& liquid,
+                 std::function<bool(int side)> const& open, std::function<float(int cx, int cz)> const& corner,
+                 liquids::Flow flow);
+// Puts a quad-list batch's quads in `order` (indices of the current quads),
+// moving every vertex stream with its positions.
+void reorderQuads(Tessellator& batch, std::vector<std::uint32_t> const& order);
 void start();
 void stop();
+// Native language/subpack updates can replace retained resource data.
+void invalidateResources();
 // The latest finished verification of the selected placement (never null).
 std::shared_ptr<Verification const> verification();
 // Progress for the Placed list (L-93 screen review): correct / total in the

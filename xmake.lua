@@ -2,7 +2,7 @@ add_rules("mode.debug", "mode.release")
 set_license("LGPL-3.0")
 
 -- Single source for the manifest version and the string the Debug View shows.
-local lamiumVersion = "0.1.7"
+local lamiumVersion = "0.2.3"
 set_policy("package.requires_lock", true)
 
 add_repositories("levimc-repo https://github.com/LiteLDev/xmake-repo.git")
@@ -42,7 +42,67 @@ option_end()
 option("icon_trace")
     set_default(false)
     set_showmenu(true)
-    set_description("Enable bounded diagnostics for L-91 (vanilla slot icon passes vs Lamium's icon calls)")
+    set_description("Enable bounded diagnostics for L-91/L-119 (vanilla slot icon routes vs Lamium's icon calls)")
+option_end()
+
+option("playerlist_trace")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Enable L-131 diagnostics: what the client knows about each listed player (permission, locator, loaded)")
+option_end()
+
+option("feature_skip")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Diagnostics: skip the features named in mods/Lamium/skip-features.txt at start")
+option_end()
+
+option("unverified_game")
+    set_default(false)
+    set_showmenu(true)
+    set_description("L-137 test build: treat the game as unverified so every version-sensitive path stays vanilla")
+option_end()
+
+option("portal_trace")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Log the Nether portal's client effects: effect time and screens (L-148/L-149)")
+option_end()
+
+option("edge_trace")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Log Edge Guard's move vectors, sent auth input, server corrections and replay (L-160/L-162)")
+option_end()
+
+option("inventorymove_trace")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Enable L-132 trial: feed the movement keys while the inventory screen is open, with a log")
+option_end()
+
+option("trade_trace")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Enable L-129 diagnostics: dump the trade data the server sends when a trade screen opens")
+option_end()
+
+option("repeat_trade_trace")
+    set_default(false)
+    set_showmenu(true)
+    set_description("L-166 read-only diagnostics: trade buttons, vanilla requests and authoritative updates")
+option_end()
+
+option("language_trace")
+    set_default(false)
+    set_showmenu(true)
+    set_description("L-167 read-only diagnostics: vanilla language selection, observers and resource pack stacks")
+option_end()
+
+option("server_pack_skip")
+    set_default(false)
+    set_showmenu(true)
+    set_description("L-167 research only, with language_trace: accept server resource packs but apply none of them locally")
 option_end()
 
 option("hunger_trace")
@@ -105,6 +165,12 @@ option("radar_icon_probe")
     set_description("L-85 research: log each radar face built and write them all to logs/radar-faces.bmp")
 option_end()
 
+option("schematic_perf_trace")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Schematic C: log ghost frame time, section rebuilds and their reasons every 5 s")
+option_end()
+
 option("schematic_model_trace")
     set_default(false)
     set_showmenu(true)
@@ -124,6 +190,8 @@ option("camera_position_probe")
 option_end()
 
 includes("packages/levilamina-client-sdk.lua")
+-- A new SDK (game or LeviLamina version): follow the playbook in
+-- docs/GAME-UPDATES.md; the verified game in src/app/Versions.cpp changes last.
 add_requires("levilamina-client-sdk 26.20.7", {configs = {shared = true}})
 
 add_requires("levibuildscript")
@@ -151,11 +219,22 @@ target("Lamium")
     if has_config("research_trace") then add_defines("LAMIUM_RESEARCH_TRACE") end
     if has_config("ghost_probe") then add_defines("LAMIUM_GHOST_PROBE") end
     if has_config("schematic_model_trace") then add_defines("LAMIUM_SCHEMATIC_MODEL_TRACE") end
+    if has_config("schematic_perf_trace") then add_defines("LAMIUM_SCHEMATIC_PERF_TRACE") end
     if has_config("consumption_trace") then add_defines("LAMIUM_CONSUMPTION_TRACE") end
     if has_config("offhand_trace") then add_defines("LAMIUM_OFFHAND_TRACE") end
     if has_config("transfer_trace") then add_defines("LAMIUM_TRANSFER_TRACE") end
     if has_config("hunger_trace") then add_defines("LAMIUM_HUNGER_TRACE") end
     if has_config("icon_trace") then add_defines("LAMIUM_ICON_TRACE") end
+    if has_config("trade_trace") then add_defines("LAMIUM_TRADE_TRACE") end
+    if has_config("repeat_trade_trace") then add_defines("LAMIUM_REPEAT_TRADE_TRACE") end
+    if has_config("language_trace") then add_defines("LAMIUM_LANGUAGE_TRACE") end
+    if has_config("server_pack_skip") then add_defines("LAMIUM_SERVER_PACK_SKIP") end
+    if has_config("playerlist_trace") then add_defines("LAMIUM_PLAYERLIST_TRACE") end
+    if has_config("inventorymove_trace") then add_defines("LAMIUM_INVENTORYMOVE_TRACE") end
+    if has_config("edge_trace") then add_defines("LAMIUM_EDGE_TRACE") end
+    if has_config("portal_trace") then add_defines("LAMIUM_PORTAL_TRACE") end
+    if has_config("feature_skip") then add_defines("LAMIUM_FEATURE_SKIP") end
+    if has_config("unverified_game") then add_defines("LAMIUM_UNVERIFIED_GAME") end
     add_rules("@levibuildscript/linkrule")
     add_rules("@levibuildscript/modpacker", {modVersion = lamiumVersion})
     add_defines('LAMIUM_VERSION="' .. lamiumVersion .. '"')

@@ -45,6 +45,11 @@ std::string_view elementName(HudElementId id) {
     case HudElementId::Durability: return "feature.durabilityHud";
     case HudElementId::Minimap: return "feature.minimap";
     case HudElementId::Schematic: return "feature.schematicHud";
+    case HudElementId::PlayerList: return "feature.playerList";
+    case HudElementId::Inventory: return "feature.inventoryHud";
+    case HudElementId::UsedSlots: return "feature.usedSlots";
+    case HudElementId::StatusEffects: return "feature.statusEffects";
+    case HudElementId::Chat: return "feature.chatPosition";
     default: return "hudEditor.toast";
     }
 }
@@ -57,6 +62,11 @@ HudElement& layoutElement(Settings::Hud& hud, HudElementId id) {
     case HudElementId::Durability: return hud.durability;
     case HudElementId::Minimap: return hud.minimap;
     case HudElementId::Schematic: return hud.schematic;
+    case HudElementId::PlayerList: return hud.playerList;
+    case HudElementId::Inventory: return hud.inventory;
+    case HudElementId::UsedSlots: return hud.usedSlots;
+    case HudElementId::StatusEffects: return hud.statusEffects;
+    case HudElementId::Chat: return hud.chat;
     default: return hud.toast;
     }
 }
@@ -109,11 +119,14 @@ Box drawToolbar(MinecraftUIRenderContext& context, Settings const& value, Box el
     std::string backgroundText = background ? optionText(*background, value) : std::string{};
     std::string shadowText = shadow ? splitLabel(translated(shadow->label)).name : std::string{};
     std::string linesText = translated("hudEditor.lines");
+    bool positionOnly = id == HudElementId::Chat;
     float snapW = textWidth(context, snapText) + 17, scaleW = textWidth(context, "150%") + 24;
-    float backgroundW = textWidth(context, backgroundText) + 8;
-    float shadowW = textWidth(context, shadowText) + switchWidth + 10;
+    if (positionOnly) scaleW = 0;
+    float backgroundW = background ? textWidth(context, backgroundText) + 8 : 0;
+    float shadowW = shadow ? textWidth(context, shadowText) + switchWidth + 10 : 0;
     float linesW = id == HudElementId::Info ? textWidth(context, linesText) + 17 : 0;
-    float width = pad + snapW + gap + scaleW + gap + backgroundW + gap + shadowW + (linesW ? gap + linesW : 0) + pad;
+    float width = pad + snapW + (scaleW ? gap + scaleW : 0) + (backgroundW ? gap + backgroundW : 0)
+        + (shadowW ? gap + shadowW : 0) + (linesW ? gap + linesW : 0) + pad;
     if (!spot || element.overlaps(Box{spot->x, spot->y, width, barHeight}))
         spot = toolbarSpot(element, width, barHeight, screenW, screenH);
     Box bar{spot->x, spot->y, width, barHeight};
@@ -128,16 +141,18 @@ Box drawToolbar(MinecraftUIRenderContext& context, Settings const& value, Box el
     };
     auto snap = add(snapW, Command::OpenSnap);
     button(context, snap, snapText, popover == Popover::Snap || hovering(snap, px, py), palette::keyEdge, true);
-    // Scale: arrows at both ends of one field.
-    Box scaleBox{x, y, scaleW, itemHeight};
-    fill(context, scaleBox.x, scaleBox.y, scaleBox.w, scaleBox.h, palette::keyFill, .9f);
-    frame(context, scaleBox.x, scaleBox.y, scaleBox.w, scaleBox.h, palette::keyEdge);
-    controls.push_back({{scaleBox.x, y, 10, itemHeight}, Command::ScaleDown});
-    controls.push_back({{scaleBox.x + scaleW - 10, y, 10, itemHeight}, Command::ScaleUp});
-    arrow(context, scaleBox.x + 3, y + 3, true);
-    arrow(context, scaleBox.x + scaleW - 7, y + 3, false);
-    label(context, scaleBox.x + 10, y + boxTextInset(), scaleW - 20, scaleText, palette::text, Align::Center);
-    x += scaleW + gap;
+    if (!positionOnly) {
+        // Scale: arrows at both ends of one field.
+        Box scaleBox{x, y, scaleW, itemHeight};
+        fill(context, scaleBox.x, scaleBox.y, scaleBox.w, scaleBox.h, palette::keyFill, .9f);
+        frame(context, scaleBox.x, scaleBox.y, scaleBox.w, scaleBox.h, palette::keyEdge);
+        controls.push_back({{scaleBox.x, y, 10, itemHeight}, Command::ScaleDown});
+        controls.push_back({{scaleBox.x + scaleW - 10, y, 10, itemHeight}, Command::ScaleUp});
+        arrow(context, scaleBox.x + 3, y + 3, true);
+        arrow(context, scaleBox.x + scaleW - 7, y + 3, false);
+        label(context, scaleBox.x + 10, y + boxTextInset(), scaleW - 20, scaleText, palette::text, Align::Center);
+        x += scaleW + gap;
+    }
     if (background) {
         auto box = add(backgroundW, Command::Background);
         button(context, box, backgroundText, hovering(box, px, py));
@@ -325,6 +340,15 @@ void render(MinecraftUIRenderContext& context, float width, float height, float 
         if (active && *active == anchor) fill(context, x, y, 5, 5, palette::accent);
         else frame(context, x, y, 5, 5, palette::white, .35f);
     }
+    // The game's hotbar where it sits in play, to place elements beside it;
+    // only a picture, not an element of the layout.
+    auto hotbar = information::editorHotbar(width, height);
+    float unit = hotbar.h / 22;
+    images(context, "textures/ui/hotbar_start_cap", {{hotbar.x, hotbar.y, unit, hotbar.h}}, .6f);
+    std::vector<ImageRect> cells;
+    for (int i = 0; i < 9; ++i) cells.push_back({hotbar.x + (1 + 20 * i) * unit, hotbar.y, 20 * unit, hotbar.h});
+    images(context, "textures/ui/hotbar_0", cells, .6f);
+    images(context, "textures/ui/hotbar_end_cap", {{hotbar.x + 181 * unit, hotbar.y, unit, hotbar.h}}, .6f);
     lastBoxes = information::drawHud(context, width, height, value.information, &preview);
     if (drag && drag->drop) {
         if (drag->drop->lineX) fill(context, *drag->drop->lineX - .5f, 0, 1, height, palette::warning, .8f);

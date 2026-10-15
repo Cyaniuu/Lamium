@@ -34,6 +34,7 @@ class CameraSessions {
     std::atomic<bool> freeToggle{true};
     std::atomic<float> freeSpeed{20.f};
     std::atomic<bool> freeWorldFixed{false};
+    std::atomic<bool> freeLeaveOnHit{false};
     std::atomic<bool> freeInterpolatedPosition{false};
     // Wanted state of each session (BACKLOG L-47): keys and the settings
     // switch flip these; reconcile() starts or ends the sessions when the
@@ -97,6 +98,9 @@ public:
     void pressLook(IClientInstance&);
     void pressFreeCamera(IClientInstance&);
     void releaseFreeCameraKey();
+    // The local player received a hurt event (L-126). Arrives from packet
+    // handling, so it only drops the wanted state; the frame reconcile ends it.
+    void bodyHit(int event);
     // True while FreeCamera owns the detached session (perspective is locked).
     bool blocksPerspective() const;
     bool freeCameraFor(IClientInstance const& current, std::uint64_t owner) const {
@@ -135,6 +139,10 @@ public:
     // for readouts that should follow the camera rather than the body.
     struct ViewRay { double x, y, z, dx, dy, dz; };
     std::optional<ViewRay> detachedViewRay(IClientInstance&);
+    // FreeCamera's position as the feet of a player whose eyes stand at the
+    // camera, and its angles; empty unless FreeCamera owns the view.
+    struct Pose { double x, y, z; float yaw, pitch; };
+    std::optional<Pose> freeCameraPose(IClientInstance&);
     // Zoom key release: ends a held Zoom; in toggle mode, true when it switched Zoom off.
     bool release();
     // keepZoomLevel: a dimension change ends Zoom but keeps its wheel level.

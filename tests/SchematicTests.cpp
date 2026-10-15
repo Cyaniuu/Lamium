@@ -1,4 +1,6 @@
+#include "features/schematic/RayCells.h"
 #include <cmath>
+#include "features/schematic/LiquidShape.h"
 #include "features/schematic/Structure.h"
 #include "features/schematic/Verify.h"
 #include "features/schematic/PlacementStore.h"
@@ -10,7 +12,10 @@
 #include "features/schematic/MaterialAmount.h"
 #include "features/schematic/MenuModel.h"
 #include "features/schematic/RestPose.h"
+#include "features/schematic/PreviewView.h"
 #include "features/schematic/GhostFaces.h"
+#include "features/schematic/PlacementOverlap.h"
+#include <algorithm>
 #include <array>
 #include <set>
 #include <cstdlib>
@@ -30,6 +35,11 @@ std::span<std::uint8_t const> span(std::string const& bytes) {
 bool throws(std::string const& bytes) {
     try { parseStructure(span(bytes)); } catch (std::runtime_error const&) { return true; }
     return false;
+}
+
+nbt::List& layersOf(nbt::Root& root) {
+    auto& body = *const_cast<nbt::Tag*>(root.compound.find("structure"))->as<nbt::Compound>();
+    return *const_cast<nbt::Tag*>(body.find("block_indices"))->as<nbt::List>();
 }
 
 Structure sample() {
@@ -130,24 +140,94 @@ void structureRejects() {
     caught = false;
     try { writeStructure(mismatched); } catch (std::runtime_error const&) { caught = true; }
     check(caught, "writing a layer that does not match the size is refused");
+    auto badLiquid = sample();
+    badLiquid.liquids[0] = 7;
+    std::string reason;
+    try { parseStructure(span(writeStructure(badLiquid))); } catch (std::runtime_error const& error) { reason = error.what(); }
+    check(reason.find("second block layer") != std::string::npos, "a second layer naming a missing palette entry is rejected by name");
+    nbt::Root shortLayer = nbt::read(span(writeStructure(sample())));
+    auto& layers = *layersOf(shortLayer).items[1].as<std::vector<std::int32_t>>();
+    layers.pop_back();
+    reason.clear();
+    try { parseStructure(span(nbt::write(shortLayer))); } catch (std::runtime_error const& error) { reason = error.what(); }
+    check(reason.find("second block layer has") != std::string::npos, "a second layer shorter than the volume is rejected by name");
 }
 
-// Optional: LAMIUM_SAMPLE_STRUCTURES names a folder of real exports to parse.
+// The shape a save writes (SCHEMATIC.md A): version 2; the second layer only
+// when some cell holds a liquid, -1 elsewhere.
+void structureWrittenShape() {
+    auto wet = sample();
+    nbt::Root root = nbt::read(span(writeStructure(wet)));
+    std::int64_t version = 0;
+    check(root.compound.find("format_version")->integer(version) && version == 2, "saves say format_version 2");
+    check(layersOf(root).element == nbt::Type::IntArray && layersOf(root).items.size() == 2,
+          "a structure with a waterlogged cell writes two int-array layers");
+    auto const& second = *layersOf(root).items[1].as<std::vector<std::int32_t>>();
+    check(second[wet.cell(1, 2, 3)] == 4 && std::count(second.begin(), second.end(), voidCell) == static_cast<long long>(wet.cells()) - 1,
+          "the second layer is -1 except the waterlogged cell");
+
+    auto dry = sample();
+    dry.liquids.clear();
+    root = nbt::read(span(writeStructure(dry)));
+    check(layersOf(root).items.size() == 1, "a structure without liquids writes one layer");
+    dry.liquids.assign(dry.cells(), voidCell);
+    root = nbt::read(span(writeStructure(dry)));
+    check(layersOf(root).items.size() == 1, "an all-void second layer is not written");
+
+    auto old = sample();
+    old.formatVersion = 1;
+    root = nbt::read(span(writeStructure(old)));
+    check(root.compound.find("format_version")->integer(version) && version == 2, "a version 1 file read in is written back as 2");
+
+    // Vanilla exports hold water over an air cell and palette entries no cell uses.
+    auto odd = sample();
+    odd.palette.push_back({"minecraft:jungle_door", {}, 18168865});
+    odd.liquids[odd.cell(0, 0, 1)] = 4;
+    auto parsed = parseStructure(span(writeStructure(odd)));
+    check(parsed.palette.size() == 6 && parsed.blocks[odd.cell(0, 0, 1)] == 0 && parsed.liquids[odd.cell(0, 0, 1)] == 4,
+          "water in an air cell and an unused palette entry read as a valid file");
+}
+
+// Optional: LAMIUM_SAMPLE_STRUCTURES names real exports to read and write
+// back: a folder, or files separated by ';' (e.g. the vanilla
+// submerged.mcstructure and water_and_lava.mcstructure). Not in the repository.
 void sampleFiles() {
-    char* folder = nullptr;
+    char* value = nullptr;
     size_t length = 0;
-    if (_dupenv_s(&folder, &length, "LAMIUM_SAMPLE_STRUCTURES") || !folder) return;
-    std::unique_ptr<char, decltype(&std::free)> owned(folder, &std::free);
-    for (auto const& entry : std::filesystem::directory_iterator(folder)) {
-        if (entry.path().extension() != ".mcstructure") continue;
-        std::ifstream file(entry.path(), std::ios::binary);
+    if (_dupenv_s(&value, &length, "LAMIUM_SAMPLE_STRUCTURES") || !value) return;
+    std::unique_ptr<char, decltype(&std::free)> owned(value, &std::free);
+    std::vector<std::filesystem::path> files;
+    std::string list = value;
+    for (size_t start = 0; start <= list.size();) {
+        auto end = std::min(list.find(';', start), list.size());
+        std::filesystem::path path = list.substr(start, end - start);
+        start = end + 1;
+        if (path.empty()) continue;
+        if (std::filesystem::is_directory(path)) {
+            for (auto const& entry : std::filesystem::directory_iterator(path))
+                if (entry.path().extension() == ".mcstructure") files.push_back(entry.path());
+        } else files.push_back(path);
+    }
+    for (auto const& path : files) {
+        std::ifstream file(path, std::ios::binary);
+        check(file.good(), "a named sample file opens");
         std::string bytes{std::istreambuf_iterator<char>(file), {}};
         auto parsed = parseStructure(span(bytes));
         check(parsed.blocks.size() == parsed.cells() && !parsed.palette.empty(), "a real export parses");
-        auto again = parseStructure(span(writeStructure(parsed)));
-        check(again.blocks == parsed.blocks && again.palette.size() == parsed.palette.size()
+        auto written = writeStructure(parsed);
+        auto again = parseStructure(span(written));
+        check(again.blocks == parsed.blocks && again.liquids == parsed.liquids && again.palette.size() == parsed.palette.size()
               && again.blockEntities.size() == parsed.blockEntities.size() && again.entities.size() == parsed.entities.size(),
-              "a real export survives writing back");
+              "a real export survives writing back, both layers included");
+        nbt::Root root = nbt::read(span(written));
+        check(layersOf(root).items.size() == (parsed.liquids.empty() ? 1u : 2u), "a written export has a second layer only with liquids");
+        std::int64_t version = 0;
+        if (parsed.formatVersion == writtenFormatVersion) {
+            nbt::Root original = nbt::read(span(bytes));
+            check(layersOf(original).items.size() == layersOf(root).items.size(),
+                  "a version 2 export is written back with as many layers as it had");
+        }
+        check(root.compound.find("format_version")->integer(version) && version == writtenFormatVersion, "a written export says version 2");
     }
 }
 
@@ -215,6 +295,21 @@ void placementTransforms() {
     check(!toLocal(size, turned, {5, 0, 0}) && !toLocal(size, turned, {0, 2, 0}) && !toLocal(size, turned, {-1, 0, 0}),
           "cells outside the placed box have no local cell");
     check(quarterTurns(-1) == 3 && quarterTurns(5) == 1, "turn counts wrap");
+    // L-179: a face stored in block entity data turns like the cell it points to.
+    bool faces = true;
+    constexpr int dx[6] = {0, 0, 0, 0, -1, 1}, dy[6] = {-1, 1, 0, 0, 0, 0}, dz[6] = {0, 0, -1, 1, 0, 0};
+    Size cube{3, 3, 3};
+    for (int rotation = 0; rotation < 4; ++rotation)
+        for (auto mirror : {Mirror::None, Mirror::X, Mirror::Z})
+            for (int face = 0; face < 6; ++face) {
+                Placement p{{10, 0, -4}, rotation, mirror};
+                auto from = toWorld(cube, p, {1, 1, 1});
+                auto to = toWorld(cube, p, {1 + dx[face], 1 + dy[face], 1 + dz[face]});
+                int turned = toWorldFace(face, p);
+                faces = faces && to.x - from.x == dx[turned] && to.y - from.y == dy[turned] && to.z - from.z == dz[turned];
+            }
+    check(faces && toWorldFace(2, {{0, 0, 0}, 1, Mirror::None}) == 5 && toWorldFace(7, {{0, 0, 0}, 1, Mirror::None}) == 7,
+          "a stored face follows the placement's mirror and turns; unknown values stay");
 
     bool centers = true;
     for (int rotation = 0; rotation < 4; ++rotation)
@@ -237,9 +332,11 @@ void placementTransforms() {
                 Position from{1.5, 0, 2.5}, ahead{from.x - std::sin(yaw * toRadians), 0, from.z + std::cos(yaw * toRadians)};
                 auto a = toWorldPosition(size, placement, from), b = toWorldPosition(size, placement, ahead);
                 double turned = toWorldYaw(yaw, placement) * toRadians;
-                facings = facings && std::abs(b.x - a.x + std::sin(turned)) < 1e-4 && std::abs(b.z - a.z - std::cos(turned)) < 1e-4;
+                // Mirrored entities face the other way, as the structure block places them.
+                double back = mirror == Mirror::None ? 1 : -1;
+                facings = facings && std::abs(b.x - a.x + back * std::sin(turned)) < 1e-4 && std::abs(b.z - a.z - back * std::cos(turned)) < 1e-4;
             }
-    check(facings, "an entity keeps facing the same way relative to the structure after any turn and mirror");
+    check(facings, "an entity keeps its facing relative to the structure after any turn, and is turned half round when mirrored");
 
     auto near = [](std::optional<float> v, float want) { return v && std::abs(*v - want) < 1e-4f; };
     check(near(constantMolang("90"), 90) && near(constantMolang(" 90 - this "), 90) && near(constantMolang("-this + 22.5"), 22.5f)
@@ -250,6 +347,60 @@ void placementTransforms() {
     check(!constantMolang("query.is_sitting ? 0 : 90") && !constantMolang("variable.tcos0 * 57.3") && !constantMolang("thisx")
           && !constantMolang("") && !constantMolang("1 / 0") && !constantMolang("(1"),
           "rest-pose Molang: anything needing the entity is not a constant");
+}
+
+void previewRules() {
+    using namespace lamium::schematic::preview;
+    View view{35, 30};
+    check(drawOrder(view) == Order{1, 1, 1} && drawOrder(View{-145, 30}) == Order{-1, 1, -1},
+          "the preview walks each axis from the end away from the viewer");
+    auto order = drawOrder(view);
+    check(facesViewer(order, 0, 1, 0) && !facesViewer(order, 0, -1, 0) && facesViewer(order, 1, 0, 0) && !facesViewer(order, 0, 0, -1),
+          "only faces turned to the viewer are kept");
+    auto e = eye(view);
+    auto center = project(view, e.x, e.y, e.z);
+    auto up = project(View{0, 0}, 0, 1, 0);
+    check(std::abs(center.right) < 1e-4f && std::abs(center.down) < 1e-4f && std::abs(center.toward - 1) < 1e-4f
+          && std::abs(up.down + 1) < 1e-4f && std::abs(up.right) < 1e-4f,
+          "the eye direction projects onto the middle, toward the viewer, and up is up on screen");
+    auto full = [](int, int, int) { return true; };
+    auto cells = visibleCells(3, 3, 3, order, full, full);
+    auto glassMiddle = visibleCells(3, 3, 3, order, full, [](int x, int y, int z) { return !(x == 1 && y == 1 && z == 2); });
+    check(glassMiddle.size() == 27, "a block that does not cover its neighbors (glass, stairs) shows the cell behind it");
+    bool farFirst = true;
+    for (size_t i = 1; i < cells.size(); ++i) {
+        auto depth = [&](std::uint32_t c) { int x = int(c) / 9, y = int(c) / 3 % 3, z = int(c) % 3; return project(view, x, y, z).toward; };
+        // A later cell is never wholly behind an earlier one along all axes.
+        int a = int(cells[i - 1]), b = int(cells[i]);
+        bool behind = a / 9 >= b / 9 && a / 3 % 3 >= b / 3 % 3 && a % 3 >= b % 3 && a != b;
+        farFirst = farFirst && !(behind && depth(cells[i]) < depth(cells[i - 1]));
+    }
+    check(cells.size() == 26 && cells.front() == 0 && cells.back() == 26 && farFirst,
+          "the hidden middle cell is left out and cells come far to near");
+    check(fitScale(4, 4, 4, 100, 60) > 0 && fitScale(4, 4, 4, 100, 60) * std::sqrt(48.f) <= 60,
+          "the preview fits the structure's diagonal in the smaller side");
+    float most = maxZoom(view, 10, 2, 10, 200, 120);
+    bool inside = true;
+    for (int k = 0; k < 8; ++k) {
+        auto p = project(view, k & 1 ? 5 : -5, k & 2 ? 1 : -1, k & 4 ? 5 : -5);
+        float s = fitScale(10, 2, 10, 200, 120) * most;
+        inside = inside && std::abs(p.right * s) <= 100 && std::abs(p.down * s) <= 60;
+    }
+    check(most >= 1 && inside, "the largest zoom keeps every corner inside the box");
+    auto top = cutFor(View{35, 60}, 5, 8, 5, 3), side = cutFor(View{90, 10}, 5, 8, 5, 2);
+    check(top == Cut{1, 1, 4} && top.keeps(0, 4, 0) && !top.keeps(0, 5, 0) && side.axis == 0 && side.keeps(2, 0, 0) && !side.keeps(3, 0, 0)
+          && cutFor(view, 5, 8, 5, 0).axis < 0 && cutFor(View{35, 60}, 5, 8, 5, 99).limit == 0,
+          "peeling takes layers off the side the view looks down on, never the last one");
+    View turned{90, 10};
+    turned.peelAxis = 1;
+    check(cutFor(turned, 5, 8, 5, 3) == Cut{1, 1, 4}, "a cut started from above stays a height cut when the view turns to the side");
+    auto above = pick(View{0, 89}, 3, 3, 3, 0, 0, full);
+    auto front = pick(View{0, 0}, 3, 3, 3, 0, 0, full);
+    auto left = pick(View{0, 0}, 3, 3, 3, -1, 0, full);
+    auto none = pick(View{0, 0}, 3, 3, 3, 5, 0, full);
+    auto hollow = pick(View{0, 0}, 3, 3, 3, 0, 0, [](int, int, int z) { return z == 0; });
+    check(above == Cell{1, 2, 1} && front == Cell{1, 1, 2} && left == Cell{0, 1, 2} && !none && hollow == Cell{1, 1, 0},
+          "a click picks the nearest block along the line of sight, and nothing beside the build");
 }
 
 void saveRules() {
@@ -324,6 +475,9 @@ void entityRules() {
     check(placed == std::vector<bool>{true, false, false}, "an entity counts near its spot, by type, and only once");
     std::vector<EntitySpot> high{{"minecraft:pig", 5.5, 66, 5.5}};
     check(matchEntities(std::span(expected).subspan(2), high) == std::vector<bool>{false}, "an entity two blocks up is not near");
+    std::vector<EntitySpot> beside{{"minecraft:armor_stand", 2.5, 64, 1.5}};
+    check(matchEntities(std::span(expected).first(1), beside) == std::vector<bool>{false},
+          "an entity of the same type on the next block does not fill the spot");
     check(entityNameKey("minecraft:armor_stand") == "entity.armor_stand.name" && entityNameKey("mod:thing") == "entity.mod:thing.name",
           "entity name keys drop the vanilla namespace only");
 
@@ -410,6 +564,45 @@ void ghostFaces() {
     // Cells 4 and 5 touch at x = 5; the camera at x 3.5 sees cell 5's west face, not cell 4's east face.
     check(beyond(0, 5, 2, 3, 3.5, 2.5, 3.5) && !beyond(1, 4, 2, 3, 3.5, 2.5, 3.5) && beyond(1, 4, 2, 3, 6.2, 2.5, 3.5),
           "of two touching faces only the one facing the camera has it beyond");
+    using lamium::schematic::faces::sideArea;
+    using lamium::schematic::faces::coveredBy;
+    // An upside-down stair's back: the upper and the lower box each half the side.
+    std::array<Vertex, 4> upperBack{{{5, 2.5f, 3}, {5, 3, 3}, {5, 3, 4}, {5, 2.5f, 4}}};
+    check(coveredBy(sideArea(slab, 0) + sideArea(upperBack, 0)) && !coveredBy(sideArea(slab, 0))
+          && coveredBy(sideArea(top, 3)) && std::abs(sideArea(slab, 0) - .5f) < 1e-5f,
+          "quads on one side add up to the part of it they cover");
+    using lamium::schematic::faces::sameQuad;
+    std::array<Vertex, 4> westBack{{{5, 2, 4}, {5, 3, 4}, {5, 3, 3}, {5, 2, 3}}};
+    check(sameQuad(west, westBack) && sameQuad(west, west) && !sameQuad(west, slab) && !sameQuad(west, top),
+          "a face emitted again with the other winding is the same quad; other faces are not");
+    using lamium::schematic::faces::dropFace;
+    check(dropFace(true, false, false, true, true) && dropFace(false, true, true, false, true),
+          "a real opaque block, or far from the camera an opaque ghost, hides the face against it");
+    check(!dropFace(false, true, true, true, true) && dropFace(false, true, true, true, false),
+          "next to the camera a shared plane keeps only the face the camera sees");
+    check(!dropFace(false, false, true, false, false) && dropFace(false, false, true, true, false)
+          && !dropFace(false, false, false, true, false), "a see-through ghost's shared plane is paired only next to the camera");
+    using lamium::schematic::faces::facingToward;
+    check(facingToward(2) == 1 && facingToward(3) == 0 && facingToward(0) == 5 && facingToward(1) == 4 && facingToward(4) == 3
+              && facingToward(5) == 2,
+          "the neighbor below shows its top face, the one to the west its east face, and so on");
+    using lamium::schematic::faces::dropBlendedFace;
+    check(dropBlendedFace(true, false, false, 0) && dropBlendedFace(true, true, true, 1) && !dropBlendedFace(false, false, false, 0),
+          "a see-through ghost's face goes against a solid ghost's face and between two of its kind");
+    bool onePerPlane = true;
+    for (int side = 0; side < 6; ++side)
+        onePerPlane = onePerPlane && dropBlendedFace(true, true, false, side) != dropBlendedFace(true, true, false, side ^ 1);
+    check(onePerPlane, "two different see-through ghosts keep exactly one face between them");
+    using lamium::schematic::faces::facesAway;
+    Vertex up{0, 1, 0}, center{0, 0, 0};
+    check(facesAway(up, center, Vertex{0, -1, 0}) && !facesAway(up, center, Vertex{0, 1, 0})
+          && !facesAway(Vertex{0, 0, 0}, center, Vertex{0, -1, 0}), "a face is seen from behind only past its plane, and only with a normal");
+    using lamium::schematic::faces::farToNear;
+    std::array<Vertex, 12> three{{{0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0},     // near
+                                  {0, 0, 9}, {1, 0, 9}, {1, 1, 9}, {0, 1, 9},     // far
+                                  {0, 0, 0}, {1, 0, 0}, {1, 1, 0}, {0, 1, 0}}};  // as near as the first
+    auto order = farToNear(std::span<Vertex const>(three), Vertex{.5f, .5f, -1});
+    check(order == std::vector<std::uint32_t>{1, 0, 2}, "blended quads are drawn far to near, equally far ones in their order");
 }
 
 void menuRules() {
@@ -426,6 +619,13 @@ void menuRules() {
           "only the move commands choose a target");
     check(openAt(false, 3) == -1 && openAt(true, 3) == 3 && openAt(true, -1) == -1 && openAt(true, 99) == -1,
           "the menu opens at the list unless set to reopen where it was closed");
+    bool switchThere = false;
+    for (auto const& item : categories[showCategory].items)
+        switchThere = switchThere || (!item.stepper() && std::get<Command>(item.what) == Command::ToggleFeature);
+    check(switchThere && worksWhileOff({"", Command::ToggleFeature}) && worksWhileOff({"", Command::CheckTab})
+              && !worksWhileOff({"", Command::Corner1Here}) && !worksWhileOff({"", Command::SaveArea})
+              && !worksWhileOff({"", Stepper::Rotate}),
+          "with Schematics off the menu opens at its switch, and only the switch and screens run");
 
     using lamium::ui::RadialLayout;
     RadialLayout::Sizes sizes{100, 26, 140, 62};
@@ -467,6 +667,48 @@ void drawKeys() {
     layered.layers.index = 4;
     check(drawKey(a) == drawKey(renamed) && drawKey(a) == drawKey(hidden), "renaming or hiding keeps a placement's ghosts");
     check(drawKey(a) != drawKey(moved) && drawKey(a) != drawKey(layered), "moving or changing layers rebuilds a placement's ghosts");
+}
+
+// L-141: the earlier placement draws the shared cells.
+void placementOverlap() {
+    auto structure = std::make_shared<Structure>();
+    structure->size = {2, 1, 1};
+    structure->palette = {PaletteBlock{"minecraft:stone", {}, 0}, PaletteBlock{"minecraft:air", {}, 0}};
+    structure->blocks = {0, 1}; // stone at x 0, air at x 1
+    session::Shown first{{}, structure}, second{{}, structure}, far{{}, structure};
+    first.placement.file = second.placement.file = far.placement.file = "a.mcstructure";
+    first.placement.placement.origin = {0, 0, 0};
+    second.placement.placement.origin = {0, 0, 0};
+    far.placement.placement.origin = {10, 0, 0};
+    std::vector<session::Shown> list{first, second, far};
+    check(overlap::drawsCell(first, 0, {0, 0, 0}) && !overlap::drawsCell(first, 0, {1, 0, 0}),
+          "a placement draws its blocks, not its air");
+    auto owned = [&](size_t index, int dimension, Point cell) {
+        auto earlier = overlap::earlierMeeting(list, index);
+        return overlap::ownedEarlier(list, earlier, dimension, cell);
+    };
+    check(owned(1, 0, {0, 0, 0}) && !owned(0, 0, {0, 0, 0}), "the earlier placement owns a shared cell");
+    check(!owned(1, 0, {1, 0, 0}), "an air cell of the earlier one does not take the cell");
+    check(!owned(1, 1, {0, 0, 0}), "a placement in another dimension owns nothing here");
+    check(overlap::earlierMeeting(list, 2).empty(), "a distant placement has no earlier one to look at");
+    list[0].placement.visible = false;
+    check(!owned(1, 0, {0, 0, 0}), "a hidden placement owns nothing");
+    std::string hiddenKey = overlap::earlierKey(list, 1);
+    list[0].placement.visible = true;
+    check(overlap::earlierKey(list, 1) != hiddenKey && overlap::earlierKey(list, 2).empty(),
+          "the earlier overlapping placements are part of the build key, distant ones are not");
+    auto before = overlap::earlierKey(list, 1);
+    list[0].structure = std::make_shared<Structure>(*structure); // its file read again
+    check(overlap::earlierKey(list, 1) != before, "a new structure for the earlier placement rebuilds the overlap");
+    // Border faces: placements that touch, earlier or later, not distant ones.
+    session::Shown beside{{}, structure};
+    beside.placement.file = "a.mcstructure";
+    beside.placement.placement.origin = {2, 0, 0}; // right after the first's x 0..1
+    std::vector<session::Shown> row{first, beside, far};
+    check(overlap::touching(row, 0) == std::vector<size_t>{1} && overlap::touching(row, 1) == std::vector<size_t>{0}
+              && overlap::touching(row, 2).empty() && !overlap::touchingKey(row, 0).empty() && overlap::touchingKey(row, 2).empty(),
+          "a placement right next to another touches it both ways; a distant one touches none");
+    check(overlap::paletteAt(first, 0, {0, 0, 0}) == 0 && !overlap::paletteAt(first, 0, {1, 0, 0}), "the palette index of a drawn cell");
 }
 
 void placementDocuments() {
@@ -514,14 +756,168 @@ void verificationOrder() {
           && itemsPerBlock("minecraft:stone", false) == 1, "double slabs need two items; second halves none");
 }
 }
+void otherHalves() {
+    PaletteBlock door{"minecraft:jungle_door", {}, 18168865};
+    door.states.set("door_hinge_bit", {std::int8_t{0}});
+    door.states.set("upper_block_bit", {std::int8_t{0}});
+    auto upper = otherHalf(door);
+    check(upper && upper->step == 1 && upper->block.name == door.name && upper->block.version == door.version,
+          "a lower door half has its other half one block above");
+    std::int64_t bit = 0, hinge = 1;
+    check(upper && upper->block.states.find("upper_block_bit")->integer(bit) && bit == 1
+          && upper->block.states.find("door_hinge_bit")->integer(hinge) && hinge == 0
+          && upper->block.states.entries.size() == door.states.entries.size(),
+          "the other half flips only upper_block_bit");
+    auto lower = upper ? otherHalf(upper->block) : std::nullopt;
+    check(lower && lower->step == -1 && lower->block.key() == door.key(), "the upper half's other half is the lower half again");
+    check(!otherHalf(PaletteBlock{"minecraft:stone", {}, 0}), "a one-block-tall block has no other half");
+}
+void liquidCorners() {
+    using liquids::Cell;
+    auto near = [](float a, float b) { return std::abs(a - b) < 1e-4f; };
+    check(near(liquids::surface(0), 8.f / 9) && near(liquids::surface(7), 1.f / 9) && near(liquids::surface(8), 8.f / 9),
+          "a liquid's surface: source 8/9, depth 7 one ninth, falling like a source");
+    // A pool of sources walled in on every side: flat at the source height.
+    auto pool = [](int dx, int dy, int dz) {
+        if (dy != 0) return Cell{};
+        return dx == 0 && dz == 0 ? Cell{1, 0, false} : Cell{0, 0, true};
+    };
+    check(near(liquids::corner(1, pool, 0, 0), 8.f / 9) && near(liquids::corner(1, pool, 1, 1), 8.f / 9),
+          "a source between solid walls keeps its height at every corner");
+    auto under = [](int dx, int dy, int dz) { return dy == 1 && dx == 0 && dz == 0 ? Cell{1, 0, false} : Cell{1, 3, false}; };
+    check(near(liquids::corner(1, under, 0, 0), 1.f), "the same liquid above raises the corner to the full block");
+    // Flowing water (depth 3) next to open air on the -x side: lower there.
+    auto flow = [](int dx, int dy, int dz) {
+        if (dy != 0) return Cell{};
+        return dx < 0 ? Cell{0, 0, false} : Cell{1, 3, false};
+    };
+    check(liquids::corner(1, flow, 0, 0) < liquids::corner(1, flow, 1, 0) && near(liquids::corner(1, flow, 1, 0), liquids::surface(3)),
+          "a flowing liquid slopes down toward open air");
+    auto lava = [](int dx, int dy, int dz) { return dy == 0 && dx == 0 && dz == 0 ? Cell{2, 0, false} : Cell{1, 0, false}; };
+    check(near(liquids::corner(2, lava, 0, 0), 8.f / 9 * 10 / 13), "another liquid around counts as open, not as the same liquid");
+    auto still = [](liquids::Flow f) { return std::abs(f.x) < 1e-4f && std::abs(f.z) < 1e-4f; };
+    check(still(liquids::flow(1, pool)), "a source between walls does not flow");
+    // A pool of sources edged by solid stairs on +x and open ground (no water below) on -x.
+    auto edged = [](int dx, int dy, int dz) {
+        if (dy != 0) return Cell{0, 0, true};
+        return dx > 0 ? Cell{0, 0, true} : dx < 0 ? Cell{0, 0, false} : Cell{1, 0, false};
+    };
+    check(still(liquids::flow(1, edged)) && liquids::corner(1, edged, 0, 0) < 8.f / 9,
+          "a source sloping toward open ground still does not flow");
+    // A source at the edge of a hole: open on -x with water below it.
+    auto ledge = [](int dx, int dy, int dz) {
+        if (dx < 0 && dy == -1) return Cell{1, 0, false};
+        if (dy != 0) return Cell{0, 0, true};
+        return dx < 0 ? Cell{0, 0, false} : dx == 0 && dz == 0 ? Cell{1, 0, false} : Cell{0, 0, true};
+    };
+    check(liquids::flow(1, ledge).x < 0, "a source flows toward an open cell with water below it");
+    auto stream = [](int dx, int dy, int dz) {
+        if (dy != 0) return Cell{0, 0, true};
+        return dz != 0 ? Cell{0, 0, true} : Cell{1, dx + 2, false};
+    };
+    check(liquids::flow(1, stream).x > 0, "water flows toward its deeper (lower) neighbor");
+}
+void blockEntitySaves() {
+    StructureBuilder builder(Size{2, 1, 1}, Point{0, 0, 0});
+    nbt::Compound bed;
+    bed.set("id", {std::string("Bed")});
+    bed.set("color", {std::int8_t{13}});
+    builder.setBlockEntity(1, bed);
+    auto bytes = writeStructure(builder.structure());
+    auto back = parseStructure({reinterpret_cast<std::uint8_t const*>(bytes.data()), bytes.size()});
+    std::int64_t color = 0;
+    auto found = back.blockEntities.find(1);
+    check(found != back.blockEntities.end() && found->second.find("color") && found->second.find("color")->integer(color) && color == 13
+          && back.blockEntities.size() == 1, "a saved area keeps a cell's block entity data through write and read");
+}
+void liquidChecks() {
+    check(withLiquid(CellState::Correct, true) == CellState::Correct && withLiquid(CellState::Correct, false) == CellState::State,
+          "a right block with the wrong waterlogging is a state mistake");
+    check(withLiquid(CellState::Wrong, false) == CellState::Wrong && withLiquid(CellState::Missing, false) == CellState::Missing,
+          "waterlogging is judged only once the block itself is right");
+    using lamium::schematic::classifyReading;
+    using lamium::schematic::CellReading;
+    check(classifyReading({.placeholder = true}, true) == CellState::Unknown
+          && classifyReading({.placeholder = true, .expectsAir = true}, true) == CellState::Unknown,
+          "a placeholder block while the chunk arrives is never judged");
+    check(classifyReading({.same = true}, false) == CellState::Correct && classifyReading({.actualAir = true}, false) == CellState::Missing
+          && classifyReading({.sameType = true}, false) == CellState::State && classifyReading({}, false) == CellState::Wrong,
+          "a block is correct, missing, in another state or wrong");
+    check(classifyReading({.same = true, .liquidsMatch = false}, false) == CellState::State
+          && classifyReading({.known = false, .liquidsMatch = false}, false) == CellState::Unknown,
+          "a right block with the wrong water is a state mistake; an unknown block stays unknown");
+    check(classifyReading({.expectsAir = true, .actualAir = true}, true) == CellState::Correct
+          && classifyReading({.expectsAir = true}, true) == CellState::Extra && classifyReading({.expectsAir = true}, false) == CellState::Ignored,
+          "air is correct when empty; something there is extra only when extras count");
+    check(classifyReading({.expectsAir = true, .expectsLiquid = true, .same = true}, false) == CellState::Correct
+          && classifyReading({.expectsAir = true, .expectsLiquid = true, .actualAir = true}, false) == CellState::Missing
+          && classifyReading({.expectsAir = true, .expectsLiquid = true, .sameType = true}, false) == CellState::State
+          && classifyReading({.expectsAir = true, .expectsLiquid = true, .liquidsMatch = false}, true) == CellState::Wrong,
+          "air with water in the second layer is judged against the water");
+    auto row = liquidDifference(true, false);
+    check(row.key == "waterlogged" && row.expected == "true" && row.actual == "false", "the waterlogging row names both sides");
+    auto face = faceDifference(2, 5);
+    check(face.key == "facing" && face.expected == "north" && face.actual == "east" && faceDifference(9, 0).expected == "9",
+          "a shulker box's opening row names both faces");
+}
+// L-184: the cells a ray passes, nearest first.
+void rayCells() {
+    auto cells = cellsAlong(.5, .5, .5, 1, 0, 0, 3.2);
+    check(cells.size() == 4 && cells.front() == Point{0, 0, 0} && cells.back() == Point{3, 0, 0}, "a ray along x steps cell by cell");
+    auto diagonal = cellsAlong(.5, .5, .5, 1, 1, 0, 2);
+    bool adjacent = true;
+    for (size_t i = 1; i < diagonal.size(); ++i)
+        adjacent = adjacent && std::abs(diagonal[i].x - diagonal[i - 1].x) + std::abs(diagonal[i].y - diagonal[i - 1].y) == 1;
+    check(adjacent && diagonal.size() >= 3, "a diagonal ray enters one face at a time");
+    auto back = cellsAlong(-.5, 2.5, 0.5, 0, -1, 0, 1.6);
+    check(back.size() == 3 && back[1] == Point{-1, 1, 0} && back[2] == Point{-1, 0, 0}, "negative directions and coordinates floor");
+    check(cellsAlong(0, 0, 0, 0, 0, 0, 5).empty(), "no direction, no cells");
+}
+// L-186: tint by setting, outline copies by width.
+void ghostLook() {
+    using lamium::schematic::faces::ghostTint;
+    check(std::abs(ghostTint(100)[0] - .62f) < 1e-6f && std::abs(ghostTint(100)[1] - .85f) < 1e-6f
+              && ghostTint(0)[0] == 1.f && ghostTint(0)[1] == 1.f && ghostTint(40)[0] > ghostTint(100)[0]
+              && ghostTint(40)[0] < 1.f && ghostTint(150)[0] == ghostTint(100)[0],
+          "the tint runs from none at 0% to the earlier strong look at 100%");
+    using lamium::schematic::faces::barHalfWidth;
+    using lamium::schematic::faces::barQuads;
+    check(barHalfWidth(0) == 0.f && barHalfWidth(2) > barHalfWidth(1) && barHalfWidth(1) > 0.f,
+          "thin is a game line, normal and thick are bars of growing width");
+    auto bar = barQuads({0, 0, 0}, {1, 0, 0}, .01f);
+    bool around = bar.size() == 32;
+    for (auto const& v : bar) around = around && (v[0] == 0.f || v[0] == 1.f) && std::abs(std::abs(v[1]) - .01f) < 1e-6f
+                                      && std::abs(std::abs(v[2]) - .01f) < 1e-6f;
+    check(around, "a bar is four sides around the edge, both windings, ends on the edge's ends");
+    using lamium::schematic::faces::outlineRank;
+    using lamium::schematic::faces::rankedBarHalfWidth;
+    int wrong = outlineRank(1.f, .25f, .2f), unknown = outlineRank(1.f, .55f, .1f), state = outlineRank(1.f, .8f, .2f),
+        missing = outlineRank(.35f, .85f, 1.f);
+    check(wrong > unknown && unknown > state && state > missing, "wrong over unknown over wrong state over missing");
+    check(rankedBarHalfWidth(1, wrong) > rankedBarHalfWidth(1, state) && rankedBarHalfWidth(1, state) > rankedBarHalfWidth(1, missing)
+          && rankedBarHalfWidth(2, missing) == barHalfWidth(2) && rankedBarHalfWidth(0, wrong) == 0.f,
+          "a stronger mistake's bar encloses a weaker neighbor's; thin stays a game line");
+    using lamium::schematic::faces::edgeKey;
+    check(edgeKey({0, 1, 0}, {1, 1, 0}) == edgeKey({0.001f, 1.f, 0.f}, {1.f, 1.001f, 0.f})
+              && edgeKey({0, 1, 0}, {1, 1, 0}) != edgeKey({0, 1, 0}, {1, 1, 1}),
+          "two boxes' copies of one edge share a key, other edges do not");
+}
 void schematicTests() {
+    rayCells();
+    ghostLook();
+    otherHalves();
+    liquidChecks();
+    blockEntitySaves();
+    liquidCorners();
     verificationOrder();
     placementDocuments();
+    placementOverlap();
     drawKeys();
     menuRules();
     ghostFaces();
     placementTransforms();
     entityRules();
+    previewRules();
     saveRules();
     savePromptHits();
     layerRules();
@@ -529,5 +925,6 @@ void schematicTests() {
     nbtBasics();
     structureRoundTrip();
     structureRejects();
+    structureWrittenShape();
     sampleFiles();
 }

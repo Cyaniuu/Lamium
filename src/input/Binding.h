@@ -14,7 +14,7 @@ struct Token {
     int code;
     auto operator<=>(Token const&) const = default;
 };
-enum class Action { Settings, Zoom, NightVision, Sort, ChunkBorders, HideOffhand, Hitboxes, ToolSwitch, InfoHud, TargetInfo, DebugView, BreakingRestriction, CaptureBreaking, ResetBreaking, CycleBreakingMode, Freelook, LightOverlay, HandRestock, PermanentSneak, PeriodicAttack, PeriodicUse, ToggleShapes, OpenShapes, FreeCamera, OpenHotkeys, OpenHudLayout, CycleAttackMode, CycleUseMode, AttackHeldOnly, UseHeldOnly, PermanentSprint, EdgeGuard, FakeOffhand, FakeOffhandUse, Transfer, ToolGuard, ElytraSwap, ElytraSwapKey, FreeCameraSpeedUp, FreeCameraSpeedDown, HideWeather, HideParticles, HideBossBars, HideNausea, HideWater, HideLava, HidePowderSnow, Minimap, MinimapZoomIn, MinimapZoomOut, MinimapView, MinimapEnlarge, AddWaypoint, HideWaypoints, OpenWaypoints, OpenWorldMap, TogglePreviews, ToggleDurability, ToggleSorting, ToggleHideEffects, ToggleDurabilityHud, ToggleAutomationStatus, ToggleRadar, ToggleWaypoints, ToggleWorldMap, RadarFaces, ToggleOffhandSlot, ToggleSaturation, ToggleFoodValues, WeaponSwitch, ToggleSchematic, OpenSchematics, ToggleSchematicHud, NearestMistake, SelectLookedPlacement, NextPlacement, MovePlacementForward, MovePlacementBack, MovePlacementHere, RotatePlacement, MirrorPlacement, LayerUp, LayerDown, MovePlacementLeft, MovePlacementRight, MovePlacementUp, MovePlacementDown, LayerHere, OpenSchematicFiles, OpenSchematicCheck, OpenSchematicMaterials, OpenSchematicPlaced, SwapOffhand, ToggleOffhandSwap, SchematicCorner1, SchematicCorner2, SaveSchematicArea, SchematicMenu, AdjustSchematic, ToggleDeathRestore, Count };
+enum class Action { Settings, Zoom, NightVision, Sort, ChunkBorders, HideOffhand, Hitboxes, ToolSwitch, InfoHud, TargetInfo, DebugView, BreakingRestriction, CaptureBreaking, ResetBreaking, CycleBreakingMode, Freelook, LightOverlay, HandRestock, PermanentSneak, PeriodicAttack, PeriodicUse, ToggleShapes, OpenShapes, FreeCamera, OpenHotkeys, OpenHudLayout, CycleAttackMode, CycleUseMode, AttackHeldOnly, UseHeldOnly, PermanentSprint, EdgeGuard, FakeOffhand, FakeOffhandUse, Transfer, ToolGuard, ElytraSwap, ElytraSwapKey, FreeCameraSpeedUp, FreeCameraSpeedDown, HideWeather, HideParticles, HideBossBars, HideNausea, HideWater, HideLava, HidePowderSnow, Minimap, MinimapZoomIn, MinimapZoomOut, MinimapView, MinimapEnlarge, AddWaypoint, HideWaypoints, OpenWaypoints, OpenWorldMap, TogglePreviews, ToggleDurability, ToggleSorting, ToggleHideEffects, ToggleDurabilityHud, ToggleAutomationStatus, ToggleRadar, ToggleWaypoints, ToggleWorldMap, RadarFaces, ToggleOffhandSlot, ToggleSaturation, ToggleFoodValues, WeaponSwitch, ToggleSchematic, OpenSchematics, ToggleSchematicHud, NearestMistake, SelectLookedPlacement, NextPlacement, MovePlacementForward, MovePlacementBack, MovePlacementHere, RotatePlacement, MirrorPlacement, LayerUp, LayerDown, MovePlacementLeft, MovePlacementRight, MovePlacementUp, MovePlacementDown, LayerHere, OpenSchematicFiles, OpenSchematicCheck, OpenSchematicMaterials, OpenSchematicPlaced, SwapOffhand, ToggleOffhandSwap, SchematicCorner1, SchematicCorner2, SaveSchematicArea, SchematicMenu, AdjustSchematic, ToggleDeathRestore, HideDistanceFog, ToggleLockedTrades, ToggleEnglishSearch, PlayerList, ToggleInventoryHud, ToggleUsedSlots, ToggleConnectedTextures, HidePortal, ToggleStatusEffects, OpenCalculator, ToggleRepeatTrades, ToggleSkipServerPacks, ToggleChatPosition, Count };
 enum class Behavior { Press, Hold, Toggle };
 // Ordinary chords are order-sensitive and yield to a more specific chord
 // completed by the same press. Modifier-like chords (held camera keys) match
@@ -127,6 +127,19 @@ inline constexpr auto actions = std::to_array<ActionInfo>({
     {"schematicmenu", "schematicMenu", Behavior::Press},
     {"adjustschematic", "schematicMenu", Behavior::Hold},
     {"deathrestore", "deathRestore", Behavior::Toggle},
+    {"hidedistancefog", "hideEffects", Behavior::Toggle},
+    {"lockedtrades", "lockedTrades", Behavior::Toggle},
+    {"englishsearch", "englishSearch", Behavior::Toggle},
+    {"playerlist", "playerList", Behavior::Hold, 0x09}, // Tab
+    {"inventoryhud", "inventoryHud", Behavior::Toggle},
+    {"usedslots", "usedSlots", Behavior::Toggle},
+    {"connectedtextures", "connectedTextures", Behavior::Toggle},
+    {"hideportal", "hideEffects", Behavior::Toggle},
+    {"statuseffects", "statusEffects", Behavior::Toggle},
+    {"opencalculator", "calculator", Behavior::Press},
+    {"repeattrades", "repeatTrades", Behavior::Toggle},
+    {"skipserverpacks", "skipServerPacks", Behavior::Toggle},
+    {"chatposition", "chatPosition", Behavior::Toggle},
 });
 static_assert(actions.size() == static_cast<size_t>(Action::Count));
 // Kept for its saved id but no longer shown or dispatched.
@@ -149,9 +162,40 @@ inline Chord effectiveChord(Bindings const& bindings, Action action) {
     if (override) return *override;
     return defaultChord(action);
 }
+// Find by key: a binding uses every pressed input, in any order (Z finds Z
+// and Ctrl+Z; Ctrl+Z finds only bindings with both).
+inline bool chordUses(Chord const& binding, Chord const& pressed) {
+    if (pressed.empty()) return false;
+    for (auto token : pressed)
+        if (std::find(binding.begin(), binding.end(), token) == binding.end()) return false;
+    return true;
+}
 // Clearing the settings binding would lock the screen shut, so only Reset is
 // offered for it. Loading also ignores a stored empty settings binding.
 inline constexpr bool canClear(Action action) { return action != Action::Settings; }
+// The Settings key also closes the settings screen (L-188), unless it is a
+// single key the screen itself uses for editing or moving around.
+inline bool closesSettings(Chord const& chord, int key) {
+    if (chord.size() != 1 || chord[0].device != Device::Key || chord[0].code != key) return false;
+    for (int used : {0x08, 0x09, 0x0d, 0x1b, 0x20, 0x25, 0x26, 0x27, 0x28})
+        if (key == used) return false;
+    return true;
+}
+// UI openers close on the same completing press, including mouse chords.
+// The caller excludes editing and repeated presses before asking. A lone
+// left, right or middle button is the menu's own click, never a close.
+inline bool completesMenuBinding(Chord const& chord, Chord const& held, Token press) {
+    if (chord.empty() || chord.back() != press) return false;
+    if (chord.size() == 1 && press.device == Device::Mouse && press.code <= 3) return false;
+    std::ptrdiff_t last = -1;
+    for (auto token : chord) {
+        if (token.device == Device::Wheel) continue;
+        auto at = std::find(held.begin(), held.end(), token);
+        if (at == held.end() || at - held.begin() <= last) return false;
+        last = at - held.begin();
+    }
+    return true;
+}
 
 // Order is the press order and is significant: the last input completes the
 // chord. A wheel impulse is always last.
@@ -216,7 +260,8 @@ inline Relation bindingRelation(Chord const& a, Chord const& b) {
 inline bool sameInputContext(Action a, Action b) {
     return a == Action::Transfer || b == Action::Transfer || (a == Action::Sort) == (b == Action::Sort);
 }
-inline bool actionAllowed(Action action, bool gameplay, bool container, bool freeCamera = false) {
+inline bool actionAllowed(Action action, bool gameplay, bool container, bool freeCamera = false, bool outsideWorld = false) {
+    if (action == Action::Settings && outsideWorld) return true;
     if (action == Action::FreeCameraSpeedUp || action == Action::FreeCameraSpeedDown) return gameplay && freeCamera;
     if (action == Action::Sort) return container;
     if (action == Action::Transfer) return gameplay || container;

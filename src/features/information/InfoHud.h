@@ -13,6 +13,14 @@ ui::hud_editor::Boxes drawHud(MinecraftUIRenderContext&, float width, float heig
                               HudPreview const* preview = nullptr);
 // The offhand item beside the game's hotbar (L-75); `view` is the HUD view.
 void drawOffhandSlot(MinecraftUIRenderContext&, ScreenView const& view, Settings::Information const&);
+// Remembers where the game laid out the hotbar on the HUD view, for the
+// layout editor, which draws it there (it opens over another screen).
+void noteHotbar(ScreenView const& view);
+struct HotbarPlace { float x, y, w, h; };
+// Whether the Info HUD drawn this frame covers the game's paper doll or its
+// position line, for hiding them there (L-145, option on).
+void noteCoveredVanilla(ScreenView const& view, ui::hud_editor::Boxes const& drawn, Settings::Information const&);
+HotbarPlace editorHotbar(float width, float height);
 // A biome's name in the game's language, or its id when it has none.
 std::string biomeName(std::string const& identifier);
 }

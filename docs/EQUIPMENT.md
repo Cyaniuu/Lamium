@@ -89,6 +89,27 @@ Experimental, off by default, under Interaction.
   hand is followed once it glides. A key press on the ground waits for the key.
 - Only the jump flag is read every tick; the held item is checked on a jump.
 
+## Auto Elytra feedback (2026-10-14)
+
+[L-180](BACKLOG.md) tracks a report that Auto Elytra does not respond to
+Riptide trident launches. The shipped L-70 contract documents jumping
+while holding fireworks, not a general Riptide activation. First decide
+what the user expects (equip, enter glide or both), then reproduce the
+Riptide sequence and verify client/server behavior. This is an open report,
+not proof that the existing firework trigger regressed.
+
+Decided 2026-10-14 (maintainer): the trigger is the launch itself, not the
+charge, since Riptide flies without an elytra; default on; no automatic
+glide (L-71 starts later from simpler cases).
+Built 2026-10-14, not checked in game: a child "Riptide launch" (on by
+default) beside "Jump with fireworks". The rising edge of the spin (the
+player's `RiptideTridentSpinAttackComponent`, or the `Damagenearbymobs`
+actor flag) puts the elytra on as a firework jump does, so it comes off the
+set time after the first landing; landing in water is not ground. The
+player jumps in the air to glide. Not in a vehicle or Creative.
+Unknown: whether the local player carries that component or flag during
+the spin on the client, locally and on a server.
+
 ## Verification
 
 Pure tests (`tests/EquipmentPlanTests.cpp`) cover durability limits, enchantment

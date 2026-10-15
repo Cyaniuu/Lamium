@@ -1,8 +1,10 @@
 #include "overlay/WorldOverlay.h"
 #include "overlay/FaceMaterial.h"
+#include "overlay/CellMesh.h"
 #include "overlay/ChunkBorders.h"
 #include "overlay/Hitboxes.h"
 #include "overlay/Depth.h"
+#include "overlay/LineColor.h"
 #include "features/camera/CameraSessions.h"
 #include "overlay/LightOverlay.h"
 #include "overlay/ShapeSession.h"
@@ -18,8 +20,12 @@
 #include "mc/client/renderer/BaseActorRenderContext.h"
 #include "mc/client/renderer/Tessellator.h"
 #include "mc/client/renderer/RenderMaterialGroup.h"
+#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
+#include "mc/client/renderer/SupplementaryFieldAutoGenerationMode.h"
+#endif
 #include "mc/client/gui/screens/ScreenContext.h"
 #include "mc/client/game/IClientInstance.h"
+#include "mc/client/options/IOptionRegistry.h"
 #include "mc/client/player/LocalPlayer.h"
 #include "mc/world/level/dimension/Dimension.h"
 #include "mc/world/level/Level.h"
@@ -34,6 +40,9 @@
 #include "mc/deps/minecraft_renderer/renderer/TexturePtr.h"
 #include "mc/deps/minecraft_renderer/resources/ClientTexture.h"
 #include "mc/deps/minecraft_renderer/resources/ServerTexture.h"
+#if !defined(LAMIUM_INPUT_UPDATE_PROBE) && !defined(LAMIUM_SDK_26_20_7)
+#include "mc/deps/minecraft_renderer/resources/OffscreenCaptureDescription.h"
+#endif
 #include "mc/common/client/renderer/helpers/MeshHelpers.h"
 #include "mc/deps/renderer/Camera.h"
 #include "mc/deps/renderer/MatrixStack.h"
@@ -45,6 +54,7 @@
 #include <span>
 #include <mutex>
 #include <atomic>
+#include <variant>
 #include "ll/api/event/client/ClientStartJoinLevelEvent.h"
 #include "ll/api/event/client/ClientJoinLevelEvent.h"
 #include "mc/client/game/IMinecraftGame.h"
@@ -56,6 +66,17 @@
 
 namespace lamium::overlay {
 namespace {
+#if defined(LAMIUM_INPUT_UPDATE_PROBE) || defined(LAMIUM_SDK_26_20_7)
+using OverlayCaptureDescription = std::monostate;
+auto supplementaryFieldMode() { return Tessellator::SupplementaryFieldAutoGenerationMode::None; }
+bool hasRenderCamera(BaseActorRenderContext const&) { return true; }
+Vec3 renderCamera(BaseActorRenderContext const& context) { return context.mCameraPosition; }
+#else
+using OverlayCaptureDescription = OffscreenCaptureDescription;
+auto supplementaryFieldMode() { return SupplementaryFieldAutoGenerationMode{}; }
+bool hasRenderCamera(BaseActorRenderContext const& context) { return context.mImpl != nullptr; }
+Vec3 renderCamera(BaseActorRenderContext const& context) { return context.mImpl->mCameraPosition; }
+#endif
 bool installed = false;
 std::mutex shapeMutex;
 ShapeWorkspace shapeWorkspace;
@@ -106,23 +127,11 @@ void joinWorld(ll::event::ClientJoinLevelEvent& event) noexcept {
 // A shape being created is previewed as lines and never persisted.
 ShapeCollection draftCollection(1);
 constexpr ShapeId draftKey = ~ShapeId{0};
-// The breaking region of the press in progress (L-15), drawn like a shape.
-constexpr ShapeId restrictionKey = draftKey - 1;
 bool hasShapes() {
     std::lock_guard lock(shapeMutex);
     return !shapeCollection.entries().empty() || !draftCollection.entries().empty();
 }
 
-// Uploaded shape meshes, owned by the render thread. Vertices are relative to
-// the shape's first block so the mesh is reused while the camera moves; only a
-// revision change rebuilds it. World exit asks the next frame to release them.
-struct ShapeMesh {
-    uint64_t revision = 0;
-    Cell origin{};
-    std::optional<mce::Mesh> faces, lines;
-    uint32_t faceVertices = 0, lineVertices = 0;
-    int variant = -1; // The FaceMaterial variant the mesh was built for.
-};
 } // namespace
 FaceMaterial faceMaterial(IClientInstance& client) {
 #if defined(LAMIUM_INPUT_UPDATE_PROBE) || defined(LAMIUM_SDK_26_20_7)
@@ -139,17 +148,20 @@ FaceMaterial faceMaterial(IClientInstance& client) {
     }
     if (mode == GraphicsMode::Fancy) {
         mce::MaterialPtr hologram(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"});
-        if (hologram.mRenderMaterialInfoPtr)
-            return {mce::MaterialPtr(mce::RenderMaterialGroup::switchable(), HashedString{"holo_hand_pointer"}), 0, true,
-                    .28f, false};
+        if (hologram.mRenderMaterialInfoPtr) return {std::move(hologram), 0, true, .28f, false};
     }
-    if (mode == GraphicsMode::Simple)
-        return {mce::MaterialPtr(mce::RenderMaterialGroup::common(), HashedString{"lightning"}), 1, false, .13f, false};
-    return {mce::MaterialPtr(mce::RenderMaterialGroup::common(), HashedString{"lightning"}), 2, false, .13f, true};
+    mce::MaterialPtr lightning(mce::RenderMaterialGroup::common(), HashedString{"lightning"});
+    if (mode == GraphicsMode::Simple) return {std::move(lightning), 1, false, .13f, false};
+    return {std::move(lightning), 2, false, .13f, true};
 #endif
 }
 namespace {
-std::map<ShapeId, ShapeMesh> shapeMeshes;
+// Uploaded shape meshes (CellMesh), owned by the render thread: only a
+// revision change rebuilds one. World exit asks the next frame to release them.
+std::map<ShapeId, CellMesh> shapeMeshes;
+// The breaking region of the press in progress (L-15): white faces with a
+// faint grid, like a face-style shape.
+CellMesh restrictionMesh;
 std::atomic<bool> releaseMeshes{false};
 struct EyeTrack { EyeOffsetInterpolator offset; uint64_t seenFrame = 0; };
 thread_local std::unordered_map<ActorRuntimeID, EyeTrack> eyeTracks;
@@ -164,114 +176,63 @@ std::array<float,3> shapeColor(ShapeColor color, bool draft) {
     default: return {.25f,.82f,.88f};
     }
 }
-void buildShapeMesh(ScreenContext& screen, ShapeMesh& mesh, ManagedShape const& shape, bool draft, FaceMaterial const& material) {
-    bool twoSided = material.twoSided;
-    mesh.faces.reset(); mesh.lines.reset();
-    mesh.faceVertices = mesh.lineVertices = 0;
-    mesh.revision = shape.revision;
-    mesh.variant = material.variant;
-    if (!shape.faces.empty()) mesh.origin = shape.faces.front().cell;
-    else if (!shape.lines.empty()) mesh.origin = {static_cast<int>(shape.lines.front().from.x),
-        static_cast<int>(shape.lines.front().from.y), static_cast<int>(shape.lines.front().from.z)};
-    auto [r, g, b] = shapeColor(shape.definition.color, draft);
-    bool faces = !draft && shape.definition.style == ShapeStyle::Face;
-    auto relative = [&](Tessellator& batch, Point p) {
-        batch.vertex(static_cast<float>(p.x - mesh.origin.x), static_cast<float>(p.y - mesh.origin.y),
-            static_cast<float>(p.z - mesh.origin.z));
-    };
-    if (faces && !shape.faces.empty()) {
-        Tessellator batch(screen.tessellator.mBufferResourceService);
-        int sides = twoSided ? 2 : 1;
-        batch.begin({}, mce::PrimitiveMode::QuadList, static_cast<int>(shape.faces.size()*4*sides), false);
-        batch.color(r, g, b, material.alpha);
-        for (auto const& face : shape.faces) {
-            // On the cell's own plane: the pull toward the eye keeps it in
-            // front of the block face there (depth rules, Depth.h).
-            auto corners = faceVertices(face);
-            for (auto p : corners) relative(batch, p);
-            // The reverse winding keeps faces visible from inside the shape.
-            if (twoSided) for (auto it = corners.rbegin(); it != corners.rend(); ++it) relative(batch, *it);
-        }
-        mesh.faces.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium shape faces",
-            Tessellator::SupplementaryFieldAutoGenerationMode::None));
-        mesh.faceVertices = static_cast<uint32_t>(shape.faces.size()*4*sides);
-    }
-    if (!shape.lines.empty()) {
-        Tessellator batch(screen.tessellator.mBufferResourceService);
-        batch.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(shape.lines.size()*2), false);
-        // Faces carry a faint outline so the block grid stays readable.
-        batch.color(r, g, b, faces && !material.strongLines ? .45f : 1.f);
-        for (auto const& line : shape.lines) { relative(batch, line.from); relative(batch, line.to); }
-        mesh.lines.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium shape lines",
-            Tessellator::SupplementaryFieldAutoGenerationMode::None));
-        mesh.lineVertices = static_cast<uint32_t>(shape.lines.size()*2);
-    }
-}
 // Draws a mesh built relative to `origin`, scaled toward the eye. The
 // projection is unchanged, but depth moves slightly nearer in proportion to
 // distance, so faces that run along or through existing blocks stay in front
 // of those blocks' own faces instead of flickering against them.
 template <class Draw>
 void withTowardEye(BaseActorRenderContext& context, Cell origin, Draw&& draw, float towardEye = depth::facePull) {
-    ScreenContext& screen = context.mScreenContext;
-    Vec3 const camera = context.mCameraPosition;
-    auto ref = screen.camera.worldMatrixStack->push(false);
-    ref.stack->_isDirty = true;
+    Vec3 const camera = renderCamera(context);
     glm::vec3 offset{static_cast<float>(origin.x - camera.x), static_cast<float>(origin.y - camera.y),
         static_cast<float>(origin.z - camera.z)};
-    ref.mat->_m = glm::scale(glm::translate(ref.mat->_m.get(), offset * towardEye), glm::vec3{towardEye});
-    draw();
-    // Pop manually, matching the proven LeviSchematic pattern for this stack.
-    ref.stack->_isDirty = true;
-    if (ref.stack->sortOrigin->has_value() && (ref.stack->stack->size() - 1) <= ref.stack->sortOrigin->value())
-        ref.stack->sortOrigin->reset();
-    ref.stack->stack->pop_back();
-    ref.mat = nullptr;
-    ref.stack = nullptr;
+    drawPulled(context.mScreenContext, offset, towardEye, draw);
 }
+// A shape (or a draft, or the breaking region) as a cell overlay: faces in
+// its color with a faint outline, or lines alone.
 void drawShape(BaseActorRenderContext& context, FaceMaterial const& faceMaterial, ShapeId id,
                ManagedShape const& shape, bool draft) {
-    ScreenContext& screen = context.mScreenContext;
+    if (!hasRenderCamera(context)) return;
+    auto [r, g, b] = shapeColor(shape.definition.color, draft);
+    CellStyle style{r, g, b, !draft && shape.definition.style == ShapeStyle::Face};
     auto& mesh = shapeMeshes[id];
-    if (mesh.revision != shape.revision || mesh.variant != faceMaterial.variant
-        || (mesh.faces && !mesh.faces->isValid()) || (mesh.lines && !mesh.lines->isValid()))
-        buildShapeMesh(screen, mesh, shape, draft, faceMaterial);
-    mce::MaterialPtr lineMaterial(mce::RenderMaterialGroup::common(), HashedString{"debug"});
-    withTowardEye(context, mesh.origin, [&] {
-        if (mesh.faces && faceMaterial.material.mRenderMaterialInfoPtr)
-            mesh.faces->renderMesh(screen, faceMaterial.material, gsl::span<mce::ClientTexture const*>{}, 0, mesh.faceVertices,
-                std::monostate{}, nullptr);
-        if (mesh.lines && lineMaterial.mRenderMaterialInfoPtr)
-            mesh.lines->renderMesh(screen, lineMaterial, gsl::span<mce::ClientTexture const*>{}, 0, mesh.lineVertices,
-                std::monostate{}, nullptr);
-    });
+    if (mesh.stale(shape.revision, style, faceMaterial))
+        buildCellMesh(context.mScreenContext, mesh, shape.faces, shape.lines, style, faceMaterial, shape.revision);
+    drawCellMesh(context.mScreenContext, renderCamera(context), mesh, faceMaterial);
 }
 // Per-batch colors so one frame can carry Java-style color coding.
 struct LineBatch { std::span<Line const> lines; float r, g, b, a = 1; };
+// One submission per nonempty batch: the selection-outline material takes
+// its color from the shader color, which keeps the colors under Vibrant
+// Visuals (L-176); one multicolor debug mesh drew them black there.
 void drawLines(BaseActorRenderContext& context, std::span<LineBatch const> batches) {
-    if (batches.empty()) return;
+    if (batches.empty() || !hasRenderCamera(context)) return;
     ScreenContext& screen = context.mScreenContext;
     Tessellator& shared = screen.tessellator;
-    // Own the temporary tessellation state. Never reset or reuse a partially
-    // assembled vanilla batch. Mesh lifetime follows the engine submission API.
-    size_t count = 0;
-    for (auto const& group : batches) count += group.lines.size();
-    if (!count) return;
-    Tessellator batch(shared.mBufferResourceService);
-    batch.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(count * 2), false);
-    Vec3 const camera = context.mCameraPosition;
+    mce::MaterialPtr material = lines::material();
+    if (!material.mRenderMaterialInfoPtr) return;
+    Vec3 const camera = renderCamera(context);
+    // Pulled toward the eye (Depth.h rule 2): chunk walls lie on block faces,
+    // and unpulled lines there broke up into dashes against the terrain (L-157);
+    // the pull also keeps them over the vanilla selection outline.
+    constexpr float pull = depth::worldLinePull;
     for (auto const& group : batches) {
+        if (group.lines.empty()) continue;
+        auto const count = group.lines.size();
+        // Own the temporary tessellation state. Never reset or reuse a partially
+        // assembled vanilla batch. Mesh lifetime follows the engine submission API.
+        Tessellator batch(shared.mBufferResourceService);
+        batch.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(count * 2), false);
+        // Vertex colors too, for the debug material fallback.
         batch.color(group.r, group.g, group.b, group.a);
         for (auto const& line : group.lines) for (auto p : {line.from, line.to})
-            batch.vertex(static_cast<float>(p.x - camera.x), static_cast<float>(p.y - camera.y),
-                static_cast<float>(p.z - camera.z));
+            batch.vertex(static_cast<float>(p.x - camera.x) * pull, static_cast<float>(p.y - camera.y) * pull,
+                static_cast<float>(p.z - camera.z) * pull);
+        auto mesh = batch.end(Tessellator::UploadMode::Buffered, "Lamium world lines", supplementaryFieldMode());
+        lines::colored(screen, group.r, group.g, group.b, [&] {
+            mesh.renderMesh(screen, material, gsl::span<mce::ClientTexture const*>{}, 0,
+                static_cast<uint>(count * 2), OverlayCaptureDescription{}, nullptr);
+        });
     }
-    auto mesh = batch.end(Tessellator::UploadMode::Buffered, "Lamium world lines",
-        Tessellator::SupplementaryFieldAutoGenerationMode::None);
-    mce::MaterialPtr material(mce::RenderMaterialGroup::common(), HashedString{"debug"});
-    if (!material.mRenderMaterialInfoPtr) return;
-    mesh.renderMesh(screen, material, gsl::span<mce::ClientTexture const*>{}, 0,
-        static_cast<uint>(count * 2), std::monostate{}, nullptr);
 }
 void drawLines(BaseActorRenderContext& context, std::span<Line const> lines, bool hitboxes = false) {
     LineBatch single{lines, 1, 1, 1};
@@ -346,8 +307,7 @@ void buildLightMesh(ScreenContext& screen, LightChunk& chunk, Cell origin, Light
                 if (sides == 2) for (auto it = quad.corners.rbegin(); it != quad.corners.rend(); ++it) relative(batch, *it);
             }
         }
-        mesh.emplace(batch.end(Tessellator::UploadMode::Buffered, name,
-            Tessellator::SupplementaryFieldAutoGenerationMode::None));
+        mesh.emplace(batch.end(Tessellator::UploadMode::Buffered, name, supplementaryFieldMode()));
         vertices = static_cast<uint32_t>(quads * 4 * sides);
     };
     build({Group{&always, .88f, .31f, .22f, tint}, Group{&night, 1.f, .76f, .29f, tint}},
@@ -359,16 +319,16 @@ void buildLightMesh(ScreenContext& screen, LightChunk& chunk, Cell origin, Light
         batch.begin({}, mce::PrimitiveMode::LineList, static_cast<int>(lines.size() * 2), false);
         batch.color(1.f, 1.f, 1.f, 1.f);
         for (auto const& line : lines) { relative(batch, line.from); relative(batch, line.to); }
-        chunk.lines.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium light lines",
-            Tessellator::SupplementaryFieldAutoGenerationMode::None));
+        chunk.lines.emplace(batch.end(Tessellator::UploadMode::Buffered, "Lamium light lines", supplementaryFieldMode()));
         chunk.lineVertices = static_cast<uint32_t>(lines.size() * 2);
     }
 }
 void drawLightOverlay(BaseActorRenderContext& context, IClientInstance& client, LocalPlayer& player,
                       Settings::Overlays const& preferences) {
+    if (!hasRenderCamera(context)) return;
     // Like Chunk Borders, follow the rendered view while the camera is detached.
     Vec3 position = player.getFeetPos();
-    if (CameraSessions::instance().detachedCameraActive()) position = context.mCameraPosition;
+    if (CameraSessions::instance().detachedCameraActive()) position = renderCamera(context);
     Cell center{checkedCoordinate(std::floor(position.x)), checkedCoordinate(std::floor(position.y)),
                 checkedCoordinate(std::floor(position.z))};
     int radius = static_cast<int>(preferences.lightRange);
@@ -445,7 +405,7 @@ void drawLightOverlay(BaseActorRenderContext& context, IClientInstance& client, 
             if (!mesh || !material.material.mRenderMaterialInfoPtr) return;
             withTowardEye(context, origin, [&] {
                 mesh->renderMesh(screen, material.material, gsl::span<mce::ClientTexture const*>{}, 0,
-                    vertices, std::monostate{}, nullptr);
+                    vertices, OverlayCaptureDescription{}, nullptr);
             }, towardEye);
         };
         faces(chunk.tints, chunk.tintVertices, depth::facePull);
@@ -453,7 +413,7 @@ void drawLightOverlay(BaseActorRenderContext& context, IClientInstance& client, 
         if (chunk.lines && lineMaterial.mRenderMaterialInfoPtr)
             withTowardEye(context, origin, [&] {
                 chunk.lines->renderMesh(screen, lineMaterial, gsl::span<mce::ClientTexture const*>{}, 0,
-                    chunk.lineVertices, std::monostate{}, nullptr);
+                    chunk.lineVertices, OverlayCaptureDescription{}, nullptr);
             }, depth::linePull);
     }
 }
@@ -465,7 +425,7 @@ LL_TYPE_INSTANCE_HOOK(WorldLines, ll::memory::HookPriority::Normal, LevelRendere
     auto const settings = runtime.snapshot();
     auto const& preferences = settings->overlays;
     bool breaking = settings->interaction.breaking;
-    if (releaseMeshes.exchange(false)) { shapeMeshes.clear(); releaseLight(); eyeTracks.clear(); }
+    if (releaseMeshes.exchange(false)) { shapeMeshes.clear(); restrictionMesh.release(); releaseLight(); eyeTracks.clear(); }
     if (!preferences.hitboxes) eyeTracks.clear();
     if (!preferences.light && !lightChunks.empty()) releaseLight();
     bool shapesShown = preferences.shapes && hasShapes();
@@ -485,7 +445,6 @@ LL_TYPE_INSTANCE_HOOK(WorldLines, ll::memory::HookPriority::Normal, LevelRendere
             // Release meshes of removed shapes.
             if (shapeMeshes.size() > shapeCollection.entries().size() + draftCollection.entries().size())
                 std::erase_if(shapeMeshes, [&](auto const& entry) {
-                    if (entry.first == restrictionKey) return false;
                     return entry.first == draftKey ? draftCollection.entries().empty() : !shapeCollection.find(entry.first);
                 });
         }
@@ -500,19 +459,23 @@ LL_TYPE_INSTANCE_HOOK(WorldLines, ll::memory::HookPriority::Normal, LevelRendere
                 if (hit.mType == HitResultType::Tile) target = Cell{hit.mBlock.x, hit.mBlock.y, hit.mBlock.z};
                 thread_local std::optional<interaction::RestrictionRegion> cachedRegion;
                 thread_local std::optional<Cell> cachedTarget;
-                thread_local ManagedShape restriction;
-                if (cachedRegion != region || cachedTarget != target || !restriction.revision) {
+                thread_local CellSurface restriction;
+                thread_local uint64_t restrictionRevision = 0;
+                if (cachedRegion != region || cachedTarget != target || !restrictionRevision) {
                     auto cells = region->preview(4);
                     if (target) cells.erase(*target);
-                    restriction.definition.style = ShapeStyle::Face;
-                    restriction.definition.color = ShapeColor::White;
-                    restriction.faces = boundaryFaces(cells);
-                    restriction.lines = gridSurfaceLines(cells);
-                    ++restriction.revision;
+                    restriction = cellSurface(cells);
+                    ++restrictionRevision;
                     cachedRegion = region;
                     cachedTarget = target;
                 }
-                drawShape(context, faceMaterial(client), restrictionKey, restriction, false);
+                auto const material = faceMaterial(client);
+                auto [r, g, b] = shapeColor(ShapeColor::White, false);
+                CellStyle style{r, g, b, true};
+                if (restrictionMesh.stale(restrictionRevision, style, material))
+                    buildCellMesh(context.mScreenContext, restrictionMesh, restriction.faces, restriction.lines, style, material,
+                                  restrictionRevision);
+                if (hasRenderCamera(context)) drawCellMesh(context.mScreenContext, renderCamera(context), restrictionMesh, material);
             }
         }
         auto& dimension = player->getDimension();
@@ -523,8 +486,8 @@ LL_TYPE_INSTANCE_HOOK(WorldLines, ll::memory::HookPriority::Normal, LevelRendere
             Point center{position.x, position.y, position.z};
             // A detached camera looks from away from the body; center the
             // borders on the rendered view instead of the player chunk.
-            if (CameraSessions::instance().detachedCameraActive()) {
-                Vec3 const camera = context.mCameraPosition;
+            if (hasRenderCamera(context) && CameraSessions::instance().detachedCameraActive()) {
+                Vec3 const camera = renderCamera(context);
                 center = {camera.x, camera.y, camera.z};
             }
             thread_local ChunkBorderCache borders;
@@ -536,8 +499,8 @@ LL_TYPE_INSTANCE_HOOK(WorldLines, ll::memory::HookPriority::Normal, LevelRendere
                                                {groups.teal, chunkTeal[0], chunkTeal[1], chunkTeal[2]}}};
             drawLines(context, colored);
         }
-        if (preferences.hitboxes) {
-            Vec3 const camera = context.mCameraPosition;
+        if (preferences.hitboxes && hasRenderCamera(context)) {
+            Vec3 const camera = renderCamera(context);
             int const dimensionId = static_cast<int>(player->getDimensionId());
             if (eyeDimension != dimensionId) { eyeTracks.clear(); eyeDimension = dimensionId; }
             uint64_t const tick = player->getLevel().getCurrentTick().tickID;
@@ -617,6 +580,21 @@ void rename(ShapeId id, std::string name) {
 bool remove(ShapeId id) {
     std::lock_guard lock(shapeMutex);
     return shapeWorkspace.change([&](auto& values) { return values.remove(id); });
+}
+std::vector<Footprint> footprints(int dimension) {
+    std::lock_guard lock(shapeMutex);
+    // Boxes by shape and the revision they were computed for.
+    static std::map<ShapeId, std::pair<uint64_t, std::optional<ShapeFootprint>>> cache;
+    std::erase_if(cache, [](auto const& entry) { return !shapeCollection.find(entry.first); });
+    std::vector<Footprint> result;
+    for (auto const& [id, shape] : shapeCollection.entries()) {
+        if (shape.definition.dimension != dimension) continue;
+        auto& cached = cache[id];
+        if (cached.first != shape.revision || !cached.first) cached = {shape.revision, shapeFootprint(shape)};
+        if (cached.second)
+            result.push_back({id, shape.definition.name, shape.definition.color, shape.definition.visible, *cached.second});
+    }
+    return result;
 }
 void setDraft(std::optional<ShapeDefinition> definition) {
     std::lock_guard lock(shapeMutex);

@@ -27,6 +27,33 @@ void durabilityHudTests() {
     check(slots(rows(wearingElytra, false, true))
               == std::vector{Slot::MainHand, Slot::Head, Slot::Chest, Slot::Legs, Slot::Feet},
           "a worn elytra is an ordinary chest row among the armor rows");
+    Sample wings{true, 59, 432, Weapon::Elytra};
+    Samples flying{pick, shield, helmet, wings, legs, boots};
+    check(slots(rows(flying, false, false, true)) == std::vector{Slot::MainHand, Slot::Chest},
+          "the elytra switch shows a worn elytra with armor rows off");
+    check(slots(rows(flying, false, true, false)) == std::vector{Slot::MainHand, Slot::Head, Slot::Legs, Slot::Feet},
+          "armor rows leave the elytra to its own switch");
+    check(slots(rows(flying, false, true, true))
+              == std::vector{Slot::MainHand, Slot::Head, Slot::Chest, Slot::Legs, Slot::Feet},
+          "with both on the elytra keeps the chest position");
+    check(slots(rows(worn, false, false, true)) == std::vector{Slot::MainHand},
+          "the elytra switch adds no row for a chestplate");
+
+    check(weaponOf("minecraft:bow") == Weapon::Bow && weaponOf("minecraft:crossbow") == Weapon::Crossbow
+              && weaponOf("minecraft:elytra") == Weapon::Elytra && weaponOf("minecraft:trident") == Weapon::Other,
+          "bows, crossbows and elytra are told apart by name");
+    check(ammoFor(Weapon::Bow) == std::vector{Ammo::Arrows}
+              && ammoFor(Weapon::Crossbow) == std::vector{Ammo::Arrows, Ammo::Fireworks}
+              && ammoFor(Weapon::Elytra) == std::vector{Ammo::Fireworks} && ammoFor(Weapon::Other).empty(),
+          "a bow counts arrows, a crossbow arrows and fireworks, an elytra fireworks");
+    AmmoCounts counts;
+    counts.add("minecraft:arrow", 64);
+    counts.add("minecraft:arrow", 12); // tipped arrows are the same item
+    counts.add("minecraft:firework_rocket", 9);
+    counts.add("minecraft:snowball", 16);
+    counts.add("minecraft:arrow", 0);
+    check(counts.of(Ammo::Arrows) == 76 && counts.of(Ammo::Fireworks) == 9,
+          "ammo totals add arrows of every kind and fireworks, nothing else");
 
     Row full{Slot::MainHand, 1561, 1561}, quarter{Slot::MainHand, 390, 1561}, low{Slot::MainHand, 118, 1561};
     check(numberText(Look::BarAndNumber, quarter) == "390/1561" && numberText(Look::Number, quarter) == "390/1561",
@@ -54,6 +81,10 @@ void durabilityHudTests() {
               && loaded.information.durabilityOffhand && loaded.information.durabilityArmor
               && loaded.hud.durability.anchor == ui::Anchor::TopRight && loaded.hud.durability.dy == 20,
           "durability HUD options load");
+    check(defaults.information.durabilityAmmo && defaults.information.durabilityElytra
+              && !decodeSettings(R"({"information":{"durabilityAmmo":false}})").information.durabilityAmmo
+              && !decodeSettings(R"({"information":{"durabilityElytra":false}})").information.durabilityElytra,
+          "ammo and the elytra row show by default and their switches load");
     check(decodeSettings(R"({"information":{"durabilityLook":9}})").information.durabilityLook == 2,
           "an unknown look is clamped");
     auto* look = settings::find("information.durabilityLook");

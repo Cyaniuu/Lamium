@@ -2,6 +2,8 @@
 #include "input/BindingCapture.h"
 #include "input/ToggleAction.h"
 #include "settings/Options.h"
+#include "input/Actions.h"
+#include "ui/SettingsNavigation.h"
 void check(bool, char const*);
 void bindingTests() {
     using namespace lamium::input;
@@ -47,6 +49,15 @@ void bindingTests() {
         && !actionAllowed(Action::Transfer, false, false)
         && actionAllowed(Action::Sort, false, true) && !actionAllowed(Action::Sort, true, false),
         "transfer toggle works in gameplay and containers while sort remains container-only");
+    check(actionAllowed(Action::Settings, false, false, false, true) && !actionAllowed(Action::Zoom, false, false, false, true)
+        && !actionAllowed(Action::Settings, false, false), "outside a world only the settings key opens (L-175)");
+    check(lamium::outsideWorldMenu("ui://./hbui/index.html", false) && !lamium::outsideWorldMenu("ui://./hbui/index.html", true)
+        && lamium::outsideWorldMenu("start_screen", false)
+        && !lamium::outsideWorldMenu("world_loading_progress_screen - local_world_load", false)
+        && !lamium::outsideWorldMenu("hud_screen", false), "the title screen's menus count, loading screens and play do not");
+    check(lamium::ui::nav::needsWorld(lamium::ui::nav::waypoints) && lamium::ui::nav::needsWorld(lamium::ui::nav::hud)
+        && !lamium::ui::nav::needsWorld(0) && !lamium::ui::nav::needsWorld(lamium::ui::nav::hotkeys)
+        && !lamium::ui::nav::needsWorld(lamium::ui::nav::calculator), "settings lists and keys work outside a world; world views do not");
     Bindings fresh;
     check(effectiveChord(fresh, Action::Settings) == Chord{Token{Device::Key, 0x4C}}
         && effectiveChord(fresh, Action::ChunkBorders) == defaultChord(Action::ChunkBorders)
@@ -62,6 +73,26 @@ void bindingTests() {
         "explicit unbind and old custom J stay while other defaults apply");
     check(!canClear(Action::Settings) && canClear(Action::Zoom) && canClear(Action::ChunkBorders),
         "only the settings action refuses Clear");
+    Chord const lKey{Token{Device::Key, 0x4c}};
+    check(completesMenuBinding(Chord{Token{Device::Mouse, 5}}, Chord{Token{Device::Mouse, 5}}, Token{Device::Mouse, 5})
+        && completesMenuBinding(lKey, lKey, Token{Device::Key, 0x4c}),
+        "menu close matches keyboard and side-button completing presses");
+    check(!completesMenuBinding(Chord{Token{Device::Mouse, 2}}, Chord{Token{Device::Mouse, 2}}, Token{Device::Mouse, 2})
+        && !completesMenuBinding(Chord{Token{Device::Mouse, 1}}, Chord{Token{Device::Mouse, 1}}, Token{Device::Mouse, 1})
+        && completesMenuBinding(Chord{Token{Device::Key, 0x11}, Token{Device::Mouse, 2}},
+            Chord{Token{Device::Key, 0x11}, Token{Device::Mouse, 2}}, Token{Device::Mouse, 2}),
+        "a lone left/right click stays a menu click; a modified one still closes");
+    Chord mouseChord{Token{Device::Key, 0x11}, Token{Device::Mouse, 5}};
+    check(completesMenuBinding(mouseChord, mouseChord, mouseChord.back())
+        && !completesMenuBinding(mouseChord, Chord{mouseChord.back()}, mouseChord.back())
+        && !completesMenuBinding(mouseChord, Chord{mouseChord.back(), mouseChord.front()}, mouseChord.back())
+        && !completesMenuBinding({}, mouseChord, mouseChord.back()),
+        "menu close requires all chord inputs in order and its completing token");
+    check(closesSettings(lKey, 0x4c) && !closesSettings(lKey, 0x4d)
+              && !closesSettings(Chord{Token{Device::Key, 0x11}, Token{Device::Key, 0x4c}}, 0x4c)
+              && !closesSettings(Chord{Token{Device::Mouse, 3}}, 3) && !closesSettings(Chord{Token{Device::Key, 0x0d}}, 0x0d)
+              && !closesSettings(Chord{Token{Device::Key, 0x28}}, 0x28),
+          "the single Settings key closes the screen, unless the screen uses that key");
     Token z{Device::Key, 0x5a}, three{Device::Key, 0x33};
     auto chord = canonicalChord({z, three, z}, Behavior::Hold);
     check(chord == Chord{z, three} && canonicalChord({three, z}, Behavior::Hold) == Chord{three, z},

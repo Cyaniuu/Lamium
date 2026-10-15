@@ -63,6 +63,14 @@ subsystems:
 - Version-sensitive internal renderer/UI paths are capability-gated and fail
   open: when the expected contract cannot be verified, Lamium leaves vanilla
   behavior intact.
+- (Decided 2026-10-15, L-202) A shared typed catalog owns compatibility policy,
+  runtime availability and failure reasons per capability. Features keep their
+  actual native checks and cleanup. Settings, compatibility and runtime state
+  are separate; waiting for context is not failure. Execution, settings/help
+  and notices read the same status. Loader support is a series plus minimum,
+  not a growing patch allowlist; unverified Minecraft builds remain blocked.
+  Failures latch until explicit restart, and capability state owns no game
+  pointers. Adopt the shared mechanism without merging the feature modules.
 - Presentation features keep observed game state separate from display state;
   hiding or augmenting visuals must not silently mutate the underlying
   gameplay state.
@@ -99,6 +107,12 @@ All colors come from `ui::palette` in `src/ui/Widgets.h`:
 Sizes (GUI units, `SettingsTable`): header 20, row 14, nav item 14, sidebar
 112, padding 6, gap 6, key cap height 11, switch 18×9. The settings panel is
 at most 640×380 and centered. New screens reuse these numbers.
+(Decided 2026-10-15) There is one settings layout. A GUI smaller than it
+needs (440 wide, and tall enough for every sidebar item beside the
+footer) draws the settings screens (table, language list,
+Shapes, Waypoints, Schematics) shrunk to fit, rather than a second layout
+with tabs or a one-line footer. The world map, calculator, prompts, radial
+menu and HUD editor keep GUI units.
 
 ### Components (Decided)
 
@@ -110,10 +124,12 @@ at most 640×380 and centered. New screens reuse these numbers.
   collapsing keeps the clicked row where it was. The wheel scrolls without
   moving the selection.
 - **Sidebar** with categories; Hotkeys and Shapes are pinned at the bottom.
-  Below 440 units wide the sidebar becomes tabs; below 380 the key column
-  narrows. Search spans all categories.
+  Below 380 units the key column narrows. Search spans all categories.
+- **Scrollbars** (decided 2026-10-15): the settings list and the footer
+  description show a scrollbar while they overflow; pressing or dragging it
+  puts the first line under the pointer, as in the tool lists.
 - **Header** (decided 2026-10-06, L-101): `Lamium` and the faint Lamium
-  version, then search and Close. The sidebar or tabs show where you are, so
+  version, then search and Close. The sidebar shows where you are, so
   the header never repeats the page name; only a panel without a sidebar
   (docked Shapes, Waypoints, Schematics) titles itself. Hovering the version
   shows the Lamium, Minecraft and LeviLamina versions (English) and clicking
@@ -124,6 +140,20 @@ at most 640×380 and centered. New screens reuse these numbers.
   retains the badge and its documented limitations.
 
 ### Text and languages (Decided)
+
+- (Decided 2026-10-15, L-197; revised the same day) The settings footer
+  always shows two description lines. Longer text scrolls there: the wheel
+  over the footer or its scrollbar, which appears only while the text
+  overflows (the hint line then starts with the wheel hint). There is no
+  "Read full description" button, expansion, F1 shortcut or separate help
+  surface, so the list keeps its height while the selection moves. A
+  newly selected row starts at the top of its description; a change in the
+  same row's text keeps the place. Wheel input over the list scrolls the
+  list. Numeric descriptions include their own help and range (white);
+  their controls replace the faint footer hint while the row is selected
+  (white says what a setting is, faint says how to operate it). All three
+  languages use the same behavior. This replaces the in-place expansion
+  and the earlier separate-panel contracts of the same date.
 
 - English is the default; Japanese and Simplified Chinese (`zh_CN`, L-90)
   follow the game language, and other languages show English. Every
@@ -140,6 +170,12 @@ at most 640×380 and centered. New screens reuse these numbers.
   Labels with `shadow` false draw no copy at all.
 - Labels with a value use one translation string with `{}`
   ("Radius: {}"), split by `splitLabel` for table display.
+- (Decided 2026-10-12) Feature names and action labels may remain separate:
+  commands need wording that describes their operation, and a child label may
+  be shorter than its standalone Hotkeys name. Accidental naming drift and
+  missing action translations need systemic prevention (BACKLOG L-158), not
+  removal of this distinction. Search and display should resolve the same
+  intended label for a given context; additional search aliases remain valid.
 
 ## HUD (Decided — see [demos/hud-editor.html](demos/hud-editor.html))
 
@@ -220,6 +256,21 @@ Contents:
   While Freelook or FreeCamera is active the card follows the camera: the
   nearest block or entity box along the rendered camera's forward, water and
   lava excluded.
+- **Target and Schematics** (decided 2026-10-15, revised the same day): one
+  card with the ordinary layout, no second section or column. The maintainer
+  found the stacked and side-by-side sections hard to read and kept only the
+  setting and the ghost target. Target Info has "Show schematic information"
+  (on by default); off, the card neither picks ghosts nor shows differences.
+  A ghost hit before a real block is the target: its icon, name (in the
+  ghost's light blue), ID, coordinates and states, plus "Schematic: Not placed
+  yet". The placement name is not shown. A real block that differs from the
+  selected placement at the same cell gets rows in the check's colors: first
+  "Schematic: Wrong block / Extra block / Wrong state", then
+  "Should be: <icon> <block>" (red; air for an extra block), or one row per
+  differing state, current -> expected with the drawn arrow (yellow), which
+  stands in for that state's ordinary row. Schematic rows come first, right
+  under the header, so a short card keeps them. Saved container contents and
+  expanded inspection remain L-184 follow-ups.
 - One "Range" (2-64 blocks, default 6) for every viewpoint: the card picks
   along the body's view normally and along the camera during Freelook and
   FreeCamera. Why: one mental model ("this far from where I look"); the
@@ -236,7 +287,7 @@ Contents:
 - **Line height and per-line backgrounds** (BACKLOG L-98, decided
   2026-10-06): the Info HUD, Status and Debug View share one "HUD line
   height" setting, 9-16 GUI units (default 12, chosen in game; it was 14
-  before; 9 is Java's debug screen). Info and Status add "Per line" to their
+  before; 9 is Java's debug screen). Info, Status and the player list (L-128) add "Per line" to their
   Background choice, and the Debug View gets "Background: None / Per line":
   each line gets a band of its text width plus 1 unit each side, rows touch,
   text centered in the band. On an element anchored to the right side the
@@ -293,7 +344,24 @@ Contents:
   line bands also use the shared Background opacity setting described above.
   Text color is not a per-element option.
 
+Chat placement (L-174, decided 2026-10-14): a saved, default-off Chat
+position switch moves ordinary HUD messages to the lower left and adds a
+position-only element to HUD layout. The default is flush left with its
+bottom 44 GUI units above the screen edge, leaving a 4-unit gap above two
+default-size Durability HUD rows (chosen 2026-10-14). Saved
+placements are kept; this is a fixed preset, not automatic avoidance.
+Native text, background, font size, shadow, fading and input/history screen
+remain vanilla. See
+[CHAT-POSITION.md](CHAT-POSITION.md) for the first step's boundary.
+
 ## World overlays (Decided unless noted)
+
+- (Decided 2026-10-12) Against the vanilla block selection outline (the black
+  frame on the targeted block): position markers win, building guides yield.
+  Chunk Borders, Hitboxes and the schematic corners and save area draw over
+  it; Shapes and the light overlay let it show over them; the breaking
+  restriction leaves the targeted block out (unchanged). Depth.h holds the
+  pulls that set this order.
 
 - Block-grid shapes show the blocks that form the shape rather than smooth
   wireframes. Wireframes are for chunk borders and hitboxes.
@@ -318,8 +386,11 @@ Contents:
 - (Decided, BACKLOG L-38; lower limit revised 2026-09-30, L-80; wheel range
   widened 2026-10-06, L-99) Zoom goes up to 50x. The initial magnification
   setting stays 2x-50x (a saved value below 2x loads as 2x), so pressing Zoom
-  always visibly zooms. While held, the wheel goes from 0.5x to 50x: below
-  1x the view widens, but never past 160 degrees (the wheel stops there). A
+  always visibly zooms. While held, the wheel goes from 1x to 50x; with the
+  Zoom setting "Wide-angle view" (off by default; decided 2026-10-11, L-140)
+  it goes down to 0.5x: below 1x the view widens, but never past 160 degrees
+  (the wheel stops there). Turning the setting off brings a kept level below
+  1x up to 1x. A
   wheel notch multiplies or divides the target magnification by a fixed ratio
   (about 1.15), so every notch feels the same at 2x and at 40x; a notch that
   crosses 1x stops on exactly 1x once. The shown magnification eases toward
@@ -394,6 +465,9 @@ includes rain-derived splashes. Particles hides all particles, including rain
 splashes, but does not hide falling precipitation. Other water splashes stay
 visible with only Rain and snow selected. Sound, weather state and particle
 emission/ticking stay vanilla.
+- (Decided 2026-10-12, L-148) "Nether portal screen" is another child, on by
+  default like the others: it removes the purple screen in a Nether portal.
+  The portal transfer, its timing and sounds stay vanilla.
 
 ## Automatic attack and use (Decided 2026-09-25, revised the same day)
 
@@ -483,12 +557,62 @@ exactly one switch, one mode and one set of keys:
   settings and HUD placement; not key bindings), and Hotkeys has "Reset all
   keys". They sit on the column-heading line and need a second press to apply.
   The HUD layout editor keeps its per-element and all-element resets.
+- (Decided 2026-10-12, L-159) Hotkeys has "Find by key" on the same line,
+  right next to the key column, with "Reset all keys" to its left (the
+  destructive button further from the frequent one): press it, then a key,
+  mouse button or combination; the list shows only actions whose binding
+  uses every input pressed (Z finds Z and Ctrl+Z). The search field then
+  has focus and shows "Key: Z" as one unit: Backspace clears it, typing
+  starts a text search instead, Esc clears it, Down/Enter go to the results.
+  Typed text search does not match key names (one letter would match too
+  many names).
+- (Decided 2026-10-12, L-159, demos/binding-editor.html A) While a key is
+  being assigned, Clear / Reset / Cancel sit on the edited row, ending just
+  before its key cell; they take the place of that row's switch or stepper
+  until the edit ends. The footer keeps the action's description and the
+  "press, then release to assign | Esc: cancel" line.
+
+## World map layer switches (Decided 2026-10-15, L-146)
+
+- The world map's top bar has three joined switches, Waypoints, Schematics
+  and Shapes, each with its mark's symbol (diamond, cyan footprint, yellow
+  footprint) before the name, left of "Center on me". On: the accent fill
+  and frame of a selected button; off: dark with faint text and symbol.
+  They are remembered across openings in the map settings, not a settings
+  screen option. On a screen too narrow for the names they show their
+  symbols alone, and the bottom bar names the one under the pointer
+  ("Show Schematics on the map: On"); only when even that does not fit do
+  they go to the second row with the Nether layer (maintainer 2026-10-15,
+  after two rows appeared at UI Profile 100% in the Nether).
+- A switch that is off removes its marks from the world map entirely (no
+  faint ghost, no click or menu); the death point goes with Waypoints. The
+  side panel's list and editor work as before; the minimap and the world
+  view are not affected.
+- The side panel's button is named "List" so it does not repeat
+  "Waypoints".
+
+## World map side panel lists (Decided 2026-10-15, L-204)
+
+- The side panel lists one layer at a time: waypoints (with the death
+  point), placed schematics or shapes. Its header names the layer with its
+  count and a small down arrow; clicking it opens a menu of the three
+  layers, each with its symbol and count (maintainer: a menu, since tabs
+  side by side do not fit the panel). The choice is remembered. Selecting a
+  mark on the map shows its layer's list; "+" shows only for waypoints.
+- Placement and shape rows match waypoint rows: symbol in the mark's
+  color, name, distance when the player is in that dimension, nearest
+  first, and the show/hide switch; a click centers the map and selects it
+  (a placement also becomes the schematic's selected one), with the
+  existing details and "Open" below.
+- Only the dimension the map shows. A layer switched off in the top bar
+  keeps its list, with a faint "Hidden on the map" line on top.
 
 ## Inventory transfer (Decided 2026-09-27, BACKLOG L-41)
 
 - The feature has one saved switch, on by default, and an unbound toggle
-  action usable in gameplay or an ordinary storage screen. Transfers act only
-  in storage screens with a player inventory and a container side. Four child
+  action usable in gameplay or an item screen. Transfers act in screens
+  with a player inventory and another side; the inventory screen moves between
+  main inventory and hotbar. Four original child
   switches enable ordinary wheel, Shift+wheel, Shift+left drag and Ctrl+left
   drag independently; all default on. An off gesture passes through to vanilla.
 - Wheel up sends one item into storage; wheel down sends one item into the
@@ -502,15 +626,106 @@ exactly one switch, one mode and one set of keys:
   the hovered item is already on that side.
 - Shift+left drag transfers the entire stack from every passed slot to the
   other side. Ctrl+left drag transfers one from each passed slot. Shift+right
-  and Ctrl+right drag retain vanilla behavior.
-  A slot is visited once per drag. Ctrl takes precedence when both modifiers
+  drag leaves one when its new child switch is on; Ctrl+right stays vanilla.
+  A slot is visited once per entry during a drag. Ctrl takes precedence when both modifiers
   are down. Unmodified clicks and drags stay vanilla.
-- Transfer requests run one at a time through the screen's vanilla auto-place
-  or explicit slot-transfer path. Close/focus changes, a cursor item, text
-  editing, feature disable, rejected/timed-out requests, and changed source
-  items stop the operation.
-  A sweep also stops if a source count changes before its request runs.
-  Mouse release stops gathering slots but lets already visited ones finish.
+- Requests go out together (revised 2026-10-15, L-169; before: one at a
+  time, each confirmed before the next): every queued move, up to 64 per UI
+  tick, calls the screen's vanilla auto-place or explicit slot-transfer path
+  in the same tick, so vanilla sends them as one batch. Lamium then waits for
+  all of their responses and checks every touched slot against the
+  authoritative state once. Moves gathered meanwhile (drag, wheel) form the
+  next batch. Why: a resource pack's bulk move, traced on 2026-10-15, sent up
+  to 44 auto-place requests in one frame and the game answered them in one
+  response; waiting for each answer made Lamium's moves visibly one by one.
+- Each move's local prediction must still be a conserved move of its own
+  source; a move that predicts nothing (no room) is skipped. Close/focus
+  changes, a cursor item, text editing, feature disable, a rejected or
+  timed-out request, an unexpected prediction or a changed source stop the
+  operation and drop what is still queued; vanilla rolls back its rejected
+  predictions. Mouse release stops gathering slots but lets visited ones
+  finish.
+
+### Bulk moves and more screens (Decided 2026-10-15 for 0.2.2, L-169; smoke-tested, unreleased)
+
+- Ctrl + wheel moves every stack of the hovered kind, Ctrl + Shift + wheel
+  everything, in the plain wheel's direction. Alt + left click and Alt +
+  Shift + left click do the same from the clicked slot's side to the other.
+  "Everything" from the player inventory moves one section: the hotbar
+  when a hotbar slot is hovered, otherwise the main inventory without the
+  hotbar (maintainer 2026-10-15, after the batched build's check).
+- Shift + right drag moves all but one item from each passed slot.
+- Transfers work in every screen that holds items beside the player
+  inventory. Slots with roles get only what they accept; outputs are only
+  taken from.
+- Each new gesture has its own switch, on by default. Not chosen: Shift +
+  click on an empty slot with a cursor item, a wheel "all but one", drop
+  gestures, W/S moves.
+
+### Held stack and drops (Decided 2026-10-15, L-169; passed in a chest on `9da5d9d`)
+
+- Items on the cursor + Shift + left click on an empty slot: the held stack
+  goes into that slot, then every matching item from the other side moves
+  to that side; the hand ends empty. A slot that does not take the whole
+  stack stops after vanilla's own placement.
+- With the game's drop key held: Ctrl + left drag drops one item from each
+  passed slot, Shift + right drag all but one, Shift + left drag the whole
+  stack. The press of the drop key itself stays vanilla (one item, or the
+  stack with Ctrl, from the slot under the pointer).
+- Items on the cursor + Shift + left click outside the window: vanilla
+  drops the held stack, then every matching item in the player inventory,
+  hotbar included, is dropped too.
+- Each has its own switch, all on by default (maintainer's choice; the
+  agent had proposed matching drops off). Drops use vanilla's drop request
+  and are confirmed with the batch like moves. Not chosen for now: Shift +
+  double click, Ctrl + Shift + click, "fill existing stacks only".
+
+Vanilla baseline reported 2026-10-15: chest inputs behave as before;
+Shift + left click routes items by role in furnace, brewing stand and
+beacon screens. A furnace fuel slot also accepted an item that cannot
+burn. Native slot acceptance and routing, rather than a new Lamium fuel
+filter, remain the baseline. Brewing/beacon restrictions were not checked
+exhaustively. The e3f9276 diagnostic checkpoint
+confirmed unchanged vanilla behavior in a large chest, furnace, brewing
+stand and beacon and captured Alt and native handlers/orders; it is not
+validation of the new Lamium gestures. Native discovery follows those orders
+with same-player-side fallbacks removed. On c8c1f1b the maintainer confirmed
+the normal implementation checklist, including the five new gestures and
+switches and chest/furnace/brewing/beacon checks, all behaved as expected.
+Checked screens in that smoke checklist: chest, furnace, brewing stand and
+beacon. Individual combinations and the remaining screen families, servers
+and controlled failure cases were not separately reported. Details:
+[ITEM-TRANSFER.md](ITEM-TRANSFER.md).
+
+## Repeated villager trading (Decided 2026-10-12, trigger 2026-10-13, L-166)
+
+- Shift + right click on an unlocked trade row trades it as often as
+  allowed, default on. Left click and plain right click keep vanilla
+  behavior; any key or click stops a run.
+- Use vanilla's trade request and confirm each round from authoritative
+  inventory and offer state. Stop when sold out, inputs run out or output
+  cannot fit; never drop output to continue.
+- The maintainer chose this part on 2026-10-13 through its first required
+  runtime checkpoint. Favourites and remaining-use presentation remain
+  undecided. Research notes: [TRADE-HELPERS.md](TRADE-HELPERS.md).
+
+## Edge Guard (Decided 2026-10-12, L-160/L-161)
+
+- Stops walking off edges like sneaking, without sneaking, also on servers:
+  the move input the server reads is guarded, not only the client's motion.
+- Stops with the box at least a margin over the block, also while sneaking
+  (a box that only touches an edge is no support on a server, and a server's
+  position can drift a few hundredths further out than the client's). The
+  margin is a setting under Edge Guard ("Stop inside the edge by"), 0.02 to
+  0.30 block in 0.01 steps, default 0.10: smaller reaches further for placing
+  blocks, larger is safer on servers (maintainer, 2026-10-12).
+  Reconfirmed 2026-10-13 after L-162: keep default 0.10 and the existing range
+  despite a successful BDS sneak-release check at 0.02; that one result does
+  not establish the smaller margin's safety for all server corrections.
+- A slab that would merge with the slab the player stands on and push them
+  out sideways (their center beside that cell) is not placed; with the
+  center over the cell the merge lifts the player and is allowed.
+- Slippery blocks slide further than the guard expects (known limit).
 
 ## Keys
 

@@ -1,4 +1,5 @@
 #include "features/camera/CameraSessions.h"
+#include <algorithm>
 #include <numbers>
 #include "features/camera/CameraInteraction.h"
 #include "features/camera/FreeCameraCulling.h"
@@ -191,6 +192,19 @@ std::optional<CameraSessions::ViewRay> CameraSessions::detachedViewRay(IClientIn
     if (!std::isfinite(ray.x + ray.y + ray.z + ray.dx + ray.dy + ray.dz)) return {};
     return ray;
 }
+std::optional<CameraSessions::Pose> CameraSessions::freeCameraPose(IClientInstance& current) {
+    if (!blocksPerspective()) return {};
+    auto ray = detachedViewRay(current);
+    auto* player = current.getLocalPlayer();
+    if (!ray || !player) return {};
+    double feet = player->getFeetPos().y - player->getEyePos().y;
+    double length = std::sqrt(ray->dx * ray->dx + ray->dy * ray->dy + ray->dz * ray->dz);
+    if (!std::isfinite(feet) || !(length > 0)) return {};
+    // Angles from the drawn view direction (yaw 0 faces +Z, positive pitch looks down).
+    auto yaw = static_cast<float>(std::atan2(-ray->dx, ray->dz) * 180 / std::numbers::pi);
+    auto pitch = static_cast<float>(-std::asin(std::clamp(ray->dy / length, -1.0, 1.0)) * 180 / std::numbers::pi);
+    return Pose{ray->x, ray->y + feet, ray->z, yaw, pitch};
+}
 std::optional<DetachedLookState::Angles> CameraSessions::lookAnglesFor(IClientInstance const& renderedClient) {
     // A different viewport must neither consume nor cancel the owner's session.
     if (client.load() != &renderedClient) return {};
@@ -210,8 +224,10 @@ void CameraSessions::configure(Settings const& settings) {
     freeToggle = settings.camera.freeCameraToggle;
     freeSpeed = camera::normalizeFlightSpeed(settings.camera.freeCameraSpeed);
     freeWorldFixed = settings.camera.freeCameraWorldFixed;
+    freeLeaveOnHit = settings.camera.freeCameraLeaveOnHit;
     zoomToggle = settings.camera.zoomToggle;
     state.configure(settings.camera.magnification);
+    state.allowWide(settings.camera.zoomWideAngle);
 }
 bool CameraSessions::wanted(Session session) const {
     switch (session) {
@@ -348,6 +364,11 @@ void CameraSessions::releaseFreeCameraKey() {
     if (freeToggle.load()) return;
     wantFree = false;
     reconcile();
+}
+void CameraSessions::bodyHit(int event) {
+    if (!running || !freeLeaveOnHit.load() || !wantFree.load()) return;
+    wantFree = false;
+    try { Runtime::instance().self().getLogger().info("FreeCamera left: the body was hit (event {})", event); } catch (...) {}
 }
 bool CameraSessions::startFreeCamera(IClientInstance& current) {
     auto* player = current.getLocalPlayer();
